@@ -1,0 +1,9 @@
+.venv
+.env
+
+# Python のキャッシュファイルを無視
+**/__pycache__/
+__pycache__
+
+# Pytest のキャッシュファイルを無視
+.pytest_cache/
