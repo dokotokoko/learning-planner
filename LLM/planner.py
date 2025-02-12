@@ -1,10 +1,8 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt import PLANNER_PROMPT
-from prompt import GOAL_PROMPT
-
-#OpenAIのLLMを作成
+from prompt.prompt import PLANNER_PROMPT
+from prompt.prompt import GOAL_PROMPT
 
 class learning_plannner():
     def __init__(self):

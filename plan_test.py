@@ -1,5 +1,5 @@
 from db_manager import DBManager
-from LLM_manager import learning_plannner
+from LLM.planner import learning_plannner
 
 def main():
     db = DBManager()

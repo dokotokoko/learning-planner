@@ -40,13 +40,13 @@ class DBManager:
     def create_table_goals(self):
         self.cur.execute("""
             CREATE TABLE IF NOT EXISTS goals
-                         (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            interest_id INTEGER,
-                            goal TEXT,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (interest_id) REFERENCES interests(id)
-                         )
+            (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            interest_id INTEGER,
+            goal TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (interest_id) REFERENCES interests(id)
+            )
             """)
         
         self.con.commit()
@@ -80,8 +80,7 @@ class DBManager:
                 nextStep TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (goal_id) REFERENCES goals(id)
-            )
-        """)
+            )""")
 
         self.con.commit()
 
@@ -102,8 +101,63 @@ class DBManager:
     def get_learningsPlans(self):
         self.cur.execute("SELECT * FROM learning_plans")
         return self.cur.fetchall()
+    
 
+    #DBに学習記録テーブルを作成する
+    def create_table_logs(self):
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS logs
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
+        self.con.commit()
+
+    #DBに学習記録を保存する
+    def save_log(self, log:str):
+        self.cur.execute(""" INSERT INTO logs(log) VALUES(?) """ , (log,))
+        self.con.commit()
+
+    #DBから学習記録を取得する
+    def get_log(self):
+        self.cur.execute(""" SELECT * FROM logs """)
+        return self.cur.fetchall()
+    
+    #DBにアドバイステーブルを作成する
+    def create_table_advices(self):
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS advices
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log_id INTEGER,
+                advice TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (log_id) REFERENCES logs(id)
+            ) """)
+        
+        self.con.commit()
+    
+    #DBにアドバイスを保存する
+    def save_advice(self, log:str, advice:str):
+        #ゴールのIDを取得する
+        self.cur.execute("""SELECT id FROM logs WHERE log = ? ORDER BY id DESC LIMIT 1""",(log,))
+        row = self.cur.fetchone()
+        if row is None:
+            raise ValueError("指定された学習記録がDBに見つかりません。")
+        log_id = row[0]
+    
+        #DBに保存する
+        self.cur.execute(""" INSERT INTO advices(log_id, advice) VALUES(?, ?)""", (log_id, advice,))
+        self.con.commit()
+    
+    #DBからアドバイスを取得する
+    def get_advice(self):
+        self.cur.execute(""" SELECT * FROM advices """)
+        return self.cur.fetchall()
+    
     def close(self):
         self.con.close()
 
@@ -114,4 +168,10 @@ class DBManager:
         self.cur.execute(""" DROP TABLE IF EXISTS goals""")    
     
     def delete_table_learning_plans(self):
-        self.cur.execute(""" DROP TABLE IF EXISTS learning_plans""")    
+        self.cur.execute(""" DROP TABLE IF EXISTS learning_plans""")
+
+    def delete_table_logs(self):
+        self.cur.execute(""" DROP TABLE IF EXISTS logs""")
+
+    def delete_table_advices(self):
+        self.cur.execute(""" DROP TABLE IF EXISTS advices""")
