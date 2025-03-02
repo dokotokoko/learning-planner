@@ -11,46 +11,48 @@ class learning_plannner():
         self.client = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY")
         )
-    
-    def make_goal_from_interest(self, interest:str):
-        #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{GOAL_PROMPT}"}]
 
-        #DBから取得した興味関心を渡して応答を取得
+    def make_goal_from_interest(self, interest: str, user_inputs: list):
+        # 対話履歴の初期化
+        messages = [{"role": "developer", "content": f"{GOAL_PROMPT}"}]
         messages.append({
             "role": "user",
             "content": f"{interest}。この興味を具体的な目標にするための質問をしてください。"
         })
 
-        final_response = None #最終的な決定（目標）を保持する変数を作成
+        final_response = None
 
-        #LLMとの対話を開始
-        for i in range(2):
+        # リクエスト経由で受け取った各ユーザー入力を対話に利用
+        for user_input in user_inputs:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages
             )
-
             got_response = response.choices[0].message.content
             print(f"AI Planner: {got_response}")
-
             messages.append({
                 "role": "assistant",
                 "content": got_response
             })
-
             final_response = got_response
-
-            #最終ラウンド以外の場合は、ユーザーからの応答を受け取る
-            if i < 2:
-                user_input =  input("あなた： ")
-                messages.append({
-                    "role": "user",
-                    "content": user_input
-                })
+            messages.append({
+                "role": "user",
+                "content": user_input
+            })
         
-        return final_response
+        # 最後に最終応答を取得
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages
+        )
+        got_response = response.choices[0].message.content
+        messages.append({
+            "role": "assistant",
+            "content": got_response
+        })
+        final_response = got_response
 
+        return final_response
 
     #LLMで学習計画を自動作成する関数
     def make_learning_plan(self, goal:str):

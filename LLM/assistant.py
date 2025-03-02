@@ -11,13 +11,13 @@ class learning_assistant():
             api_key=os.getenv("OPENAI_API_KEY")
         )
 
-    #学習記録を元にアドバイスを自動作成する
-    def get_advise(self, log:str):
+    #学習記録を元に、学習計画の達成に向けたアドバイスを自動作成する
+    def get_advise(self, log:str, plan:str):
         
         #対話履歴の初期化
         messages=[{"role": "developer", "content": ASSIST_PROMPT }]
 
-        messages.append({"role": "user", "content": f"{log}。今日やったことへのアドバイスと応援メッセージが欲しいです。"})
+        messages.append({"role": "user", "content": f"{log}。今日やったことを元に、{plan}に向けてアドバイスと応援メッセージが欲しいです。"})
 
         response = self.client.chat.completions.create(
             model = self.model,
