@@ -12,14 +12,14 @@ def main():
     db.create_table_advices()
     db.create_table_logs()
 
-    log_input = input("学習記録： ")
+    log_input = input("今日の日報： ")
 
     db.save_log(log_input)
-    print("\n=== 今日の学習記録 ===")
+    print("\n=== 今日の日報 ===")
     print(log_input)
 
-    advice = learning_assistant.get_advise(log_input)
-    print("\n===アドバイス===")
+    advice = assistant.get_advise(log=log_input)
+    print("\n=== アドバイス ===")
     print(advice)
 
     db.save_advice(advice=advice)

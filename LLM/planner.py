@@ -1,13 +1,13 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import PLANNER_PROMPT
-from prompt.prompt import GOAL_PROMPT
+from prompt.prompt import PLANNER_PROMPT, PLANNER_PROMPT_EN
+from prompt.prompt import GOAL_PROMPT, GOAL_PROMPT_EN
 
 class learning_plannner():
     def __init__(self):
         load_dotenv()
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-4o"
         self.client = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY")
         )
@@ -20,6 +20,7 @@ class learning_plannner():
         messages.append({
             "role": "user",
             "content": f"{interest}。この興味を具体的な目標にするための質問をしてください。"
+            #"content": f"{interest}. Please ask a question to turn this interest into a concrete goal."
         })
 
         final_response = None #最終的な決定（目標）を保持する変数を作成
@@ -43,7 +44,7 @@ class learning_plannner():
 
             #最終ラウンド以外の場合は、ユーザーからの応答を受け取る
             if i < 2:
-                user_input =  input("あなた： ")
+                user_input =  input("You： ")
                 messages.append({
                     "role": "user",
                     "content": user_input
@@ -61,6 +62,7 @@ class learning_plannner():
                 {
                     "role": "user",
                     "content": f"{goal}。この学習目標に向けた3ステップの学習計画を提案してください。なお、見やすいように3行の箇条書きでシンプルかつ簡潔にまとめてください。"
+                    #"content": f"{goal}. Please propose a 3-step study plan for this learning goal. Additionally, summarize it in 3 simple and concise bullet points for easy reading."
                 }
             ]
         )

@@ -62,8 +62,8 @@ class DBManager:
 
         # goals テーブルに、interest_id と goal を保存
         self.cur.execute("INSERT INTO goals (interest_id, goal) VALUES (?, ?)", (interest_id, goal,))
-        self.con.commit()
         logging.info("ゴールと関連する興味関心がDBに保存されました。")
+        self.con.commit()
     
     #ゴールを取得する関数
     def get_goal(self):

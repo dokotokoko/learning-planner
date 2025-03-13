@@ -16,7 +16,7 @@ def main():
 
     planner = learning_plannner()
 
-    interest = input("学びたいことを入力してください：")
+    interest = input("探究のテーマを入力してください：")
     db.save_interests(interest=interest)
 
     user_interest = db.get_interest()
