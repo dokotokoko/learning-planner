@@ -1,8 +1,8 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import PLANNER_PROMPT, PLANNER_PROMPT_EN
-from prompt.prompt import GOAL_PROMPT, GOAL_PROMPT_EN
+from prompt.prompt import INTEREST_PROMPT, PLANNER_PROMPT_EN
+from prompt.prompt import OBJECT_PROMPT, PLAN_PROMPT
 
 class learning_plannner():
     def __init__(self):
@@ -12,9 +12,9 @@ class learning_plannner():
             api_key=os.getenv("OPENAI_API_KEY")
         )
     
-    def make_goal_from_interest(self, interest:str):
+    def make_object_from_interest(self, interest:str):
         #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{GOAL_PROMPT}"}]
+        messages=[{"role": "developer", "content": f"{INTEREST_PROMPT}"}]
 
         #DBから取得した興味関心を渡して応答を取得
         messages.append({
@@ -51,14 +51,53 @@ class learning_plannner():
                 })
         
         return final_response
+    
+    def make_goal_from_object(self, object:str):
+        #対話履歴の初期化
+        messages=[{"role": "developer", "content": f"{OBJECT_PROMPT}"}]
 
+        #DBから取得した興味関心を渡して応答を取得
+        messages.append({
+            "role": "user",
+            "content": f"{object}。この目的から、探究的な目標の言語化を促進する質問をしてください。"
+            #"content": f"{interest}. Please ask a question to turn this interest into a concrete goal."
+        })
+
+        final_response = None #最終的な決定（目標）を保持する変数を作成
+
+        #LLMとの対話を開始
+        for i in range(2):
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
+
+            got_response = response.choices[0].message.content
+            print(f"AI Planner: {got_response}")
+
+            messages.append({
+                "role": "assistant",
+                "content": got_response
+            })
+
+            final_response = got_response
+
+            #最終ラウンド以外の場合は、ユーザーからの応答を受け取る
+            if i < 2:
+                user_input =  input("You： ")
+                messages.append({
+                    "role": "user",
+                    "content": user_input
+                })
+        
+        return final_response
 
     #LLMで学習計画を自動作成する関数
     def make_learning_plan(self, goal:str):
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "developer", "content": f"{PLANNER_PROMPT}"},
+                {"role": "developer", "content": f"{PLAN_PROMPT}"},
                 {
                     "role": "user",
                     "content": f"{goal}。この学習目標に向けた3ステップの学習計画を提案してください。なお、見やすいように3行の箇条書きでシンプルかつ簡潔にまとめてください。"

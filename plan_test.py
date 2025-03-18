@@ -20,16 +20,18 @@ def main():
     db.save_interests(interest=interest)
 
     user_interest = db.get_interest()
-    goal = planner.make_goal_from_interest(user_interest)
-    db.save_goal(interest=interest, goal=goal)
+    object = planner.make_object_from_interest(user_interest)
+    db.save_goal(interest=interest, goal=object)
 
-    learning_plan = planner.make_learning_plan(goal=goal)
+    goal = planner.make_goal_from_object(object=object)
+
+    plan = planner.make_learning_plan(goal=goal)
 
     print("\n=== 提案された学習計画 ===")
-    print(learning_plan)
+    print(plan)
 
     #DBに保存
-    db.save_learningPlans(goal=goal, nextStep=learning_plan)
+    db.save_learningPlans(goal=goal, nextStep=plan)
     print("\n 学習計画を保存しました")
 
     interest_log = db.get_interest()
