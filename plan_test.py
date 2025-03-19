@@ -25,7 +25,9 @@ def main():
 
     goal = planner.make_goal_from_object(object=object)
 
-    plan = planner.make_learning_plan(goal=goal)
+    content = planner.make_content_from_goal(goal=goal)
+
+    plan = planner.make_learning_plan(content=content)
 
     print("\n=== 提案された学習計画 ===")
     print(plan)
