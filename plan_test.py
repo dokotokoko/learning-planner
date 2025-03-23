@@ -19,15 +19,18 @@ def main():
     interest = input("探究のテーマを入力してください：")
     db.save_interests(interest=interest)
 
+    goal = planner.make_goal_from_object(object=interest)
+    user_goal = input("あなたの探究学習の目標： ")
+    print("\n=== あなたの学習目標 ===")
+    #content = planner.make_content_from_goal(goal=goal)
+
     user_interest = db.get_interest()
-    object = planner.make_object_from_interest(user_interest)
+    object = planner.make_object_from_interest(user_goal)
+    print("\n=== あなたの目的意識")
+    print(object)
     db.save_goal(interest=interest, goal=object)
 
-    goal = planner.make_goal_from_object(object=object)
-
-    content = planner.make_content_from_goal(goal=goal)
-
-    plan = planner.make_learning_plan(content=content)
+    plan = planner.make_learning_plan(goal=user_goal)
 
     print("\n=== 提案された学習計画 ===")
     print(plan)
