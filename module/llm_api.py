@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import GOAL_PROMPT, PLANNER_PROMPT, OBJECT_PROMPT
+from prompt.prompt import GOAL_PROMPT, PLANNER_PROMPT, OBJECT_PROMPT, GENERAL_PROMPT, ASSIST_PROMPT
 
 class learning_plannner():
     def __init__(self):
@@ -53,7 +53,7 @@ class learning_plannner():
     
     def make_goal_from_object(self, object:str):
         #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{GOAL_PROMPT}"}]
+        messages=[{"role": "developer", "content": f"{GENERAL_PROMPT}"}]
 
         #DBから取得した興味関心を渡して応答を取得
         messages.append({
@@ -104,6 +104,24 @@ class learning_plannner():
                 }
             ]
         )
+
+        return response.choices[0].message.content
+    
+    #学習記録を元にアドバイスを自動作成する
+    def get_advise(self, log:str):
+        
+        #対話履歴の初期化
+        messages=[{"role": "developer", "content": ASSIST_PROMPT}]
+
+        messages.append({"role": "user", "content": f"{log}。Please advise to user's today's learning and encourage."})
+
+        response = self.client.chat.completions.create(
+            model = self.model,
+            messages=messages
+        )
+
+        #作成したアドバイスを記録する
+        messages.append({"role": "assistant", "content": response.choices[0].message.content})
 
         return response.choices[0].message.content
 

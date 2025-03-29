@@ -1,10 +1,10 @@
-from db_manager import DBManager
-from LLM.assistant import learning_assistant
+from module.db_manager import DBManager
+from module.llm_api import learning_plannner
 
 
 def main():
     db = DBManager()
-    assistant = learning_assistant()
+    assistant = learning_plannner()
 
     db.delete_table_logs()
     db.delete_table_advices()
