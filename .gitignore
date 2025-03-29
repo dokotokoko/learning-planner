@@ -13,3 +13,63 @@ __pycache__
 *.db
 learning_assistant.db
 
+# Streamlit関連
+.streamlit/secrets.toml
+
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+venv/
+ENV/
+env/
+.venv/
+
+# データベース
+*.db
+*.sqlite
+*.sqlite3
+
+# ログファイル
+*.log
+
+# .env ファイル
+.env
+
+# OS固有のファイル
+.DS_Store
+Thumbs.db
+
+# エディタ設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# ローカル設定と一時ファイル
+*.local
+*.tmp
+*~
+
