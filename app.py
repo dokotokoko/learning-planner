@@ -247,15 +247,6 @@ def main():
     DB = DBManager()
     DB.create_table_users()
     
-    # テストユーザーの追加部分を削除または以下のようにコメントアウト
-    """
-    test_users = [
-        ("user1", "test123"),
-        ("user2", "test456"),
-    ]
-    DB.add_test_users(test_users)
-    """
-    
     # 認証状態の確認
     if not st.session_state.authenticated:
         login_page()
