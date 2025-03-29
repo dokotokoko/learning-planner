@@ -1,5 +1,6 @@
 .venv
 .env
+venv310
 
 # Python のキャッシュファイルを無視
 **/__pycache__/
@@ -7,3 +8,8 @@ __pycache__
 
 # Pytest のキャッシュファイルを無視
 .pytest_cache/
+
+# SQLiteデータベースファイルを無視
+*.db
+learning_assistant.db
+

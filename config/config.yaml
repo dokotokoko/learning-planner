@@ -1,0 +1,42 @@
+cookie:
+  expiry_days: 1
+  key: some_signature_key
+  name: some_cookie_name
+credentials:
+  usernames:
+    A12345:
+      email: johndoe@example.com
+      name: JohnDoe
+      password: $2b$12$cRdlwJefd9sSnmlLczG.jOOpWP6Ge11tn5r70yZc5Y28/hUnKr3DW
+    B23456:
+      email: alice.smith@example.com
+      name: AliceSmith
+      password: $2b$12$T3p.QOO/mwDUxD/29Ud/3uEhNF5BPcLZxqhz3vqi7Xt5xfYQt9UZ.
+    C34567:
+      email: bobj@example.com
+      name: BobJohnson
+      password: $2b$12$MtXmRsT7vMrGUP.leIrJtOusQuO.KnxM82uxIFL0yx1tn5HjFsx3q
+    D45678:
+      email: emily.brown@example.com
+      name: EmilyBrown
+      password: $2b$12$.nXYPr0snPwn1qsoXdsyueKvmarnKSUhDFs94ru7HwPftP/AX4r7i
+    E56789:
+      email: michael.clark@example.com
+      name: MichaelClark
+      password: $2b$12$tTN.IgsCvMQ9kUUfSgV/7.u08QZI3fj45zT2Lzon6Ng2WXlx0ION2
+    F67890:
+      email: sarah.lee@example.com
+      name: SarahLee
+      password: $2b$12$85Li.cdirVspFgkNxUW85O9Zgiibp0FhmPmO3Uao8lYhg9TwZi8R2
+    G78901:
+      email: david.wilson@example.com
+      name: DavidWilson
+      password: $2b$12$f9AWjtAxPFHcBOATan11ae7Qt3gBctaJXgSYUSAT3UIXbAO.F/xXC
+    H89012:
+      email: jennifer.taylor@example.com
+      name: JenniferTaylor
+      password: $2b$12$r4lm7Xy0dsTC9otJqKnPkeZG3CX3JJbssVnEw.aapine47CcpS5CO
+    I90123:
+      email: daniel.martinez@example.com
+      name: DanielMartinez
+      password: $2b$12$v.ZJ7tie37VdXuh5s.iO/uC9WIu9h20JUVTb0VTUCXvzp5R/t1ZMC

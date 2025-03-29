@@ -1,0 +1,10 @@
+id,name,password,email
+A12345,JohnDoe,johndoepass,johndoe@example.com
+B23456,AliceSmith,alicepass,alice.smith@example.com
+C34567,BobJohnson,bobjohnsonpass,bobj@example.com
+D45678,EmilyBrown,emilypass,emily.brown@example.com
+E56789,MichaelClark,mikepass,michael.clark@example.com
+F67890,SarahLee,sarahpass,sarah.lee@example.com
+G78901,DavidWilson,davidpass,david.wilson@example.com
+H89012,JenniferTaylor,jenniferpass,jennifer.taylor@example.com
+I90123,DanielMartinez,danielpass,daniel.martinez@example.com
