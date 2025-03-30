@@ -23,6 +23,10 @@ if "authenticated" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
 
+
+db_path = os.path.abspath("IBL-assistant.db")
+print("SQLite DB path:", db_path)
+
 #DB名
 DB_FILE = "IBL-assistant.db"
 
