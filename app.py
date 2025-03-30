@@ -24,7 +24,7 @@ if "user_id" not in st.session_state:
     st.session_state.user_id = None
 
 #DB名
-DB_FILE = "learning_assistant.db"
+DB_FILE = "IBL-assistant.db"
 
 class DBManager:
     def __init__(self) :

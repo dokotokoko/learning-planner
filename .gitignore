@@ -9,13 +9,6 @@ __pycache__
 # Pytest のキャッシュファイルを無視
 .pytest_cache/
 
-# SQLiteデータベースファイルを無視
-*.db
-learning_assistant.db
-
-# Streamlit関連
-.streamlit/secrets.toml
-
 # Python関連
 __pycache__/
 *.py[cod]
@@ -45,7 +38,6 @@ env/
 .venv/
 
 # データベース
-*.db
 *.sqlite
 *.sqlite3
 
