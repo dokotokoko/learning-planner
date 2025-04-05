@@ -17,6 +17,79 @@ def next_page():
 def prev_page():
     st.session_state.page -= 1
 
+# 4つのステップをそれぞれactive判定
+def is_active(step_number):
+    current_page = st.session_state.page
+    return "active" if step_number <= current_page else ""
+
+def make_sequence_bar():
+    st.markdown(f"""
+    <style>
+    .step-container {{
+        display: flex;
+        justify-content: space-between;
+        margin: 30px 0;
+        max-width: 600px;
+    }}
+    .step {{
+        position: relative;
+        flex: 1;
+        text-align: center;
+    }}
+    .step .circle {{
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background-color: #cccccc;
+        margin: 0 auto;
+        z-index: 2;
+        position: relative;
+    }}
+    .step.active .circle {{
+        background-color: #2E8EF6; /* アクティブ時の色 */
+    }}
+    .step .label {{
+        margin-top: 8px;
+    }}
+    /* 線（バー）のスタイル */
+    .step::before {{
+        content: "";
+        position: absolute;
+        top: 15px; /* 円の縦位置に合わせる */
+        left: -50%;
+        width: 100%;
+        height: 4px;
+        background-color: #cccccc;
+        z-index: 1;
+    }}
+    .step:first-child::before {{
+        content: none; /* 先頭ステップの左側には線を描画しない */
+    }}
+    .step.active::before {{
+        background-color: #2E8EF6; /* アクティブ時の色 */
+    }}
+    </style>
+
+    <div class="step-container">
+        <div class="step {is_active(1)}">
+            <div class="circle"></div>
+            <div class="label">Step 1</div>
+        </div>
+        <div class="step {is_active(2)}">
+            <div class="circle"></div>
+            <div class="label">Step 2</div>
+        </div>
+        <div class="step {is_active(3)}">
+            <div class="circle"></div>
+            <div class="label">Step 3</div>
+        </div>
+        <div class="step {is_active(4)}">
+            <div class="circle"></div>
+            <div class="label">Step 4</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # セッション状態で認証状態を管理
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -276,17 +349,46 @@ def main():
                         del st.session_state[key]
                 st.rerun()
 
+@st.dialog("test")
+def guide_step1():
+    st.write('これはガイドライン表示のテストです')
+
+    st.markdown("""
+    <style>
+    .my-text {
+        color: white;
+        font-size: 24px;
+        background-color: #008080;
+        padding: 10px;
+        border-radius: 10px;
+    }
+    </style>
+    <p class='my-text'>Hello World!</p>
+    """, unsafe_allow_html=True)
+
+    greet = st.text_input('test')
+    if st.button('閉じる'):
+        st.rerun()   
+
 # ページごとの内容を定義
 def page1():
+
+    #ページの最初にガイドラインを表示
+    guide_step1()
+
     st.title("探究学習アシスタント")
     st.write("これは最初の画面です。")
+
+    #現在のステップを表示
+    make_sequence_bar()
 
     #DB初期化
     DB.create_table_interests()
     DB.create_table_goals()
     DB.create_table_learningPlans()
 
-    theme = st.text_input("探究学習のテーマを入力してください")
+    theme = st.text_input("探究学習のテーマを入力してください。")
+
     if theme:  # 入力があった場合のみ保存
         DB.save_interests(user_id=st.session_state.user_id, interest=theme)
 
@@ -296,7 +398,9 @@ def page1():
 
 def page2():
     st.title("Step2：探究学習の目標を決めよう！")
-    st.write("")
+    
+    #現在のステップを表示
+    make_sequence_bar()
 
     # 変数を関数の先頭で初期化
     user_theme_str = ""
@@ -336,7 +440,7 @@ def page2():
     # 対話回数が3回未満の場合のみ、入力フィールドを表示
     if user_messages_count < 3:
         # ユーザー入力
-        user_message = st.chat_input("あなたの回答を入力してください")
+        user_message = st.chat_input("AIアシスタントからの質問に回答してください。")
         
         if user_message:  # ユーザーが何か入力した場合のみ実行
             # 対話履歴に追加
@@ -383,7 +487,9 @@ def page2():
 
 def page3():
     st.title("Step3：アイディエーション ~探究学習の内容を決めよう！")
-    st.write("")
+    
+    #現在のステップを表示
+    make_sequence_bar()
 
     # 会話履歴の初期化（存在しない場合のみ）
     if 'dialogue_log_plan' not in st.session_state:
