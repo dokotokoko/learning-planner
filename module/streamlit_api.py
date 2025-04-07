@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_chat import message
 
 from module.db_manager import DBManager
 from module.llm_api import learning_plannner
@@ -154,11 +155,11 @@ class StreamlitApp:
             }
 
             st.write(dialog_content[step_number])
+            st.session_state[dialog_key] = True
+
 
     def render_page1(self):
-        """テーマ設定ページの表示"""
-        self.show_guide_dialog(1)
-        
+        """テーマ設定ページの表示"""      
         st.title("Step1: 自分の興味から探究学習のテーマを決める！")
 
         # 現在のステップを表示
@@ -179,10 +180,15 @@ class StreamlitApp:
             self.next_page()
             st.rerun()
 
+        # このページでやることのガイドを表示（インデックス指定）
+        page_index = 1;
+        dialog_key = f"dialog_closed_page{page_index}"
+        # 既に表示済みかチェック
+        if dialog_key not in st.session_state or not st.session_state[dialog_key]:
+            self.show_guide_dialog(1)
+
     def render_page2(self):
-        """ゴール設定ページの表示"""
-        self.show_guide_dialog(2)
-        
+        """ゴール設定ページの表示"""      
         st.title("Step2：探究学習の目標を決めよう！")
         
         # 現在のステップを表示
@@ -190,6 +196,13 @@ class StreamlitApp:
 
         # 変数を関数の先頭で初期化
         user_theme_str = ""
+
+        # このページでやることのガイドを表示（インデックス指定）
+        page_index = 2;
+        dialog_key = f"dialog_closed_page{page_index}"
+        # 既に表示済みかチェック
+        if dialog_key not in st.session_state or not st.session_state[dialog_key]:
+            self.show_guide_dialog(2) 
         
         # 会話履歴の初期化（存在しない場合のみ）
         if 'dialogue_log' not in st.session_state:
@@ -219,9 +232,9 @@ class StreamlitApp:
                 user_theme_str = st.session_state.user_theme_str
 
         # 対話履歴の表示
-        for sender, message in st.session_state.dialogue_log:
+        for sender, msg_content in st.session_state.dialogue_log:
             with st.chat_message("assistant" if sender == "AI" else "user"):
-                st.write(message)
+                st.write(msg_content)
 
         # 対話回数をカウント（AIの発言回数をカウント）
         ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log if sender == "AI")
@@ -276,12 +289,17 @@ class StreamlitApp:
 
     def render_page3(self):
         """アイディエーションページの表示"""
-        self.show_guide_dialog(3)
-        
         st.title("Step3：アイディエーション ~探究学習の内容を決めよう！")
         
         # 現在のステップを表示
         self.make_sequence_bar()
+
+        # このページでやることのガイドを表示（インデックス指定）       
+        page_index = 3;
+        dialog_key = f"dialog_closed_page{page_index}"
+        # 既に表示済みかチェック
+        if dialog_key not in st.session_state or not st.session_state[dialog_key]:
+            self.show_guide_dialog(3)
 
         # 会話履歴の初期化（存在しない場合のみ）
         if 'dialogue_log_plan' not in st.session_state:
@@ -301,9 +319,9 @@ class StreamlitApp:
                 return  # テーマがない場合は処理を中断
 
         # 対話履歴の表示
-        for sender, message in st.session_state.dialogue_log_plan:
+        for sender, msg_content in st.session_state.dialogue_log_plan:
             with st.chat_message("assistant" if sender == "AI" else "user"):
-                st.write(message)
+                st.write(msg_content)
 
         # 対話回数をカウント（AIの発言回数をカウント）
         ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "AI")
@@ -364,13 +382,18 @@ class StreamlitApp:
                     st.warning("活動内容を整理してください。")
 
     def render_page4(self):
-        """最終ページ（まとめ）の表示"""
-        self.show_guide_dialog(4)
-        
+        """最終ページ（まとめ）の表示"""      
         st.title("Step4：まとめ")
         
         # 現在のステップを表示
         self.make_sequence_bar()
+        
+        # このページでやることのガイドを表示（インデックス指定）  
+        page_index = 4;
+        dialog_key = f"dialog_closed_page{page_index}"
+        # 既に表示済みかチェック
+        if dialog_key not in st.session_state or not st.session_state[dialog_key]:
+            self.show_guide_dialog(4)
         
         # ユーザーのこれまでの入力内容をまとめて表示
         user_theme = self.db_manager.get_interest(user_id=st.session_state.user_id)

@@ -204,3 +204,5 @@ class DBManager:
 
     def delete_table_advices(self):
         self.cur.execute(""" DROP TABLE IF EXISTS advices""")
+    def delete_table_users(self):
+        self.cur.execute(""" DROP TABLE IF EXISTS users""")

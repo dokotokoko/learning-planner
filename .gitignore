@@ -2,6 +2,12 @@
 .env
 venv310
 
+#DBファイルを無視
+# データベースファイル
+*.db
+learning_assistant.db
+IBL-assistant.db
+
 # Python のキャッシュファイルを無視
 **/__pycache__/
 __pycache__
@@ -65,3 +71,4 @@ Thumbs.db
 *.tmp
 *~
 
+IBL-assistant.db
