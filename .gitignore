@@ -62,6 +62,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.cursor
+mcp.json
 
 # Jupyter Notebook
 .ipynb_checkpoints
