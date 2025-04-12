@@ -661,7 +661,7 @@ class StreamlitApp:
                 try:
                     # Supabaseからユーザーを検索
                     # TODO: access_codeはハッシュ化して比較するべき
-                    result = self.conn.table("users").select("id").eq("username", username).eq("access_code", access_code).execute()
+                    result = self.conn.table("users").select("id").eq("username", username).eq("password", access_code).execute()
                     if result.data:
                         user_id = result.data[0]['id']
                         st.session_state.authenticated = True
