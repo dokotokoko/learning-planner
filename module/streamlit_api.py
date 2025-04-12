@@ -42,57 +42,60 @@ class StreamlitApp:
 
     def _initialize_supabase_tables(self):
         """Supabaseに必要なテーブルが存在しない場合に作成する"""
-        logging.info("Supabaseテーブルの初期化を開始します...")
-        try:
+        logging.info("Supabaseテーブルの初期化を試みます (注意: テーブルは事前に作成することを推奨)")
+        # try:
             # Usersテーブル (パスワードはTEXT型のままですが、ハッシュ化推奨)
-            self.conn.query("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) UNIQUE NOT NULL,
-                    access_code TEXT NOT NULL, -- Supabase Authを使用しない場合、ハッシュ化して保存することを強く推奨します
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-            """, ttl=0).execute() # ttl=0でキャッシュ無効
+            # self.conn.query(""" # conn.query は SELECT 用のため CREATE TABLE には不向き
+            #     CREATE TABLE IF NOT EXISTS users (
+            #         id SERIAL PRIMARY KEY,
+            #         username VARCHAR(255) UNIQUE NOT NULL,
+            #         access_code TEXT NOT NULL, -- Supabase Authを使用しない場合、ハッシュ化して保存することを強く推奨します
+            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            #     );
+            # """, ttl=0).execute() # ttl=0でキャッシュ無効
+            #
+            # # Interestsテーブル
+            # self.conn.query("""
+            #     CREATE TABLE IF NOT EXISTS interests (
+            #         id SERIAL PRIMARY KEY,
+            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 外部キー制約を追加
+            #         interest TEXT,
+            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            #     );
+            # """, ttl=0).execute()
+            #
+            # # Goalsテーブル
+            # self.conn.query("""
+            #     CREATE TABLE IF NOT EXISTS goals (
+            #         id SERIAL PRIMARY KEY,
+            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            #         interest_id INT REFERENCES interests(id) ON DELETE SET NULL, -- 興味が消えたらNULLにするか、CASCADEで一緒に消すかなど検討
+            #         goal TEXT,
+            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            #     );
+            # """, ttl=0).execute()
+            #
+            # # Learning Plansテーブル
+            # self.conn.query("""
+            #     CREATE TABLE IF NOT EXISTS learning_plans (
+            #         id SERIAL PRIMARY KEY,
+            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            #         goal_id INT REFERENCES goals(id) ON DELETE SET NULL, -- ゴールが消えたらNULLにするか、CASCADEで一緒に消すかなど検討
+            #         nextStep TEXT,
+            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            #     );
+            # """, ttl=0).execute()
+            #
+            # logging.info("Supabaseテーブルの初期化確認が完了しました。")
 
-            # Interestsテーブル
-            self.conn.query("""
-                CREATE TABLE IF NOT EXISTS interests (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 外部キー制約を追加
-                    interest TEXT,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-            """, ttl=0).execute()
-
-            # Goalsテーブル
-            self.conn.query("""
-                CREATE TABLE IF NOT EXISTS goals (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    interest_id INT REFERENCES interests(id) ON DELETE SET NULL, -- 興味が消えたらNULLにするか、CASCADEで一緒に消すかなど検討
-                    goal TEXT,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-            """, ttl=0).execute()
-
-            # Learning Plansテーブル
-            self.conn.query("""
-                CREATE TABLE IF NOT EXISTS learning_plans (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    goal_id INT REFERENCES goals(id) ON DELETE SET NULL, -- ゴールが消えたらNULLにするか、CASCADEで一緒に消すかなど検討
-                    nextStep TEXT,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-            """, ttl=0).execute()
-
-            logging.info("Supabaseテーブルの初期化が完了しました。")
-
-        except Exception as e:
-            st.error(f"テーブル作成中にエラーが発生しました: {e}")
-            logging.error(f"テーブル作成エラー: {e}", exc_info=True)
+        # except Exception as e:
+        #     st.error(f"テーブル作成/確認中にエラーが発生しました: {e}")
+        #     logging.error(f"テーブル作成/確認エラー: {e}", exc_info=True)
             # テーブル作成失敗は致命的な可能性があるため停止
-            st.stop()
+            # st.stop()
+        # ---> テーブル作成は Supabase Studio で事前に行うことを推奨するため、
+        # ---> アプリケーション起動時の CREATE TABLE 処理はコメントアウトします。
+        pass # テーブル作成処理は行わない
 
     def next_page(self):
         """次のページに進む"""
