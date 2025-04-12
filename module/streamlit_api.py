@@ -691,7 +691,7 @@ class StreamlitApp:
                     try:
                         # Supabaseにユーザーを挿入
                         # TODO: new_access_code はハッシュ化して保存するべき
-                        insert_data = {"username": new_username, "access_code": new_access_code}
+                        insert_data = {"username": new_username, "password": new_access_code}
                         result = self.conn.table("users").insert(insert_data).execute()
                         # resultの内容を確認して成功判定しても良い
                         st.success("ユーザー登録が完了しました。ログインしてください。")
