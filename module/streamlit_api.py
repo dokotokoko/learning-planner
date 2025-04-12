@@ -1,19 +1,33 @@
 import streamlit as st
 from streamlit_chat import message
+from st_supabase_connection import SupabaseConnection
+import logging
 
-from module.db_manager import DBManager
 from module.llm_api import learning_plannner
 from prompt.prompt import goal_prompt, content_prompt
 
 # DBの設定
 DB_FILE = "IBL-assistant.db"
 
+# ロギング設定 (任意)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 class StreamlitApp:
     def __init__(self):
         """アプリケーションの初期化"""
-        self.db_manager = DBManager()
         self.planner = learning_plannner()
         self._initialize_session_state()
+        # Supabase接続を初期化
+        try:
+            self.conn = st.connection("supabase", type=SupabaseConnection)
+            logging.info("Supabase接続を初期化しました。")
+            # Supabaseテーブルを初期化
+            self._initialize_supabase_tables()
+        except Exception as e:
+            st.error(f"データベース接続またはテーブル初期化中にエラーが発生しました: {e}")
+            logging.error(f"データベース接続/初期化エラー: {e}", exc_info=True)
+            # エラーが発生した場合、アプリの続行が難しい可能性があるため停止
+            st.stop()
 
     def _initialize_session_state(self):
         """セッション状態の初期化"""
@@ -25,6 +39,60 @@ class StreamlitApp:
             st.session_state.user_id = None
         if "username" not in st.session_state:
             st.session_state.username = None
+
+    def _initialize_supabase_tables(self):
+        """Supabaseに必要なテーブルが存在しない場合に作成する"""
+        logging.info("Supabaseテーブルの初期化を開始します...")
+        try:
+            # Usersテーブル (パスワードはTEXT型のままですが、ハッシュ化推奨)
+            self.conn.query("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    access_code TEXT NOT NULL, -- Supabase Authを使用しない場合、ハッシュ化して保存することを強く推奨します
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+            """, ttl=0).execute() # ttl=0でキャッシュ無効
+
+            # Interestsテーブル
+            self.conn.query("""
+                CREATE TABLE IF NOT EXISTS interests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 外部キー制約を追加
+                    interest TEXT,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+            """, ttl=0).execute()
+
+            # Goalsテーブル
+            self.conn.query("""
+                CREATE TABLE IF NOT EXISTS goals (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    interest_id INT REFERENCES interests(id) ON DELETE SET NULL, -- 興味が消えたらNULLにするか、CASCADEで一緒に消すかなど検討
+                    goal TEXT,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+            """, ttl=0).execute()
+
+            # Learning Plansテーブル
+            self.conn.query("""
+                CREATE TABLE IF NOT EXISTS learning_plans (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    goal_id INT REFERENCES goals(id) ON DELETE SET NULL, -- ゴールが消えたらNULLにするか、CASCADEで一緒に消すかなど検討
+                    nextStep TEXT,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+            """, ttl=0).execute()
+
+            logging.info("Supabaseテーブルの初期化が完了しました。")
+
+        except Exception as e:
+            st.error(f"テーブル作成中にエラーが発生しました: {e}")
+            logging.error(f"テーブル作成エラー: {e}", exc_info=True)
+            # テーブル作成失敗は致命的な可能性があるため停止
+            st.stop()
 
     def next_page(self):
         """次のページに進む"""
@@ -170,11 +238,12 @@ class StreamlitApp:
         if st.button("テーマを決定する"):
             if theme:
                 try:
-                    self.db_manager.save_interests(user_id=st.session_state.user_id, interest=theme)
+                    self.conn.table("interests").insert({"user_id": st.session_state.user_id, "interest": theme}).execute()
                     st.success(f"テーマ '{theme}' を保存しました (user_id: {st.session_state.user_id})")
                     st.session_state.user_theme = theme
                 except Exception as e:
                     st.error(f"テーマの保存に失敗: {str(e)}")
+                    logging.error(f"テーマ保存エラー: {e}", exc_info=True)
 
         if st.button("次へ"):
             self.next_page()
@@ -209,27 +278,53 @@ class StreamlitApp:
             st.session_state.dialogue_log = []
             
             # 初期メッセージは会話履歴が空の時だけ追加する
-            user_theme = self.db_manager.get_interest(user_id=st.session_state.user_id)
-            if user_theme and len(user_theme) > 0:
-                user_theme_str = user_theme[0][0]
-                st.write(f"あなたの探究テーマ: {user_theme_str}")
+            try:
+                user_theme_result = self.conn.table("interests")\
+                                          .select("interest")\
+                                          .eq("user_id", st.session_state.user_id)\
+                                          .order("created_at", desc=True)\
+                                          .limit(1)\
+                                          .execute()
                 
-                # セッション状態に保存して後で使えるようにする
-                st.session_state.user_theme_str = user_theme_str
-                
-                # 初期メッセージを生成して対話履歴に追加
-                ai_question = self.planner.generate_response(prompt=goal_prompt, user_input=user_theme_str)
-                st.session_state.dialogue_log.append(("AI", ai_question))
-            elif "user_theme" in st.session_state:
-                user_theme_str = st.session_state.user_theme
-                st.success("session_stateからテーマを取得しました。")
-            else:
-                st.warning("テーマが登録されていません。前の画面で登録してください。")
-                return  # テーマがない場合は処理を中断
+                if user_theme_result.data:
+                    user_theme_str = user_theme_result.data[0]['interest']
+                    st.write(f"あなたの探究テーマ: {user_theme_str}")
+                    
+                    # セッション状態に保存して後で使えるようにする
+                    st.session_state.user_theme_str = user_theme_str
+                    
+                    # 初期メッセージを生成して対話履歴に追加
+                    ai_question = self.planner.generate_response(prompt=goal_prompt, user_input=user_theme_str)
+                    st.session_state.dialogue_log.append(("AI", ai_question))
+                else:
+                    st.warning("テーマが登録されていません。前の画面で登録してください。")
+                    return  # テーマがない場合は処理を中断
+            except Exception as e:
+                 st.error(f"テーマの読み込みに失敗: {e}")
+                 logging.error(f"テーマ読み込みエラー: {e}", exc_info=True)
+                 return # 読み込み失敗時も中断
         else:
-            # セッション状態から取得
+            # セッション状態から取得 (再描画時など)
             if 'user_theme_str' in st.session_state:
                 user_theme_str = st.session_state.user_theme_str
+            else:
+                # 念のため、セッションにもなければDBから再取得試行
+                try:
+                    user_theme_result = self.conn.table("interests")\
+                                              .select("interest")\
+                                              .eq("user_id", st.session_state.user_id)\
+                                              .order("created_at", desc=True)\
+                                              .limit(1)\
+                                              .execute()
+                    if user_theme_result.data:
+                        user_theme_str = user_theme_result.data[0]['interest']
+                        st.session_state.user_theme_str = user_theme_str
+                    else:
+                        st.warning("テーマが見つかりません。Step1からやり直してください。")
+                        # ここで st.stop() または return するかは要件次第
+                except Exception as e:
+                    st.error(f"テーマの再取得に失敗: {e}")
+                    logging.error(f"テーマ再取得エラー: {e}", exc_info=True)
 
         # 対話履歴の表示
         for sender, msg_content in st.session_state.dialogue_log:
@@ -242,7 +337,7 @@ class StreamlitApp:
         # 対話回数が3回未満の場合のみ、入力フィールドを表示
         if user_messages_count < 3:
             # ユーザー入力
-            user_message = st.chat_input("AIアシスタントからの質問に回答してください。")
+            user_message = st.chat_input("AIアシスタントからの質問に回答してください。", key="goal_input")
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
                 # 対話履歴に追加
@@ -262,14 +357,65 @@ class StreamlitApp:
             
             # 最終目標を保存するテキストエリア
             if 'final_goal' not in st.session_state:
-                st.session_state.final_goal = ""
+                st.session_state.final_goal = "" # 初期化
+                # 過去のデータがあれば読み込む
+                try:
+                    goal_result = self.conn.table("goals")\
+                                        .select("goal")\
+                                        .eq("user_id", st.session_state.user_id)\
+                                        .order("created_at", desc=True)\
+                                        .limit(1)\
+                                        .execute()
+                    if goal_result.data:
+                        st.session_state.final_goal = goal_result.data[0]['goal']
+                except Exception as e:
+                    logging.warning(f"過去のゴールの読み込みに失敗: {e}")
             
-            final_goal = st.text_area("学習目標を整理しましょう", st.session_state.final_goal)
+            final_goal_input = st.text_area("学習目標を整理しましょう", value=st.session_state.final_goal, key="final_goal_text_area")
             
-            if final_goal != st.session_state.final_goal:
-                st.session_state.final_goal = final_goal
-                self.db_manager.save_goal(user_id=st.session_state.user_id, interest=user_theme_str, goal=final_goal)
-                st.rerun()
+            # テキストエリアの内容が変更されたらDBに保存
+            if final_goal_input != st.session_state.final_goal:
+                st.session_state.final_goal = final_goal_input
+                # --- DB操作の変更 --- 
+                try:
+                    # 対応するinterest_idを取得
+                    interest_id = None
+                    if 'user_theme_str' in st.session_state:
+                        interest_result = self.conn.table("interests")\
+                                                  .select("id")\
+                                                  .eq("user_id", st.session_state.user_id)\
+                                                  .eq("interest", st.session_state.user_theme_str)\
+                                                  .order("created_at", desc=True)\
+                                                  .limit(1)\
+                                                  .execute()
+                        if interest_result.data:
+                            interest_id = interest_result.data[0]['id']
+                        else:
+                            st.warning(f"テーマ '{st.session_state.user_theme_str}' のIDが見つかりません。先にテーマを保存してください。")
+                            # interest_id がなければ goals に保存できないため return か、interest_idなしで保存するか検討
+                            # return # ここでは保存を中止
+                    else:
+                        st.warning("テーマ情報がセッションにありません。Goalを保存できませんでした。")
+                        # return
+                    
+                    if interest_id:
+                        # self.db_manager.save_goal(st.session_state.user_id, st.session_state.user_theme_str, final_goal_input)
+                        # 既存のゴールがあれば更新、なければ挿入 (upsert) または Insert のみ
+                        # ここでは単純にInsert（同じユーザーIDで複数のゴールを持てる仕様とする）
+                        self.conn.table("goals").insert({
+                            "user_id": st.session_state.user_id,
+                            "interest_id": interest_id,
+                            "goal": final_goal_input
+                        }).execute()
+                        st.success("学習目標を保存しました。")
+                        st.rerun() # 保存後に再実行して表示を更新
+                    else:
+                         st.error("関連するテーマが見つからなかったため、目標を保存できませんでした。")
+
+                except Exception as e:
+                     st.error(f"学習目標の保存に失敗: {e}")
+                     logging.error(f"ゴール保存エラー: {e}", exc_info=True)
+                # --- 変更ここまで --- 
 
         col1, col2 = st.columns(2)
         with col1:
@@ -279,10 +425,10 @@ class StreamlitApp:
         with col2:
             if st.button("次へ"):
                 # 目標がセットされていれば次のページへ
-                if ai_messages_count >= 3 and 'final_goal' in st.session_state and st.session_state.final_goal:
+                if user_messages_count >= 3 and 'final_goal' in st.session_state and st.session_state.final_goal:
                     self.next_page()
                     st.rerun()
-                elif ai_messages_count < 3:
+                elif user_messages_count < 3:
                     st.warning("まずは3回の対話を完了させてください。")
                 else:
                     st.warning("最終的な学習目標を入力してください。")
@@ -301,22 +447,41 @@ class StreamlitApp:
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(3)
 
+        # --- DB操作の変更 (ゴールの取得) ---
+        user_goal_str = ""
+        try:
+            goal_result = self.conn.table("goals")\
+                              .select("goal")\
+                              .eq("user_id", st.session_state.user_id)\
+                              .order("created_at", desc=True)\
+                              .limit(1)\
+                              .execute()
+            if goal_result.data:
+                user_goal_str = goal_result.data[0]['goal']
+                st.session_state.user_goal_str = user_goal_str # セッションにも保存
+                st.write(f"あなたの探究活動の目標: {user_goal_str}")
+            elif 'final_goal' in st.session_state: # DBになくてもセッションにあれば使う
+                 user_goal_str = st.session_state.final_goal
+                 st.write(f"あなたの探究活動の目標 (セッションから): {user_goal_str}")
+            else:
+                st.warning("目標が登録されていません。前の画面で登録してください。")
+                # return ここで止めると以降の処理ができない
+        except Exception as e:
+            st.error(f"目標の読み込みに失敗: {e}")
+            logging.error(f"目標読み込みエラー: {e}", exc_info=True)
+            # return
+        # --- 変更ここまで ---
+
         # 会話履歴の初期化（存在しない場合のみ）
         if 'dialogue_log_plan' not in st.session_state:
             st.session_state.dialogue_log_plan = []
             
-            # 初期メッセージは会話履歴が空の時だけ追加する
-            user_goal = self.db_manager.get_goal(user_id=st.session_state.user_id)
-            if user_goal and len(user_goal) > 0:
-                user_goal_str = user_goal[0][3]
-                st.write(f"あなたの探究活動の目標: {user_goal_str}")
-                
-                # 初期メッセージを生成して対話履歴に追加
+            # 初期メッセージは会話履歴が空の時だけ追加する (目標が取得できていれば)
+            if user_goal_str:
                 ai_question = self.planner.generate_response(prompt=content_prompt, user_input=user_goal_str)
                 st.session_state.dialogue_log_plan.append(("AI", ai_question))
-            else:
-                st.warning("テーマが登録されていません。前の画面で登録してください。")
-                return  # テーマがない場合は処理を中断
+            # else: # 目標がない場合は初期質問をスキップ（あるいは別のメッセージ）
+            #     st.info("目標を設定してから、活動内容の相談を開始します。")
 
         # 対話履歴の表示
         for sender, msg_content in st.session_state.dialogue_log_plan:
@@ -326,10 +491,10 @@ class StreamlitApp:
         # 対話回数をカウント（AIの発言回数をカウント）
         ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "AI")
         user_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "user")
-        # 対話回数が3回未満の場合のみ、入力フィールドを表示
+        # 対話回数が6回未満の場合のみ、入力フィールドを表示
         if user_messages_count < 6:
             # ユーザー入力
-            user_message = st.chat_input("あなたの回答を入力してください")
+            user_message = st.chat_input("あなたの回答を入力してください", key="plan_input")
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
                 # 対話履歴に追加
@@ -344,26 +509,65 @@ class StreamlitApp:
                 # 画面を再読み込みして最新の対話を表示
                 st.rerun()
         else:
-            # 対話が3回に達した場合のメッセージ
+            # 対話が完了した場合のメッセージ
             st.success("活動内容を決める対話が完了しました。「次へ」ボタンをクリックして次のステップに進みましょう。")
             
-            # 初期化：user_goal_str変数
-            user_goal_str = ""
-            user_goal = self.db_manager.get_goal(user_id=st.session_state.user_id)
-            if user_goal and len(user_goal) > 0:
-                user_goal_str = user_goal[0][3]  # goalカラムの位置に応じて調整
-                
             # 学習計画を保存するテキストエリア
             if 'learning_plan' not in st.session_state:
-                st.session_state.learning_plan = ""
+                st.session_state.learning_plan = "" # 初期化
+                 # 過去のデータがあれば読み込む
+                try:
+                    plan_result = self.conn.table("learning_plans")\
+                                        .select("nextStep")\
+                                        .eq("user_id", st.session_state.user_id)\
+                                        .order("created_at", desc=True)\
+                                        .limit(1)\
+                                        .execute()
+                    if plan_result.data:
+                        st.session_state.learning_plan = plan_result.data[0]['nextStep']
+                except Exception as e:
+                    logging.warning(f"過去の学習計画の読み込みに失敗: {e}")
             
-            learning_plan = st.text_area("改めて活動内容を整理しましょう", st.session_state.learning_plan)
+            learning_plan_input = st.text_area("改めて活動内容を整理しましょう", value=st.session_state.learning_plan, key="learning_plan_text_area")
             
-            if learning_plan != st.session_state.learning_plan:
-                st.session_state.learning_plan = learning_plan
-                if user_goal_str:  # user_goal_strが空でない場合のみ保存を実行
-                    self.db_manager.save_learningPlans(user_id=st.session_state.user_id, goal=user_goal_str, nextStep=learning_plan)
-                st.rerun()
+            if learning_plan_input != st.session_state.learning_plan:
+                st.session_state.learning_plan = learning_plan_input
+                 # --- DB操作の変更 --- 
+                try:
+                    # 対応する goal_id を取得 (user_goal_str を使う)
+                    goal_id = None
+                    current_goal_str = st.session_state.get('user_goal_str') # セッションから最新のゴール文字列を取得
+                    if current_goal_str:
+                         goal_result = self.conn.table("goals")\
+                                           .select("id")\
+                                           .eq("user_id", st.session_state.user_id)\
+                                           .eq("goal", current_goal_str)\
+                                           .order("created_at", desc=True)\
+                                           .limit(1)\
+                                           .execute()
+                         if goal_result.data:
+                             goal_id = goal_result.data[0]['id']
+                         else:
+                             st.warning(f"目標 '{current_goal_str}' のIDが見つかりません。先に目標を保存してください。")
+                    else:
+                         st.warning("目標情報がセッションにありません。活動計画を保存できませんでした。")
+
+                    if goal_id:
+                        # self.db_manager.save_learningPlans(st.session_state.user_id, user_goal_str, learning_plan_input)
+                        # Insert or Upsert
+                        self.conn.table("learning_plans").insert({
+                            "user_id": st.session_state.user_id,
+                            "goal_id": goal_id,
+                            "nextStep": learning_plan_input
+                        }).execute()
+                        st.success("活動計画を保存しました。")
+                        st.rerun()
+                    else:
+                         st.error("関連する目標が見つからなかったため、活動計画を保存できませんでした。")
+                except Exception as e:
+                     st.error(f"活動計画の保存に失敗: {e}")
+                     logging.error(f"活動計画保存エラー: {e}", exc_info=True)
+                # --- 変更ここまで --- 
 
         col1, col2 = st.columns(2)
         with col1:
@@ -373,11 +577,11 @@ class StreamlitApp:
         with col2:
             if st.button("次へ"):
                 # 学習計画がセットされていれば次のページへ
-                if ai_messages_count >= 3 and 'learning_plan' in st.session_state and st.session_state.learning_plan:
+                if user_messages_count >= 6 and 'learning_plan' in st.session_state and st.session_state.learning_plan:
                     self.next_page()
                     st.rerun()
-                elif ai_messages_count < 3:
-                    st.warning("まずは3回の対話を完了させてください。")
+                elif user_messages_count < 6:
+                    st.warning("まずは対話を完了させてください。")
                 else:
                     st.warning("活動内容を整理してください。")
 
@@ -395,22 +599,45 @@ class StreamlitApp:
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(4)
         
-        # ユーザーのこれまでの入力内容をまとめて表示
-        user_theme = self.db_manager.get_interest(user_id=st.session_state.user_id)
-        user_goal = self.db_manager.get_goal(user_id=st.session_state.user_id)
-        user_plan = self.db_manager.get_learningsPlans(user_id=st.session_state.user_id)
-        
-        if user_theme and user_goal and user_plan:
+        # --- DB操作の変更 (データの取得) --- 
+        theme_str = "データなし"
+        goal_str = "データなし"
+        plan_str = "データなし"
+        try:
+            user_theme_result = self.conn.table("interests")\
+                                      .select("interest")\
+                                      .eq("user_id", st.session_state.user_id)\
+                                      .order("created_at", desc=True).limit(1).execute()
+            user_goal_result = self.conn.table("goals")\
+                                     .select("goal")\
+                                     .eq("user_id", st.session_state.user_id)\
+                                     .order("created_at", desc=True).limit(1).execute()
+            user_plan_result = self.conn.table("learning_plans")\
+                                     .select("nextStep")\
+                                     .eq("user_id", st.session_state.user_id)\
+                                     .order("created_at", desc=True).limit(1).execute()
+
+            if user_theme_result.data:
+                theme_str = user_theme_result.data[0]['interest']
+            if user_goal_result.data:
+                goal_str = user_goal_result.data[0]['goal']
+            if user_plan_result.data:
+                plan_str = user_plan_result.data[0]['nextStep']
+
             st.write("### 探究学習の内容")
-            st.write(f"**テーマ**: {user_theme[0][0]}")
-            st.write(f"**目標**: {user_goal[0][3]}")
-            st.write(f"**活動内容**: {user_plan[0][3]}")
+            st.write(f"**テーマ**: {theme_str}")
+            st.write(f"**目標**: {goal_str}")
+            st.write(f"**活動内容**: {plan_str}")
             
             st.write("### 次のステップ")
             st.write("探究学習の計画が完成しました。この計画に沿って、実際に探究活動を進めていきましょう。")
             st.write("定期的に進捗を振り返り、必要に応じて計画を見直すことも大切です。")
-        else:
-            st.warning("データが見つかりません。前のステップを完了してください。")
+
+        except Exception as e:
+             st.error(f"データの読み込み中にエラーが発生しました: {e}")
+             logging.error(f"まとめページデータ読み込みエラー: {e}", exc_info=True)
+             st.warning("データが完全に読み込めませんでした。前のステップに戻って確認してください。")
+        # --- 変更ここまで --- 
 
         if st.button("前へ"):
             self.prev_page()
@@ -420,7 +647,6 @@ class StreamlitApp:
         """ログイン画面の表示"""
         st.title("探究学習アシスタント - ログイン")
         
-        # タブを作成してログインと登録を分ける
         tab1, tab2 = st.tabs(["ログイン", "新規ユーザー登録"])
         
         # ログインタブ
@@ -429,15 +655,23 @@ class StreamlitApp:
             access_code = st.text_input("アクセスコード", type="password", key="login_password")
             
             if st.button("ログイン", key="login_button"):
-                user_id = self.db_manager.verify_user(username, access_code)
-                if user_id:
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = user_id
-                    st.session_state.username = username
-                    st.success("ログインしました！")
-                    st.rerun()
-                else:
-                    st.error("ユーザー名またはアクセスコードが正しくありません")
+                try:
+                    # Supabaseからユーザーを検索
+                    # TODO: access_codeはハッシュ化して比較するべき
+                    result = self.conn.table("users").select("id").eq("username", username).eq("access_code", access_code).execute()
+                    if result.data:
+                        user_id = result.data[0]['id']
+                        st.session_state.authenticated = True
+                        st.session_state.user_id = user_id
+                        st.session_state.username = username
+                        st.success("ログインしました！")
+                        st.rerun()
+                    else:
+                        st.error("ユーザー名またはアクセスコードが正しくありません")
+                        user_id = None
+                except Exception as e:
+                    st.error(f"ログイン処理中にエラーが発生しました: {e}")
+                    logging.error(f"ログインエラー: {e}", exc_info=True)
         
         # 新規ユーザー登録タブ
         with tab2:
@@ -451,11 +685,22 @@ class StreamlitApp:
                 elif not new_username or not new_access_code:
                     st.error("ユーザー名とアクセスコードを入力してください")
                 else:
-                    success = self.db_manager.add_user(new_username, new_access_code)
-                    if success:
+                    try:
+                        # Supabaseにユーザーを挿入
+                        # TODO: new_access_code はハッシュ化して保存するべき
+                        insert_data = {"username": new_username, "access_code": new_access_code}
+                        result = self.conn.table("users").insert(insert_data).execute()
+                        # resultの内容を確認して成功判定しても良い
                         st.success("ユーザー登録が完了しました。ログインしてください。")
-                    else:
-                        st.error("そのユーザー名は既に使用されています")
+                        success = True
+                    except Exception as e:
+                        # PostgRESTエラーを解析して重複を判定することも可能
+                        if "duplicate key value violates unique constraint" in str(e):
+                             st.error("そのユーザー名は既に使用されています")
+                        else:
+                             st.error(f"ユーザー登録中にエラーが発生しました: {e}")
+                        logging.error(f"ユーザー登録エラー: {e}", exc_info=True)
+                        success = False
 
     def setup_sidebar(self):
         """サイドバーの設定"""
@@ -463,12 +708,14 @@ class StreamlitApp:
             with st.sidebar:
                 st.write(f"ログイン中: {st.session_state.username}")
                 if st.button("ログアウト"):
+                    # ログアウト処理は DBManager に依存していないので基本そのまま
                     st.session_state.authenticated = False
                     st.session_state.user_id = None
                     st.session_state.username = None
-                    # セッションクリア
+                    # 他のセッション状態もクリア
+                    keys_to_keep = {"authenticated", "user_id", "username"}
                     for key in list(st.session_state.keys()):
-                        if key not in ["authenticated", "user_id", "username"]:
+                        if key not in keys_to_keep:
                             del st.session_state[key]
                     st.rerun()
 
