@@ -194,8 +194,9 @@ class StreamlitApp:
             }
             
             dialog_content = {
-                1: """この画面では、探究学習のテーマを入力してください。
+                1: """まずはあなたの興味・知的好奇心を教えてください！！。
                 後からゴールや学習計画を設定する際の出発点となります。
+                興味 = 探究学習のエネルギー
                 
                 例えば以下のような視点で考えてみましょう：
                 - 社会問題や身近な疑問・課題
@@ -203,6 +204,7 @@ class StreamlitApp:
                 - これまでに学んできた中で特に興味を持ったこと""",
                 
                 2: """この画面では、テーマを具体的な目標に落とし込みます。
+                目標 = 方向性と目指すゴール
                 
                 以下の質問に答えていくことで、目標が明確になります：
                 - なぜそのテーマに興味を持ったのですか？
@@ -236,13 +238,13 @@ class StreamlitApp:
         # 現在のステップを表示
         self.make_sequence_bar()
 
-        theme = st.text_input("探究学習のテーマを入力してください。")
+        theme = st.text_input("あなたが探究したいテーマを入力してください。例：AIによるメタ認知支援")
 
         if st.button("テーマを決定する"):
             if theme:
                 try:
                     self.conn.table("interests").insert({"user_id": st.session_state.user_id, "interest": theme}).execute()
-                    st.success(f"テーマ '{theme}' を保存しました (user_id: {st.session_state.user_id})")
+                    st.success(f"テーマ '{theme}' を保存しました！")
                     st.session_state.user_theme = theme
                 except Exception as e:
                     st.error(f"テーマの保存に失敗: {str(e)}")
@@ -343,12 +345,20 @@ class StreamlitApp:
             user_message = st.chat_input("AIアシスタントからの質問に回答してください。", key="goal_input")
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
+                # --- ログ保存処理を追加 ---
+                self._save_chat_log(page=2, sender="user", message_content=user_message)
+                # --- 追加ここまで ---
+
                 # 対話履歴に追加
                 st.session_state.dialogue_log.append(("user", user_message))
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=goal_prompt, user_input=user_message)
                 
+                # --- ログ保存処理を追加 ---
+                self._save_chat_log(page=2, sender="AI", message_content=response)
+                # --- 追加ここまで ---
+
                 # 対話履歴に追加
                 st.session_state.dialogue_log.append(("AI", response))
                 
@@ -438,7 +448,7 @@ class StreamlitApp:
 
     def render_page3(self):
         """アイディエーションページの表示"""
-        st.title("Step3：アイディエーション ~探究学習の内容を決めよう！")
+        st.title("Step3：アイディエーション ~探究学習の活動内容を決めよう！")
         
         # 現在のステップを表示
         self.make_sequence_bar()
@@ -500,12 +510,20 @@ class StreamlitApp:
             user_message = st.chat_input("あなたの回答を入力してください", key="plan_input")
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
+                # --- ログ保存処理を追加 ---
+                self._save_chat_log(page=3, sender="user", message_content=user_message)
+                # --- 追加ここまで ---
+
                 # 対話履歴に追加
                 st.session_state.dialogue_log_plan.append(("user", user_message))
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=content_prompt, user_input=user_message)
                 
+                # --- ログ保存処理を追加 ---
+                self._save_chat_log(page=3, sender="AI", message_content=response)
+                # --- 追加ここまで ---
+
                 # 対話履歴に追加
                 st.session_state.dialogue_log_plan.append(("AI", response))
                 
@@ -648,14 +666,14 @@ class StreamlitApp:
 
     def render_login_page(self):
         """ログイン画面の表示"""
-        st.title("探究学習アシスタント - ログイン")
+        st.title("探Qメイト - ログイン")
         
         tab1, tab2 = st.tabs(["ログイン", "新規ユーザー登録"])
         
         # ログインタブ
         with tab1:
             username = st.text_input("ユーザー名", key="login_username")
-            access_code = st.text_input("アクセスコード", type="password", key="login_password")
+            access_code = st.text_input("パスワード", type="password", key="login_password")
             
             if st.button("ログイン", key="login_button"):
                 try:
@@ -670,7 +688,7 @@ class StreamlitApp:
                         st.success("ログインしました！")
                         st.rerun()
                     else:
-                        st.error("ユーザー名またはアクセスコードが正しくありません")
+                        st.error("ユーザー名またはパスワードが正しくありません")
                         user_id = None
                 except Exception as e:
                     st.error(f"ログイン処理中にエラーが発生しました: {e}")
@@ -679,14 +697,14 @@ class StreamlitApp:
         # 新規ユーザー登録タブ
         with tab2:
             new_username = st.text_input("ユーザー名", key="reg_username")
-            new_access_code = st.text_input("アクセスコード", type="password", key="reg_password")
-            confirm_code = st.text_input("アクセスコード（確認）", type="password", key="confirm_password")
+            new_access_code = st.text_input("パスワード", type="password", key="reg_password")
+            confirm_code = st.text_input("パスワード（確認）", type="password", key="confirm_password")
             
             if st.button("登録", key="register_button"):
                 if new_access_code != confirm_code:
-                    st.error("アクセスコードが一致しません")
+                    st.error("パスワードが一致しません")
                 elif not new_username or not new_access_code:
-                    st.error("ユーザー名とアクセスコードを入力してください")
+                    st.error("ユーザー名とパスワードを入力してください")
                 else:
                     try:
                         # Supabaseにユーザーを挿入
@@ -740,6 +758,22 @@ class StreamlitApp:
                 self.render_page3()
             elif st.session_state.page == 4:
                 self.render_page4()
+
+    # --- ヘルパーメソッドを追加 ---
+    def _save_chat_log(self, page: int, sender: str, message_content: str):
+        """対話ログをSupabaseに保存する"""
+        try:
+            self.conn.table("chat_logs").insert({
+                "user_id": st.session_state.user_id,
+                "page": page,
+                "sender": sender,
+                "message": message_content
+            }).execute()
+            logging.info(f"対話ログ保存成功: Page={page}, Sender={sender}")
+        except Exception as e:
+            st.error(f"対話ログの保存に失敗しました: {e}")
+            logging.error(f"対話ログ保存エラー: Page={page}, Sender={sender}, Error={e}", exc_info=True)
+    # --- 追加ここまで ---
 
 # アプリケーション実行
 if __name__ == "__main__":
