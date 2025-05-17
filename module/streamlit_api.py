@@ -39,63 +39,12 @@ class StreamlitApp:
             st.session_state.user_id = None
         if "username" not in st.session_state:
             st.session_state.username = None
+        if "general_inquiry_history" not in st.session_state:
+            st.session_state.general_inquiry_history = []
 
     def _initialize_supabase_tables(self):
         """Supabaseに必要なテーブルが存在しない場合に作成する"""
         logging.info("Supabaseテーブルの初期化を試みます (注意: テーブルは事前に作成することを推奨)")
-        # try:
-            # Usersテーブル (パスワードはTEXT型のままですが、ハッシュ化推奨)
-            # self.conn.query(""" # conn.query は SELECT 用のため CREATE TABLE には不向き
-            #     CREATE TABLE IF NOT EXISTS users (
-            #         id SERIAL PRIMARY KEY,
-            #         username VARCHAR(255) UNIQUE NOT NULL,
-            #         access_code TEXT NOT NULL, -- Supabase Authを使用しない場合、ハッシュ化して保存することを強く推奨します
-            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            #     );
-            # """, ttl=0).execute() # ttl=0でキャッシュ無効
-            #
-            # # Interestsテーブル
-            # self.conn.query("""
-            #     CREATE TABLE IF NOT EXISTS interests (
-            #         id SERIAL PRIMARY KEY,
-            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 外部キー制約を追加
-            #         interest TEXT,
-            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            #     );
-            # """, ttl=0).execute()
-            #
-            # # Goalsテーブル
-            # self.conn.query("""
-            #     CREATE TABLE IF NOT EXISTS goals (
-            #         id SERIAL PRIMARY KEY,
-            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            #         interest_id INT REFERENCES interests(id) ON DELETE SET NULL, -- 興味が消えたらNULLにするか、CASCADEで一緒に消すかなど検討
-            #         goal TEXT,
-            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            #     );
-            # """, ttl=0).execute()
-            #
-            # # Learning Plansテーブル
-            # self.conn.query("""
-            #     CREATE TABLE IF NOT EXISTS learning_plans (
-            #         id SERIAL PRIMARY KEY,
-            #         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            #         goal_id INT REFERENCES goals(id) ON DELETE SET NULL, -- ゴールが消えたらNULLにするか、CASCADEで一緒に消すかなど検討
-            #         nextStep TEXT,
-            #         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            #     );
-            # """, ttl=0).execute()
-            #
-            # logging.info("Supabaseテーブルの初期化確認が完了しました。")
-
-        # except Exception as e:
-        #     st.error(f"テーブル作成/確認中にエラーが発生しました: {e}")
-        #     logging.error(f"テーブル作成/確認エラー: {e}", exc_info=True)
-            # テーブル作成失敗は致命的な可能性があるため停止
-            # st.stop()
-        # ---> テーブル作成は Supabase Studio で事前に行うことを推奨するため、
-        # ---> アプリケーション起動時の CREATE TABLE 処理はコメントアウトします。
-        pass # テーブル作成処理は行わない
 
     def next_page(self):
         """次のページに進む"""
@@ -250,9 +199,15 @@ class StreamlitApp:
                     st.error(f"テーマの保存に失敗: {str(e)}")
                     logging.error(f"テーマ保存エラー: {e}", exc_info=True)
 
-        if st.button("次へ"):
-            self.next_page()
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("ホームへ戻る", key="back_to_home_from_page1"):
+                self.set_page("home")
+                st.rerun()
+        with col2:
+            if st.button("次へ"):
+                self.next_page()
+                st.rerun()
 
         # このページでやることのガイドを表示（インデックス指定）
         page_index = 1;
@@ -303,6 +258,9 @@ class StreamlitApp:
                     st.session_state.dialogue_log.append(("AI", ai_question))
                 else:
                     st.warning("テーマが登録されていません。前の画面で登録してください。")
+                    if st.button("テーマ登録ページに戻る", key="back_to_page1_from_page2_for_theme"):
+                        self.set_page(1)
+                        st.rerun()
                     return  # テーマがない場合は処理を中断
             except Exception as e:
                  st.error(f"テーマの読み込みに失敗: {e}")
@@ -326,6 +284,9 @@ class StreamlitApp:
                         st.session_state.user_theme_str = user_theme_str
                     else:
                         st.warning("テーマが見つかりません。Step1からやり直してください。")
+                        if st.button("テーマ登録ページに戻る", key="back_to_page1_from_page2_for_theme_retry"):
+                            self.set_page(1)
+                            st.rerun()
                         # ここで st.stop() または return するかは要件次第
                 except Exception as e:
                     st.error(f"テーマの再取得に失敗: {e}")
@@ -667,6 +628,7 @@ class StreamlitApp:
     def render_login_page(self):
         """ログイン画面の表示"""
         st.title("探Qメイト - ログイン")
+        st.write("AIを活用した探究学習支援アプリケーションです。探究テーマから学習目標の設定、学習計画の作成までを対話形式でサポートします。")
         
         tab1, tab2 = st.tabs(["ログイン", "新規ユーザー登録"])
         
@@ -681,10 +643,11 @@ class StreamlitApp:
                     # TODO: access_codeはハッシュ化して比較するべき
                     result = self.conn.table("users").select("id").eq("username", username).eq("password", access_code).execute()
                     if result.data:
-                        user_id = result.data[0]['id']
+                        user_id = result.data[0]["id"]
                         st.session_state.authenticated = True
                         st.session_state.user_id = user_id
                         st.session_state.username = username
+                        st.session_state.page = "home" # ログイン後ホームページへ
                         st.success("ログインしました！")
                         st.rerun()
                     else:
@@ -728,8 +691,23 @@ class StreamlitApp:
         if st.session_state.authenticated:
             with st.sidebar:
                 st.write(f"ログイン中: {st.session_state.username}")
-                if st.button("ログアウト"):
-                    # ログアウト処理は DBManager に依存していないので基本そのまま
+                st.divider()
+
+                if st.session_state.page == "home":
+                    st.button("❓ なんでも相談窓口", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_home", use_container_width=True)
+                else:
+                    st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
+                    st.divider()
+                    st.button("1️⃣ Step 1: テーマ設定", on_click=self.navigate_to_page1, key="sidebar_nav_p1", use_container_width=True)
+                    st.button("2️⃣ Step 2: ゴール設定", on_click=self.navigate_to_page2, key="sidebar_nav_p2", use_container_width=True)
+                    st.button("3️⃣ Step 3: アイディエーション", on_click=self.navigate_to_page3, key="sidebar_nav_p3", use_container_width=True)
+                    st.button("4️⃣ Step 4: まとめ", on_click=self.navigate_to_page4, key="sidebar_nav_p4", use_container_width=True)
+                    st.divider()
+                    st.button("❓ なんでも相談窓口", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_other", use_container_width=True)
+                
+                st.divider()
+                if st.button("ログアウト", key="sidebar_logout", use_container_width=True):
+                    # ログアウト処理
                     st.session_state.authenticated = False
                     st.session_state.user_id = None
                     st.session_state.username = None
@@ -739,6 +717,17 @@ class StreamlitApp:
                         if key not in keys_to_keep:
                             del st.session_state[key]
                     st.rerun()
+
+    def set_page(self, page_value):
+        """ページを設定するヘルパー関数"""
+        st.session_state.page = page_value
+        # 相談窓口やホームページ以外から移動する場合は履歴をクリア（必要に応じて調整）
+        if page_value not in ["general_inquiry", "home"]:
+            if "general_inquiry_history" in st.session_state:
+                 st.session_state.general_inquiry_history = []
+        # elif page_value == "home": # ホームに移動したときに相談履歴をクリアする場合
+        #     if "general_inquiry_history" in st.session_state:
+        #          st.session_state.general_inquiry_history = []
 
     def run(self):
         """アプリケーションの実行"""
@@ -750,7 +739,9 @@ class StreamlitApp:
             self.render_login_page()
         else:
             # 認証済みならページを表示
-            if st.session_state.page == 1:
+            if st.session_state.page == "home":
+                self.render_home_page()
+            elif st.session_state.page == 1:
                 self.render_page1()
             elif st.session_state.page == 2:
                 self.render_page2()
@@ -758,6 +749,8 @@ class StreamlitApp:
                 self.render_page3()
             elif st.session_state.page == 4:
                 self.render_page4()
+            elif st.session_state.page == "general_inquiry":
+                self.render_general_inquiry_page()
 
     # --- ヘルパーメソッドを追加 ---
     def _save_chat_log(self, page: int, sender: str, message_content: str):
@@ -765,7 +758,7 @@ class StreamlitApp:
         try:
             self.conn.table("chat_logs").insert({
                 "user_id": st.session_state.user_id,
-                "page": page,
+                "page": str(page), # ページ番号が文字列の場合も考慮してstr()でキャスト
                 "sender": sender,
                 "message": message_content
             }).execute()
@@ -774,6 +767,110 @@ class StreamlitApp:
             st.error(f"対話ログの保存に失敗しました: {e}")
             logging.error(f"対話ログ保存エラー: Page={page}, Sender={sender}, Error={e}", exc_info=True)
     # --- 追加ここまで ---
+
+    def render_general_inquiry_page(self):
+        """なんでも相談窓口ページの表示"""
+        st.title("なんでも相談窓口")
+        st.write("探究学習を進める上で困っていること、悩んでいることを自由に入力してください。AIアシスタントが相談に乗ります。")
+
+        # 「よくある困りごと」ボタンの例 (後で具体的な選択肢を追加)
+        common_issues = [
+            "何から始めたらいいかわからない",
+            "テーマが大きすぎる気がする",
+            "具体的な進め方がわからない",
+            "行き詰まってしまった"
+        ]
+        
+        # selectbox のキーを修正し、コールバック関数または st.form を使った制御を検討
+        # ここではシンプルに、選択肢が変更されたらそれを表示する形にする
+        
+        # ユーザーが選択した共通の問題を処理するための列
+        col1, col2 = st.columns([3,1])
+        with col1:
+            selected_issue = st.selectbox(
+                "もしかして、こういうことで困っていますか？", 
+                options=["選択してください"] + common_issues, 
+                key="common_issue_selector"
+            )
+        with col2:
+            st.write("") # レイアウト調整用
+            st.write("") # レイアウト調整用
+            if selected_issue != "選択してください":
+                if st.button("これで相談", key="common_issue_submit_button"):
+                    st.session_state.general_inquiry_history.append({"role": "user", "content": selected_issue})
+                    ai_response, st.session_state.general_inquiry_history = self.planner.handle_general_inquiry(
+                        selected_issue, 
+                        st.session_state.general_inquiry_history
+                    )
+                    self._save_chat_log(page="general_inquiry", sender="user", message_content=selected_issue)
+                    self._save_chat_log(page="general_inquiry", sender="AI", message_content=ai_response)
+                    # selectboxをリセットするためにキーを変更するか、st.formを使うことを検討
+                    # ここではシンプルにrerun
+                    st.rerun()
+
+
+        # 対話履歴の表示
+        chat_container = st.container()
+        with chat_container:
+            for msg in st.session_state.general_inquiry_history:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+
+        user_input = st.chat_input("相談内容を入力してください...", key="general_inquiry_input")
+
+        if user_input:
+            st.session_state.general_inquiry_history.append({"role": "user", "content": user_input})
+            self._save_chat_log(page="general_inquiry", sender="user", message_content=user_input)
+
+            # LLMからの応答を取得
+            ai_response, st.session_state.general_inquiry_history = self.planner.handle_general_inquiry(
+                user_input, 
+                st.session_state.general_inquiry_history
+            )
+            self._save_chat_log(page="general_inquiry", sender="AI", message_content=ai_response)
+            st.rerun()
+        
+        st.divider()
+        if st.button("ステップ選択に戻る", key="back_to_steps_from_general_inquiry"):
+            self.set_page(1) # set_page を使う
+            st.rerun()
+        if st.button("ホームページに戻る", key="back_to_home_from_general_inquiry"):
+            self.set_page("home")
+            st.rerun()
+
+    def render_home_page(self):
+        """ホームページの表示"""
+        st.title(f"ようこそ、{st.session_state.username}さん！")
+        st.write("どちらの機能を利用しますか？")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("課題設定プロセスを開始する", key="start_process_button"):
+                self.set_page(1) # ステップ1へ
+                st.rerun()
+        with col2:
+            if st.button("なんでも相談窓口へ", key="goto_general_inquiry_button"):
+                self.set_page("general_inquiry")
+                st.rerun()
+
+    def navigate_to_home(self):
+        self.set_page("home")
+
+    def navigate_to_page1(self):
+        self.set_page(1)
+
+    def navigate_to_page2(self):
+        self.set_page(2)
+
+    def navigate_to_page3(self):
+        self.set_page(3)
+
+    def navigate_to_page4(self):
+        self.set_page(4)
+
+    def navigate_to_general_inquiry(self):
+        self.set_page("general_inquiry")
+
 
 # アプリケーション実行
 if __name__ == "__main__":
