@@ -1,0 +1,84 @@
+/* static/style.css */
+.step-container {
+    display: flex;
+    justify-content: space-between;
+    margin: 30px 0;
+    max-width: 600px;
+    font-family: 'Arial', sans-serif; /* 例: フォントファミリーを指定 */
+}
+.step {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    cursor: default; /* ステップ自体はクリックできないのでデフォルトカーソルに */
+}
+.step .circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: #e0e0e0; /* 未完了ステップの円の色を少し明るく */
+    margin: 0 auto 8px auto;   /* ラベルとの間隔を調整 */
+    z-index: 2;
+    position: relative;
+    transition: background-color 0.3s ease, transform 0.2s ease; /* アニメーションのためのトランジション */
+}
+.step .label {
+    margin-top: 8px;
+    font-size: 0.9em; /* ラベルのフォントサイズ調整 */
+    color: #757575;   /* 未完了ステップのラベルの色 */
+}
+/* アクティブまたは完了したステップのスタイル */
+.step.active .circle {
+    background-color: #1976D2; /* アクティブ/完了ステップの円の色 (少し濃い青) */
+}
+.step.active .label {
+    color: #1976D2;       /* アクティブ/完了ステップのラベルの色 */
+    font-weight: bold;     /* ラベルを太字に */
+}
+/* 線（バー）のスタイル */
+.step::before {
+    content: "";
+    position: absolute;
+    top: 15px; /* 円の縦位置に合わせる */
+    left: -50%;
+    width: 100%;
+    height: 4px;
+    background-color: #e0e0e0; /* 未完了ステップの線の色 */
+    z-index: 1;
+    transition: background-color 0.3s ease; /* アニメーションのためのトランジション */
+}
+.step:first-child::before {
+    content: none; /* 先頭ステップの左側には線を描画しない */
+}
+.step.active::before {
+    background-color: #1976D2; /* アクティブ/完了ステップの線の色 */
+}
+/* ホバーエフェクト */
+.step:hover .circle {
+    transform: scale(1.15); /* マウスオーバーで円を少し拡大 */
+}
+.step:hover .label {
+    color: #0D47A1; /* マウスオーバーでラベルの色を少し濃く (任意) */
+} 
+
+/* "login_button" というキーを持つボタンのスタイル */
+button[data-testid="stButton"][key="login_button"], /* Streamlitのバージョンによってはこちらが有効な場合も */
+button[data-testid="login_button"] {
+    background-color: #73bbff; 
+    color: white; /* 文字色を白に */
+    border: none; /* 枠線を消す場合 */
+    padding: 10px 24px; /* パディング調整 */
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 8px; /* 角を丸くする場合 */
+}
+
+/* ホバー時のスタイル (任意) */
+button[data-testid="stButton"][key="login_button"]:hover,
+button[data-testid="login_button"]:hover {
+    background-color: #45a049; /* 少し暗い緑色 */
+}

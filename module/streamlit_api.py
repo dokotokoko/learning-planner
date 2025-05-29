@@ -4,13 +4,19 @@ from st_supabase_connection import SupabaseConnection
 import logging
 
 from module.llm_api import learning_plannner
-from prompt.prompt import goal_prompt, content_prompt
+from prompt.prompt import GOAL_PROMPT, content_prompt
 
 # DBの設定
 DB_FILE = "IBL-assistant.db"
 
 # ロギング設定 (任意)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- 追加: 外部CSSファイルを読み込むヘルパー関数 ---
+def local_css(file_name):
+    with open(file_name, encoding='utf-8') as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# --- 追加ここまで ---
 
 class StreamlitApp:
     def __init__(self):
@@ -62,52 +68,6 @@ class StreamlitApp:
     def make_sequence_bar(self):
         """ステッププログレスバーを表示"""
         st.markdown(f"""
-        <style>
-        .step-container {{
-            display: flex;
-            justify-content: space-between;
-            margin: 30px 0;
-            max-width: 600px;
-        }}
-        .step {{
-            position: relative;
-            flex: 1;
-            text-align: center;
-        }}
-        .step .circle {{
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background-color: #cccccc;
-            margin: 0 auto;
-            z-index: 2;
-            position: relative;
-        }}
-        .step.active .circle {{
-            background-color: #2E8EF6; /* アクティブ時の色 */
-        }}
-        .step .label {{
-            margin-top: 8px;
-        }}
-        /* 線（バー）のスタイル */
-        .step::before {{
-            content: "";
-            position: absolute;
-            top: 15px; /* 円の縦位置に合わせる */
-            left: -50%;
-            width: 100%;
-            height: 4px;
-            background-color: #cccccc;
-            z-index: 1;
-        }}
-        .step:first-child::before {{
-            content: none; /* 先頭ステップの左側には線を描画しない */
-        }}
-        .step.active::before {{
-            background-color: #2E8EF6; /* アクティブ時の色 */
-        }}
-        </style>
-
         <div class="step-container">
             <div class="step {self.is_active(1)}">
                 <div class="circle"></div>
@@ -254,7 +214,7 @@ class StreamlitApp:
                     st.session_state.user_theme_str = user_theme_str
                     
                     # 初期メッセージを生成して対話履歴に追加
-                    ai_question = self.planner.generate_response(prompt=goal_prompt, user_input=user_theme_str)
+                    ai_question = self.planner.generate_response(prompt=GOAL_PROMPT, user_input=user_theme_str)
                     st.session_state.dialogue_log.append(("AI", ai_question))
                 else:
                     st.warning("テーマが登録されていません。前の画面で登録してください。")
@@ -314,7 +274,7 @@ class StreamlitApp:
                 st.session_state.dialogue_log.append(("user", user_message))
                 
                 # AIの応答を生成
-                response = self.planner.generate_response(prompt=goal_prompt, user_input=user_message)
+                response = self.planner.generate_response(prompt=GOAL_PROMPT, user_input=user_message)
                 
                 # --- ログ保存処理を追加 ---
                 self._save_chat_log(page=2, sender="AI", message_content=response)
@@ -466,7 +426,7 @@ class StreamlitApp:
         ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "AI")
         user_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "user")
         # 対話回数が6回未満の場合のみ、入力フィールドを表示
-        if user_messages_count < 6:
+        if user_messages_count < 3:
             # ユーザー入力
             user_message = st.chat_input("あなたの回答を入力してください", key="plan_input")
             
@@ -731,6 +691,10 @@ class StreamlitApp:
 
     def run(self):
         """アプリケーションの実行"""
+        # --- 追加: CSSファイルの読み込み ---
+        local_css("static/style.css") 
+        # --- 追加ここまで ---
+
         # サイドバーの設定
         self.setup_sidebar()
         
