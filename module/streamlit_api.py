@@ -596,6 +596,30 @@ class StreamlitApp:
         with tab1:
             username = st.text_input("ユーザー名", key="login_username")
             access_code = st.text_input("パスワード", type="password", key="login_password")
+
+            st.markdown(
+                """
+                <style>
+                .stButton button {
+                    font-size: 16px;
+                    font-weight: bold; /* Bold text */
+                    color: #FFFFFF;
+                    background-color: #0e3558; /* Dark blue color */
+                    border: none;
+                    border-radius: 25px; /* Rounded corners */
+                    padding: 10px 20px;
+                    cursor: pointer;
+                    transition: background-color 0.3s ease, transform 0.3s ease;
+                }
+                .stButton button:hover {
+                    background-color: #47d7ac; /* Green background on hover */
+                    color: #FFFFFF; /* Keep text white on hover */
+                    transform: scale(1.05); /* Slightly enlarge on hover */
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
             
             if st.button("ログイン", key="login_button"):
                 try:
