@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+※ 本機能はCalude4によって全自動で実装されたMocです。
+※ この引き継ぎ書としてのREADME.mdも開発者が細かな開発を進めていく上での引き継ぎ書としてClaude4に自動生成してもらっています。
+※ 開発者によるレビューはまだ行えていないことをご了承ください。
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
