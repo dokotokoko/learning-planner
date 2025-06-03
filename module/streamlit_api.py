@@ -4,7 +4,7 @@ from st_supabase_connection import SupabaseConnection
 import logging
 
 from module.llm_api import learning_plannner
-from prompt.prompt import GOAL_PROMPT, content_prompt
+from prompt.prompt import GOAL_PROMPT, content_prompt, system_prompt
 
 # DBの設定
 DB_FILE = "IBL-assistant.db"
@@ -214,7 +214,7 @@ class StreamlitApp:
                     st.session_state.user_theme_str = user_theme_str
                     
                     # 初期メッセージを生成して対話履歴に追加
-                    ai_question = self.planner.generate_response(prompt=GOAL_PROMPT, user_input=user_theme_str)
+                    ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_theme_str)
                     st.session_state.dialogue_log.append(("AI", ai_question))
                 else:
                     st.warning("テーマが登録されていません。前の画面で登録してください。")
@@ -274,7 +274,7 @@ class StreamlitApp:
                 st.session_state.dialogue_log.append(("user", user_message))
                 
                 # AIの応答を生成
-                response = self.planner.generate_response(prompt=GOAL_PROMPT, user_input=user_message)
+                response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
                 
                 # --- ログ保存処理を追加 ---
                 self._save_chat_log(page=2, sender="AI", message_content=response)
@@ -412,7 +412,7 @@ class StreamlitApp:
             
             # 初期メッセージは会話履歴が空の時だけ追加する (目標が取得できていれば)
             if user_goal_str:
-                ai_question = self.planner.generate_response(prompt=content_prompt, user_input=user_goal_str)
+                ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_goal_str)
                 st.session_state.dialogue_log_plan.append(("AI", ai_question))
             # else: # 目標がない場合は初期質問をスキップ（あるいは別のメッセージ）
             #     st.info("目標を設定してから、活動内容の相談を開始します。")
@@ -439,7 +439,7 @@ class StreamlitApp:
                 st.session_state.dialogue_log_plan.append(("user", user_message))
                 
                 # AIの応答を生成
-                response = self.planner.generate_response(prompt=content_prompt, user_input=user_message)
+                response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
                 
                 # --- ログ保存処理を追加 ---
                 self._save_chat_log(page=3, sender="AI", message_content=response)
