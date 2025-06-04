@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import GOAL_PROMPT, PLANNER_PROMPT, OBJECT_PROMPT, GENERAL_PROMPT, ASSIST_PROMPT
+from prompt.prompt import system_prompt
 
 class learning_plannner():
     def __init__(self):
@@ -23,7 +23,7 @@ class learning_plannner():
     
     def make_object_from_interest(self, interest:str):
         #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{GENERAL_PROMPT}"}]
+        messages=[{"role": "developer", "content": f"{system_prompt}"}]
 
         #DBから取得した興味関心を渡して応答を取得
         messages.append({
@@ -63,7 +63,7 @@ class learning_plannner():
     
     def make_goal_from_object(self, object:str):
         #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{GENERAL_PROMPT}"}]
+        messages=[{"role": "developer", "content": f"{system_prompt}"}]
 
         #DBから取得した興味関心を渡して応答を取得
         messages.append({
@@ -106,7 +106,7 @@ class learning_plannner():
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "developer", "content": f"{GENERAL_PROMPT}"},
+                {"role": "developer", "content": f"{system_prompt}"},
                 {
                     "role": "user",
                     "content": f"{goal}。この目標に取り組む3ステップの学習計画を提案してください。"
@@ -121,7 +121,7 @@ class learning_plannner():
     def get_advise(self, log:str):
         
         #対話履歴の初期化
-        messages=[{"role": "developer", "content": ASSIST_PROMPT}]
+        messages=[{"role": "developer", "content": system_prompt}]
 
         messages.append({"role": "user", "content": f"{log}。Please advise to user's today's learning and encourage."})
 

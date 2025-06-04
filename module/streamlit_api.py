@@ -4,7 +4,7 @@ from st_supabase_connection import SupabaseConnection
 import logging
 
 from module.llm_api import learning_plannner
-from prompt.prompt import GOAL_PROMPT, content_prompt, system_prompt
+from prompt.prompt import system_prompt
 
 # DBの設定
 DB_FILE = "IBL-assistant.db"
@@ -12,7 +12,7 @@ DB_FILE = "IBL-assistant.db"
 # ロギング設定 (任意)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- 追加: 外部CSSファイルを読み込むヘルパー関数 ---
+# --- 追加: 外部CSSファイルを読み込むヘルパー関数 ---   
 def local_css(file_name):
     with open(file_name, encoding='utf-8') as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
