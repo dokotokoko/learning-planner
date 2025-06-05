@@ -267,7 +267,7 @@ class StreamlitApp:
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
                 # --- ログ保存処理を追加 ---
-                self._save_chat_log(page=2, sender="user", message_content=user_message)
+                self.save_chat_log(page=2, sender="user", message_content=user_message)
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
@@ -277,7 +277,7 @@ class StreamlitApp:
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
                 
                 # --- ログ保存処理を追加 ---
-                self._save_chat_log(page=2, sender="AI", message_content=response)
+                self.save_chat_log(page=2, sender="AI", message_content=response)
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
@@ -432,7 +432,7 @@ class StreamlitApp:
             
             if user_message:  # ユーザーが何か入力した場合のみ実行
                 # --- ログ保存処理を追加 ---
-                self._save_chat_log(page=3, sender="user", message_content=user_message)
+                self.save_chat_log(page=3, sender="user", message_content=user_message)
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
@@ -442,7 +442,7 @@ class StreamlitApp:
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
                 
                 # --- ログ保存処理を追加 ---
-                self._save_chat_log(page=3, sender="AI", message_content=response)
+                self.save_chat_log(page=3, sender="AI", message_content=response)
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
@@ -741,7 +741,7 @@ class StreamlitApp:
                 self.render_general_inquiry_page()
 
     # --- ヘルパーメソッドを追加 ---
-    def _save_chat_log(self, page: int, sender: str, message_content: str):
+    def save_chat_log(self, page: int, sender: str, message_content: str):
         """対話ログをSupabaseに保存する"""
         try:
             self.conn.table("chat_logs").insert({
@@ -766,7 +766,8 @@ class StreamlitApp:
             "何から始めたらいいかわからない",
             "テーマが大きすぎる気がする",
             "具体的な進め方がわからない",
-            "行き詰まってしまった"
+            "行き詰まってしまった",
+            "自分の探究テーマや問いの解像度を上げたい"
         ]
         
         # selectbox のキーを修正し、コールバック関数または st.form を使った制御を検討
@@ -790,12 +791,11 @@ class StreamlitApp:
                         selected_issue, 
                         st.session_state.general_inquiry_history
                     )
-                    self._save_chat_log(page="general_inquiry", sender="user", message_content=selected_issue)
-                    self._save_chat_log(page="general_inquiry", sender="AI", message_content=ai_response)
+                    self.save_chat_log(page=5, sender="user", message_content=selected_issue)
+                    self.save_chat_log(page=5, sender="AI", message_content=ai_response)
                     # selectboxをリセットするためにキーを変更するか、st.formを使うことを検討
                     # ここではシンプルにrerun
                     st.rerun()
-
 
         # 対話履歴の表示
         chat_container = st.container()
@@ -807,16 +807,25 @@ class StreamlitApp:
         user_input = st.chat_input("相談内容を入力してください...", key="general_inquiry_input")
 
         if user_input:
-            st.session_state.general_inquiry_history.append({"role": "user", "content": user_input})
-            self._save_chat_log(page="general_inquiry", sender="user", message_content=user_input)
-
-            # LLMからの応答を取得
-            ai_response, st.session_state.general_inquiry_history = self.planner.handle_general_inquiry(
-                user_input, 
-                st.session_state.general_inquiry_history
-            )
-            self._save_chat_log(page="general_inquiry", sender="AI", message_content=ai_response)
-            st.rerun()
+                 # --- ログ保存処理を追加 ---
+                 self.save_chat_log(page=5, sender="user", message_content=user_input)
+                 # --- 追加ここまで ---
+ 
+                 # 対話履歴に追加
+                 st.session_state.dialogue_log.append(("user", user_input))
+                 
+                 # AIの応答を生成
+                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_input)
+                 
+                 # --- ログ保存処理を追加 ---
+                 self.save_chat_log(page=5, sender="AI", message_content=response)
+                 # --- 追加ここまで ---
+ 
+                 # 対話履歴に追加
+                 st.session_state.dialogue_log.append(("AI", response))
+                 
+                 # 画面を再読み込みして最新の対話を表示
+                 st.rerun()
         
         st.divider()
         if st.button("ステップ選択に戻る", key="back_to_steps_from_general_inquiry"):
@@ -838,7 +847,7 @@ class StreamlitApp:
                 st.rerun()
         with col2:
             if st.button("なんでも相談窓口へ", key="goto_general_inquiry_button"):
-                self.set_page("general_inquiry")
+                self.set_page(5)
                 st.rerun()
 
     def navigate_to_home(self):
@@ -857,7 +866,7 @@ class StreamlitApp:
         self.set_page(4)
 
     def navigate_to_general_inquiry(self):
-        self.set_page("general_inquiry")
+        self.set_page(5)
 
 
 # アプリケーション実行
