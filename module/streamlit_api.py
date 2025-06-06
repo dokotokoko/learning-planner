@@ -215,7 +215,7 @@ class StreamlitApp:
                     
                     # 初期メッセージを生成して対話履歴に追加
                     ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_theme_str)
-                    st.session_state.dialogue_log.append(("AI", ai_question))
+                    st.session_state.dialogue_log.append({"role": "assistant", "content": ai_question})
                 else:
                     st.warning("テーマが登録されていません。前の画面で登録してください。")
                     if st.button("テーマ登録ページに戻る", key="back_to_page1_from_page2_for_theme"):
@@ -253,13 +253,13 @@ class StreamlitApp:
                     logging.error(f"テーマ再取得エラー: {e}", exc_info=True)
 
         # 対話履歴の表示
-        for sender, msg_content in st.session_state.dialogue_log:
-            with st.chat_message("assistant" if sender == "AI" else "user"):
-                st.write(msg_content)
+        for msg in st.session_state.dialogue_log:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
         # 対話回数をカウント（AIの発言回数をカウント）
-        ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log if sender == "AI")
-        user_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log if sender == "user")
+        ai_messages_count = sum(1 for msg in st.session_state.dialogue_log if msg["role"] == "assistant")
+        user_messages_count = sum(1 for msg in st.session_state.dialogue_log if msg["role"] == "user")
         # 対話回数が3回未満の場合のみ、入力フィールドを表示
         if user_messages_count < 3:
             # ユーザー入力
@@ -271,7 +271,7 @@ class StreamlitApp:
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
-                st.session_state.dialogue_log.append(("user", user_message))
+                st.session_state.dialogue_log.append({"role": "user", "content": user_message})
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
@@ -281,7 +281,7 @@ class StreamlitApp:
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
-                st.session_state.dialogue_log.append(("AI", response))
+                st.session_state.dialogue_log.append({"role": "assistant", "content": response})
                 
                 # 画面を再読み込みして最新の対話を表示
                 st.rerun()
@@ -413,18 +413,18 @@ class StreamlitApp:
             # 初期メッセージは会話履歴が空の時だけ追加する (目標が取得できていれば)
             if user_goal_str:
                 ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_goal_str)
-                st.session_state.dialogue_log_plan.append(("AI", ai_question))
+                st.session_state.dialogue_log_plan.append({"role": "assistant", "content": ai_question})
             # else: # 目標がない場合は初期質問をスキップ（あるいは別のメッセージ）
             #     st.info("目標を設定してから、活動内容の相談を開始します。")
 
         # 対話履歴の表示
-        for sender, msg_content in st.session_state.dialogue_log_plan:
-            with st.chat_message("assistant" if sender == "AI" else "user"):
-                st.write(msg_content)
+        for msg in st.session_state.dialogue_log_plan:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
         # 対話回数をカウント（AIの発言回数をカウント）
-        ai_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "AI")
-        user_messages_count = sum(1 for sender, _ in st.session_state.dialogue_log_plan if sender == "user")
+        ai_messages_count = sum(1 for msg in st.session_state.dialogue_log_plan if msg["role"] == "assistant")
+        user_messages_count = sum(1 for msg in st.session_state.dialogue_log_plan if msg["role"] == "user")
         # 対話回数が6回未満の場合のみ、入力フィールドを表示
         if user_messages_count < 3:
             # ユーザー入力
@@ -436,7 +436,7 @@ class StreamlitApp:
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
-                st.session_state.dialogue_log_plan.append(("user", user_message))
+                st.session_state.dialogue_log_plan.append({"role": "user", "content": user_message})
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
@@ -446,7 +446,7 @@ class StreamlitApp:
                 # --- 追加ここまで ---
 
                 # 対話履歴に追加
-                st.session_state.dialogue_log_plan.append(("AI", response))
+                st.session_state.dialogue_log_plan.append({"role": "assistant", "content": response})
                 
                 # 画面を再読み込みして最新の対話を表示
                 st.rerun()
@@ -737,7 +737,7 @@ class StreamlitApp:
                 self.render_page3()
             elif st.session_state.page == 4:
                 self.render_page4()
-            elif st.session_state.page == "general_inquiry":
+            elif st.session_state.page == 5:
                 self.render_general_inquiry_page()
 
     # --- ヘルパーメソッドを追加 ---
@@ -769,6 +769,10 @@ class StreamlitApp:
             "行き詰まってしまった",
             "自分の探究テーマや問いの解像度を上げたい"
         ]
+        
+        # general_inquiry_historyが存在しない場合は初期化
+        if 'general_inquiry_history' not in st.session_state:
+            st.session_state.general_inquiry_history = []
         
         # selectbox のキーを修正し、コールバック関数または st.form を使った制御を検討
         # ここではシンプルに、選択肢が変更されたらそれを表示する形にする
@@ -807,25 +811,25 @@ class StreamlitApp:
         user_input = st.chat_input("相談内容を入力してください...", key="general_inquiry_input")
 
         if user_input:
-                 # --- ログ保存処理を追加 ---
-                 self.save_chat_log(page=5, sender="user", message_content=user_input)
-                 # --- 追加ここまで ---
- 
-                 # 対話履歴に追加
-                 st.session_state.dialogue_log.append(("user", user_input))
-                 
-                 # AIの応答を生成
-                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_input)
-                 
-                 # --- ログ保存処理を追加 ---
-                 self.save_chat_log(page=5, sender="AI", message_content=response)
-                 # --- 追加ここまで ---
- 
-                 # 対話履歴に追加
-                 st.session_state.dialogue_log.append(("AI", response))
-                 
-                 # 画面を再読み込みして最新の対話を表示
-                 st.rerun()
+                # --- ログ保存処理を追加 ---
+                self.save_chat_log(page=5, sender="user", message_content=user_input)
+                # --- 追加ここまで ---
+
+                # 対話履歴に追加
+                st.session_state.general_inquiry_history.append({"role": "user", "content": user_input})
+                
+                # AIの応答を生成
+                response = self.planner.generate_response(prompt=system_prompt, user_input=user_input)
+                
+                # --- ログ保存処理を追加 ---
+                self.save_chat_log(page=5, sender="AI", message_content=response)
+                # --- 追加ここまで ---
+
+                # 対話履歴に追加
+                st.session_state.general_inquiry_history.append({"role": "assistant", "content": response})
+                
+                # 画面を再読み込みして最新の対話を表示
+                st.rerun()
         
         st.divider()
         if st.button("ステップ選択に戻る", key="back_to_steps_from_general_inquiry"):
