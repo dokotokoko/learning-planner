@@ -678,7 +678,7 @@ class StreamlitApp:
                 st.divider()
 
                 if st.session_state.page == "home":
-                    st.button("❓ なんでも相談窓口", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_home", use_container_width=True)
+                    st.button("❓ 行き詰ってたら僕に聞いて！", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_home", use_container_width=True)
                 else:
                     st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
                     st.divider()
@@ -687,7 +687,7 @@ class StreamlitApp:
                     st.button("3️⃣ Step 3: アイディエーション", on_click=self.navigate_to_page3, key="sidebar_nav_p3", use_container_width=True)
                     st.button("4️⃣ Step 4: まとめ", on_click=self.navigate_to_page4, key="sidebar_nav_p4", use_container_width=True)
                     st.divider()
-                    st.button("❓ なんでも相談窓口", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_other", use_container_width=True)
+                    st.button("❓ 行き詰ってたら僕に聞いて！", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_other", use_container_width=True)
                 
                 st.divider()
                 if st.button("ログアウト", key="sidebar_logout", use_container_width=True):
@@ -758,7 +758,7 @@ class StreamlitApp:
 
     def render_general_inquiry_page(self):
         """なんでも相談窓口ページの表示"""
-        st.title("なんでも相談窓口")
+        st.title("行き詰ってたら僕に聞いて！")
         st.write("探究学習を進める上で困っていること、悩んでいることを自由に入力してください。AIアシスタントが相談に乗ります。")
 
         # 「よくある困りごと」ボタンの例 (後で具体的な選択肢を追加)
@@ -850,7 +850,7 @@ class StreamlitApp:
                 self.set_page(1) # ステップ1へ
                 st.rerun()
         with col2:
-            if st.button("なんでも相談窓口へ", key="goto_general_inquiry_button"):
+            if st.button("行き詰ってたら僕に聞いて！", key="goto_general_inquiry_button"):
                 self.set_page(5)
                 st.rerun()
 
