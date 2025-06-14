@@ -47,6 +47,8 @@ class StreamlitApp:
             st.session_state.username = None
         if "general_inquiry_history" not in st.session_state:
             st.session_state.general_inquiry_history = []
+        if "is_initial_setup" not in st.session_state:
+            st.session_state.is_initial_setup = False
 
     def _initialize_supabase_tables(self):
         """Supabaseに必要なテーブルが存在しない場合に作成する"""
@@ -658,9 +660,18 @@ class StreamlitApp:
                         # TODO: new_access_code はハッシュ化して保存するべき
                         insert_data = {"username": new_username, "password": new_access_code}
                         result = self.conn.table("users").insert(insert_data).execute()
-                        # resultの内容を確認して成功判定しても良い
-                        st.success("ユーザー登録が完了しました。ログインしてください。")
-                        success = True
+                        if result.data:
+                            # 登録成功後、自動的にログインしてプロフィール設定に遷移
+                            user_id = result.data[0]["id"]
+                            st.session_state.authenticated = True
+                            st.session_state.user_id = user_id
+                            st.session_state.username = new_username
+                            st.session_state.is_initial_setup = True
+                            st.session_state.page = "profile"
+                            st.success("ユーザー登録が完了しました。プロフィール設定を続けてください。")
+                            st.rerun()
+                        else:
+                            st.error("ユーザー登録に失敗しました")
                     except Exception as e:
                         # PostgRESTエラーを解析して重複を判定することも可能
                         if "duplicate key value violates unique constraint" in str(e):
@@ -668,13 +679,13 @@ class StreamlitApp:
                         else:
                              st.error(f"ユーザー登録中にエラーが発生しました: {e}")
                         logging.error(f"ユーザー登録エラー: {e}", exc_info=True)
-                        success = False
 
     def setup_sidebar(self):
         """サイドバーの設定"""
         if st.session_state.authenticated:
             with st.sidebar:
                 st.write(f"ログイン中: {st.session_state.username}")
+                st.button("👤 プロフィール設定", on_click=self.navigate_to_profile, key="sidebar_nav_profile", use_container_width=True)
                 st.divider()
 
                 if st.session_state.page == "home":
@@ -729,6 +740,8 @@ class StreamlitApp:
             # 認証済みならページを表示
             if st.session_state.page == "home":
                 self.render_home_page()
+            elif st.session_state.page == "profile":
+                self.render_profile_page()
             elif st.session_state.page == 1:
                 self.render_page1()
             elif st.session_state.page == 2:
@@ -754,7 +767,185 @@ class StreamlitApp:
         except Exception as e:
             st.error(f"対話ログの保存に失敗しました: {e}")
             logging.error(f"対話ログ保存エラー: Page={page}, Sender={sender}, Error={e}", exc_info=True)
-    # --- 追加ここまで ---
+
+    def load_user_profile(self):
+        """ユーザーのプロフィール情報をロードする"""
+        try:
+            result = self.conn.table("user_profiles")\
+                        .select("profile_data")\
+                        .eq("user_id", st.session_state.user_id)\
+                        .execute()
+            if result.data:
+                profile_data = result.data[0]['profile_data']
+                return {
+                    "likes": profile_data.get("likes", []),
+                    "interests": profile_data.get("interests", []),
+                    "wants_to_try": profile_data.get("wants_to_try", [])
+                }
+            else:
+                return {"likes": [], "interests": [], "wants_to_try": []}
+        except Exception as e:
+            logging.error(f"プロフィール読み込みエラー: {e}", exc_info=True)
+            return {"likes": [], "interests": [], "wants_to_try": []}
+
+    def save_user_profile(self, likes: list, interests: list, wants_to_try: list):
+        """ユーザーのプロフィール情報を保存する（JSON形式）"""
+        try:
+            # プロフィールが既に存在するかチェック
+            existing = self.conn.table("user_profiles")\
+                        .select("id")\
+                        .eq("user_id", st.session_state.user_id)\
+                        .execute()
+            
+            profile_data = {
+                "likes": likes,
+                "interests": interests,
+                "wants_to_try": wants_to_try
+            }
+            
+            if existing.data:
+                # 既存のプロフィールを更新
+                result = self.conn.table("user_profiles")\
+                          .update({"profile_data": profile_data})\
+                          .eq("user_id", st.session_state.user_id)\
+                          .execute()
+            else:
+                # 新規プロフィールを作成
+                insert_data = {
+                    "user_id": st.session_state.user_id,
+                    "profile_data": profile_data
+                }
+                result = self.conn.table("user_profiles")\
+                          .insert(insert_data)\
+                          .execute()
+            
+            return True
+        except Exception as e:
+            logging.error(f"プロフィール保存エラー: {e}", exc_info=True)
+            return False
+
+    def render_tag_input(self, label: str, items: list, key: str, placeholder: str = "", help_text: str = ""):
+        """動的タグ入力ウィジェットをレンダリング（編集モード付き）"""
+        st.write(f"**{label}**")
+        if help_text:
+            st.caption(help_text)
+        
+        # 編集モードの状態管理
+        edit_mode_key = f"edit_mode_{key}"
+        if edit_mode_key not in st.session_state:
+            st.session_state[edit_mode_key] = False
+        
+        # 2カラムレイアウト
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:            
+            # 新しいタグ追加用の入力フィールド
+            new_item = st.text_input(
+                "項目名を入力",
+                key=f"new_{key}",
+                placeholder=placeholder,
+                label_visibility="collapsed"
+            )
+            
+            # 追加ボタンを入力欄の直下に配置
+            if st.button("➕ 追加", key=f"add_{key}", disabled=not new_item.strip(), use_container_width=True):
+                if new_item.strip():
+                    if new_item.strip() not in items:
+                        items.append(new_item.strip())
+                        st.success(f"✅ '{new_item.strip()}'を追加しました！")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ 既に存在しています")
+            
+            # 一括追加機能
+            with st.expander("📝 一括追加"):
+                bulk_input = st.text_area(
+                    "カンマ区切りで入力",
+                    key=f"bulk_{key}",
+                    placeholder="例: 音楽, 映画, 読書",
+                    help="カンマ(,)で区切って複数項目を追加",
+                    height=80
+                )
+                if st.button("一括追加", key=f"bulk_add_{key}", use_container_width=True):
+                    if bulk_input.strip():
+                        new_items = [item.strip() for item in bulk_input.split(",") if item.strip()]
+                        added_count = 0
+                        for item in new_items:
+                            if item and item not in items:
+                                items.append(item)
+                                added_count += 1
+                        
+                        if added_count > 0:
+                            st.success(f"✅ {added_count}個追加しました！")
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ 新しい項目はありませんでした")
+        
+        with col2:
+            if items:
+                # 登録数と編集ボタン
+                col2_header1, col2_header2 = st.columns([2, 1])
+                # タグ一覧の表示
+                for i, item in enumerate(items):
+                    if st.session_state[edit_mode_key]:
+                        # 編集モード: 削除ボタン付きで表示
+                        tag_col1, tag_col2 = st.columns([4, 1])
+                        with tag_col1:
+                            st.write(f"🏷️ {item}")
+                        with tag_col2:
+                            if st.button("✕", key=f"delete_{key}_{i}_{item}", help=f"'{item}'を削除"):
+                                items.remove(item)
+                                st.success(f"🗑️ '{item}'を削除しました")
+                                st.rerun()
+                    else:
+                        # 表示モード: 削除ボタンなし
+                        st.write(f"🏷️ {item}")
+
+                # 編集モードの切り替えボタン
+                if st.session_state[edit_mode_key]:
+                    if st.button("✅ 完了", key=f"finish_edit_{key}", use_container_width=True):
+                        st.session_state[edit_mode_key] = False
+                        st.success("📝 編集を完了しました")
+                        st.rerun()
+                else:
+                    if st.button("✏️ 編集", key=f"start_edit_{key}", use_container_width=True):
+                        st.session_state[edit_mode_key] = True
+                        st.info("💡 各タグの✕ボタンで削除できます")
+                        st.rerun()             
+
+                # 編集モード中の追加操作
+                if st.session_state[edit_mode_key]:
+                    st.divider()
+                    col2_action1, col2_action2 = st.columns(2)
+                    with col2_action1:
+                        if st.button("🔄 並び替え", key=f"sort_{key}", use_container_width=True):
+                            items.sort()
+                            st.success("🔄 アルファベット順に並び替えました")
+                            st.rerun()
+                    with col2_action2:
+                        if st.button("🗑️ 全削除", key=f"clear_all_{key}", use_container_width=True):
+                            if st.session_state.get(f"confirm_clear_{key}", False):
+                                items.clear()
+                                st.session_state[edit_mode_key] = False
+                                st.success("🗑️ 全て削除しました")
+                                st.rerun()
+                            else:
+                                st.session_state[f"confirm_clear_{key}"] = True
+                                st.warning("⚠️ もう一度押すと全削除されます")
+                                st.rerun()
+                    
+                    # 確認状態をリセット（他のボタンが押された場合）
+                    if f"confirm_clear_{key}" in st.session_state and st.session_state[f"confirm_clear_{key}"] == True:
+                        # 少し待ってから確認状態をリセット
+                        import time
+                        time.sleep(0.1)
+                        if st.session_state.get(f"confirm_clear_{key}", False):
+                            st.session_state[f"confirm_clear_{key}"] = False
+            else:
+                st.info("📝 まだタグが追加されていません")
+                st.caption("👈 左側の入力欄からタグを追加してください")
+        
+        return items
 
     def render_general_inquiry_page(self):
         """なんでも相談窓口ページの表示"""
@@ -871,6 +1062,104 @@ class StreamlitApp:
 
     def navigate_to_general_inquiry(self):
         self.set_page(5)
+
+    def navigate_to_profile(self):
+        self.set_page("profile")
+
+    def render_profile_page(self):
+        """プロフィール設定ページの表示（タグ入力版）"""
+        if st.session_state.get("is_initial_setup", False):
+            st.title("🎉 ようこそ！プロフィール設定をしましょう")
+            st.write("あなたの好きなことや興味関心を教えてください。これらの情報は、あなた専用の探究学習プランを作成する際に活用されます。")
+            st.info("💡 項目は個数制限なく追加できます。後からいつでも変更可能です！")
+        else:
+            st.title("👤 プロフィール設定")
+            st.write("あなたの好きなことや興味関心を編集できます。項目の追加・削除は自由自在です！")
+
+        # 既存のプロフィール情報をロード
+        profile_data = self.load_user_profile()
+        
+        # セッション状態でプロフィールデータを管理（編集中の一時保存）
+        if 'temp_profile_data' not in st.session_state:
+            st.session_state.temp_profile_data = {
+                "likes": profile_data.get("likes", []).copy(),
+                "interests": profile_data.get("interests", []).copy(), 
+                "wants_to_try": profile_data.get("wants_to_try", []).copy()
+            }
+
+        st.divider()
+        
+
+        st.session_state.temp_profile_data["likes"] = self.render_tag_input(
+            label="💝 My Tags",
+            items=st.session_state.temp_profile_data["likes"],
+            key="likes",
+            placeholder="あなたが好きなこと、趣味、興味があることを追加してください"
+        )
+
+        # 保存ボタン
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("💾 プロフィールを保存", key="save_profile", use_container_width=True, type="primary"):
+                # 少なくとも1つの項目が入力されているかチェック
+                total_items = (len(st.session_state.temp_profile_data["likes"]) + 
+                             len(st.session_state.temp_profile_data["interests"]) + 
+                             len(st.session_state.temp_profile_data["wants_to_try"]))
+                
+                if total_items > 0:
+                    if self.save_user_profile(
+                        st.session_state.temp_profile_data["likes"],
+                        st.session_state.temp_profile_data["interests"],
+                        st.session_state.temp_profile_data["wants_to_try"]
+                    ):
+                        st.success("✅ プロフィールを保存しました！")
+                        # 一時保存データをクリア
+                        if 'temp_profile_data' in st.session_state:
+                            del st.session_state.temp_profile_data
+                        
+                        # 初回設定完了の場合
+                        if st.session_state.get("is_initial_setup", False):
+                            st.session_state.is_initial_setup = False
+                            st.balloons()  # 🎈 お祝いアニメーション
+                            st.info("🚀 プロフィール設定が完了しました！それでは探究学習を始めましょう。")
+                            # 少し待ってからホームページにリダイレクト
+                            import time
+                            time.sleep(2)
+                            self.set_page("home")
+                            st.rerun()
+                    else:
+                        st.error("❌ プロフィールの保存に失敗しました。もう一度お試しください。")
+                else:
+                    st.warning("⚠️ 少なくとも1つの項目は追加してください。")
+
+        # ナビゲーションボタン
+        st.divider()
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if not st.session_state.get("is_initial_setup", False):
+                if st.button("🏠 ホームへ戻る", key="profile_to_home"):
+                    # 一時保存データをクリア
+                    if 'temp_profile_data' in st.session_state:
+                        del st.session_state.temp_profile_data
+                    self.set_page("home")
+                    st.rerun()
+        
+        with col2:
+            if st.button("🔄 リセット", key="reset_profile", help="編集内容を元に戻します"):
+                if 'temp_profile_data' in st.session_state:
+                    del st.session_state.temp_profile_data
+                st.rerun()
+        
+        with col3:
+            if st.session_state.get("is_initial_setup", False):
+                if st.button("⏩ 後で設定する", key="skip_profile_setup"):
+                    st.session_state.is_initial_setup = False
+                    # 一時保存データをクリア
+                    if 'temp_profile_data' in st.session_state:
+                        del st.session_state.temp_profile_data
+                    self.set_page("home")
+                    st.rerun()
 
 
 # アプリケーション実行
