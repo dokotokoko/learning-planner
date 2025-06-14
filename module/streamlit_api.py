@@ -38,7 +38,7 @@ class StreamlitApp:
     def _initialize_session_state(self):
         """セッション状態の初期化"""
         if "page" not in st.session_state:
-            st.session_state.page = 1
+            st.session_state.page = "landing"  # 初期ページをランディングページに設定
         if "authenticated" not in st.session_state:
             st.session_state.authenticated = False
         if "user_id" not in st.session_state:
@@ -47,23 +47,50 @@ class StreamlitApp:
             st.session_state.username = None
         if "general_inquiry_history" not in st.session_state:
             st.session_state.general_inquiry_history = []
+        if "is_initial_setup" not in st.session_state:
+            st.session_state.is_initial_setup = False
 
     def _initialize_supabase_tables(self):
-        """Supabaseに必要なテーブルが存在しない場合に作成する"""
+        """Supabaseテーブルの初期化（必要に応じて）"""
+        # 本来はSupabase側で事前にテーブルを作成するべきですが、
+        # 開発段階では自動作成を試行することも可能です
         logging.info("Supabaseテーブルの初期化を試みます (注意: テーブルは事前に作成することを推奨)")
 
     def next_page(self):
         """次のページに進む"""
-        st.session_state.page += 1
+        current_page = st.session_state.page
+        if current_page == "step1":
+            st.session_state.page = "step2"
+        elif current_page == "step2":
+            st.session_state.page = "step3"
+        elif current_page == "step3":
+            st.session_state.page = "step4"
+        # step4からは自動で次に進まない（ユーザーが明示的に選択）
 
     def prev_page(self):
         """前のページに戻る"""
-        st.session_state.page -= 1
+        current_page = st.session_state.page
+        if current_page == "step2":
+            st.session_state.page = "step1"
+        elif current_page == "step3":
+            st.session_state.page = "step2"
+        elif current_page == "step4":
+            st.session_state.page = "step3"
 
     def is_active(self, step_number):
         """指定されたステップが現在のページと同じかそれ以前なら'active'を返す"""
         current_page = st.session_state.page
-        return "active" if step_number <= current_page else ""
+        
+        # ページ識別子を数字にマッピング
+        page_mapping = {
+            "step1": 1,
+            "step2": 2, 
+            "step3": 3,
+            "step4": 4
+        }
+        
+        current_step = page_mapping.get(current_page, 0)
+        return "active" if step_number <= current_step else ""
 
     def make_sequence_bar(self):
         """ステッププログレスバーを表示"""
@@ -139,8 +166,7 @@ class StreamlitApp:
             st.write(dialog_content[step_number])
             st.session_state[dialog_key] = True
 
-
-    def render_page1(self):
+    def render_step1(self):
         """テーマ設定ページの表示"""      
         st.title("Step1: 自分の興味から探究学習のテーマを決める！")
 
@@ -161,7 +187,7 @@ class StreamlitApp:
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("ホームへ戻る", key="back_to_home_from_page1"):
+            if st.button("ホームへ戻る", key="back_to_home_from_step1"):
                 self.set_page("home")
                 st.rerun()
         with col2:
@@ -169,188 +195,99 @@ class StreamlitApp:
                 self.next_page()
                 st.rerun()
 
-        # このページでやることのガイドを表示（インデックス指定）
-        page_index = 1;
+        # このページでやることのガイドを表示
+        page_index = 1
         dialog_key = f"dialog_closed_page{page_index}"
-        # 既に表示済みかチェック
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(1)
 
-    def render_page2(self):
+    def render_step2(self):
         """ゴール設定ページの表示"""      
         st.title("Step2：探究学習の目標を決めよう！")
         
         # 現在のステップを表示
         self.make_sequence_bar()
 
-        # 変数を関数の先頭で初期化
-        user_theme_str = ""
-
-        # このページでやることのガイドを表示（インデックス指定）
-        page_index = 2;
+        # このページでやることのガイドを表示
+        page_index = 2
         dialog_key = f"dialog_closed_page{page_index}"
-        # 既に表示済みかチェック
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(2) 
         
-        # 会話履歴の初期化（存在しない場合のみ）
-        if 'dialogue_log' not in st.session_state:
-            st.session_state.dialogue_log = []
+        # ユーザーテーマの取得
+        user_theme_str = ""
+        try:
+            user_theme_result = self.conn.table("interests")\
+                                      .select("interest")\
+                                      .eq("user_id", st.session_state.user_id)\
+                                      .order("created_at", desc=True)\
+                                      .limit(1)\
+                                      .execute()
             
-            # 初期メッセージは会話履歴が空の時だけ追加する
-            try:
-                user_theme_result = self.conn.table("interests")\
-                                          .select("interest")\
-                                          .eq("user_id", st.session_state.user_id)\
-                                          .order("created_at", desc=True)\
-                                          .limit(1)\
-                                          .execute()
-                
-                if user_theme_result.data:
-                    user_theme_str = user_theme_result.data[0]['interest']
-                    st.write(f"あなたの探究テーマ: {user_theme_str}")
-                    
-                    # セッション状態に保存して後で使えるようにする
-                    st.session_state.user_theme_str = user_theme_str
-                    
-                    # 初期メッセージを生成して対話履歴に追加
-                    ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_theme_str)
-                    st.session_state.dialogue_log.append({"role": "assistant", "content": ai_question})
-                else:
-                    st.warning("テーマが登録されていません。前の画面で登録してください。")
-                    if st.button("テーマ登録ページに戻る", key="back_to_page1_from_page2_for_theme"):
-                        self.set_page(1)
-                        st.rerun()
-                    return  # テーマがない場合は処理を中断
-            except Exception as e:
-                 st.error(f"テーマの読み込みに失敗: {e}")
-                 logging.error(f"テーマ読み込みエラー: {e}", exc_info=True)
-                 return # 読み込み失敗時も中断
-        else:
-            # セッション状態から取得 (再描画時など)
-            if 'user_theme_str' in st.session_state:
-                user_theme_str = st.session_state.user_theme_str
+            if user_theme_result.data:
+                user_theme_str = user_theme_result.data[0]['interest']
+                st.write(f"あなたの探究テーマ: {user_theme_str}")
+                st.session_state.user_theme_str = user_theme_str
             else:
-                # 念のため、セッションにもなければDBから再取得試行
-                try:
-                    user_theme_result = self.conn.table("interests")\
-                                              .select("interest")\
-                                              .eq("user_id", st.session_state.user_id)\
-                                              .order("created_at", desc=True)\
-                                              .limit(1)\
-                                              .execute()
-                    if user_theme_result.data:
-                        user_theme_str = user_theme_result.data[0]['interest']
-                        st.session_state.user_theme_str = user_theme_str
-                    else:
-                        st.warning("テーマが見つかりません。Step1からやり直してください。")
-                        if st.button("テーマ登録ページに戻る", key="back_to_page1_from_page2_for_theme_retry"):
-                            self.set_page(1)
-                            st.rerun()
-                        # ここで st.stop() または return するかは要件次第
-                except Exception as e:
-                    st.error(f"テーマの再取得に失敗: {e}")
-                    logging.error(f"テーマ再取得エラー: {e}", exc_info=True)
+                st.warning("テーマが登録されていません。前の画面で登録してください。")
+                if st.button("テーマ登録ページに戻る", key="back_to_step1_from_step2"):
+                    self.set_page("step1")
+                    st.rerun()
+                return
+        except Exception as e:
+            st.error(f"テーマの読み込みに失敗: {e}")
+            logging.error(f"テーマ読み込みエラー: {e}", exc_info=True)
+            return
 
-        # 対話履歴の表示
-        for msg in st.session_state.dialogue_log:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+        # 初期メッセージを生成（テーマがある場合）
+        initial_message = None
+        if user_theme_str and 'dialogue_log' not in st.session_state:
+            initial_message = self.planner.generate_response(prompt=system_prompt, user_input=user_theme_str)
 
-        # 対話回数をカウント（AIの発言回数をカウント）
-        ai_messages_count = sum(1 for msg in st.session_state.dialogue_log if msg["role"] == "assistant")
-        user_messages_count = sum(1 for msg in st.session_state.dialogue_log if msg["role"] == "user")
-        # 対話回数が3回未満の場合のみ、入力フィールドを表示
-        if user_messages_count < 3:
-            # ユーザー入力
-            user_message = st.chat_input("AIアシスタントからの質問に回答してください。", key="goal_input")
-            
-            if user_message:  # ユーザーが何か入力した場合のみ実行
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=2, sender="user", message_content=user_message)
-                # --- 追加ここまで ---
+        # 統一された対話インターフェースを使用（無制限対話）
+        chat_status = self.render_chat_interface(
+            page_number="step2",
+            history_key='dialogue_log',
+            input_key='goal_input',
+            placeholder='AIアシスタントからの質問に回答してください...',
+            initial_message=initial_message,
+            max_exchanges=float('inf')  # 無制限対話に変更
+        )
 
-                # 対話履歴に追加
-                st.session_state.dialogue_log.append({"role": "user", "content": user_message})
-                
-                # AIの応答を生成
-                response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
-                
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=2, sender="AI", message_content=response)
-                # --- 追加ここまで ---
+        # 対話とは並行して、いつでも目標を整理できるエリアを表示
+        st.markdown("---")
+        st.subheader("💭 目標の整理")
+        st.write("AIとの対話を参考に、あなたの探究学習の目標を整理してみましょう。いい感じに言語化できたら「次へ」に進んでください。")
+        
+        # 最終目標を保存するテキストエリア
+        if 'final_goal' not in st.session_state:
+            st.session_state.final_goal = ""
+            # 過去のデータがあれば読み込む
+            try:
+                goal_result = self.conn.table("goals")\
+                                    .select("goal")\
+                                    .eq("user_id", st.session_state.user_id)\
+                                    .order("created_at", desc=True)\
+                                    .limit(1)\
+                                    .execute()
+                if goal_result.data:
+                    st.session_state.final_goal = goal_result.data[0]['goal']
+            except Exception as e:
+                logging.warning(f"過去のゴールの読み込みに失敗: {e}")
+        
+        final_goal_input = st.text_area(
+            "学習目標を整理しましょう", 
+            value=st.session_state.final_goal, 
+            key="final_goal_text_area",
+            height=150,
+            help="AIとの対話を踏まえて、あなたの探究学習の目標を自由に記述してください"
+        )
+        
+        # テキストエリアの内容が変更されたらセッションに保存
+        if final_goal_input != st.session_state.final_goal:
+            st.session_state.final_goal = final_goal_input
 
-                # 対話履歴に追加
-                st.session_state.dialogue_log.append({"role": "assistant", "content": response})
-                
-                # 画面を再読み込みして最新の対話を表示
-                st.rerun()
-        else:
-            # 対話が3回に達した場合のメッセージ
-            st.success("目標設定のための対話が完了しました。最後に目標を入力した後に「次へ」ボタンをクリックして次のステップに進みましょう。")
-            
-            # 最終目標を保存するテキストエリア
-            if 'final_goal' not in st.session_state:
-                st.session_state.final_goal = "" # 初期化
-                # 過去のデータがあれば読み込む
-                try:
-                    goal_result = self.conn.table("goals")\
-                                        .select("goal")\
-                                        .eq("user_id", st.session_state.user_id)\
-                                        .order("created_at", desc=True)\
-                                        .limit(1)\
-                                        .execute()
-                    if goal_result.data:
-                        st.session_state.final_goal = goal_result.data[0]['goal']
-                except Exception as e:
-                    logging.warning(f"過去のゴールの読み込みに失敗: {e}")
-            
-            final_goal_input = st.text_area("学習目標を整理しましょう", value=st.session_state.final_goal, key="final_goal_text_area")
-            
-            # テキストエリアの内容が変更されたらDBに保存
-            if final_goal_input != st.session_state.final_goal:
-                st.session_state.final_goal = final_goal_input
-                # --- DB操作の変更 --- 
-                try:
-                    # 対応するinterest_idを取得
-                    interest_id = None
-                    if 'user_theme_str' in st.session_state:
-                        interest_result = self.conn.table("interests")\
-                                                  .select("id")\
-                                                  .eq("user_id", st.session_state.user_id)\
-                                                  .eq("interest", st.session_state.user_theme_str)\
-                                                  .order("created_at", desc=True)\
-                                                  .limit(1)\
-                                                  .execute()
-                        if interest_result.data:
-                            interest_id = interest_result.data[0]['id']
-                        else:
-                            st.warning(f"テーマ '{st.session_state.user_theme_str}' のIDが見つかりません。先にテーマを保存してください。")
-                            # interest_id がなければ goals に保存できないため return か、interest_idなしで保存するか検討
-                            # return # ここでは保存を中止
-                    else:
-                        st.warning("テーマ情報がセッションにありません。Goalを保存できませんでした。")
-                        # return
-                    
-                    if interest_id:
-                        # self.db_manager.save_goal(st.session_state.user_id, st.session_state.user_theme_str, final_goal_input)
-                        # 既存のゴールがあれば更新、なければ挿入 (upsert) または Insert のみ
-                        # ここでは単純にInsert（同じユーザーIDで複数のゴールを持てる仕様とする）
-                        self.conn.table("goals").insert({
-                            "user_id": st.session_state.user_id,
-                            "interest_id": interest_id,
-                            "goal": final_goal_input
-                        }).execute()
-                        st.success("学習目標を保存しました。")
-                        st.rerun() # 保存後に再実行して表示を更新
-                    else:
-                         st.error("関連するテーマが見つからなかったため、目標を保存できませんでした。")
-
-                except Exception as e:
-                     st.error(f"学習目標の保存に失敗: {e}")
-                     logging.error(f"ゴール保存エラー: {e}", exc_info=True)
-                # --- 変更ここまで --- 
-
+        # ナビゲーションボタン
         col1, col2 = st.columns(2)
         with col1:
             if st.button("前へ"):
@@ -358,30 +295,53 @@ class StreamlitApp:
                 st.rerun()
         with col2:
             if st.button("次へ"):
-                # 目標がセットされていれば次のページへ
-                if user_messages_count >= 3 and 'final_goal' in st.session_state and st.session_state.final_goal:
-                    self.next_page()
-                    st.rerun()
-                elif user_messages_count < 3:
-                    st.warning("まずは3回の対話を完了させてください。")
+                if st.session_state.final_goal.strip():
+                    # DBに保存してから次へ進む
+                    try:
+                        # 対応するinterest_idを取得
+                        interest_id = None
+                        if 'user_theme_str' in st.session_state:
+                            interest_result = self.conn.table("interests")\
+                                                      .select("id")\
+                                                      .eq("user_id", st.session_state.user_id)\
+                                                      .eq("interest", st.session_state.user_theme_str)\
+                                                      .order("created_at", desc=True)\
+                                                      .limit(1)\
+                                                      .execute()
+                            if interest_result.data:
+                                interest_id = interest_result.data[0]['id']
+                        
+                        if interest_id:
+                            self.conn.table("goals").insert({
+                                "user_id": st.session_state.user_id,
+                                "interest_id": interest_id,
+                                "goal": st.session_state.final_goal
+                            }).execute()
+                            st.success("学習目標を保存しました。")
+                            self.next_page()
+                            st.rerun()
+                        else:
+                            st.error("関連するテーマが見つからなかったため、目標を保存できませんでした。")
+                    except Exception as e:
+                        st.error(f"学習目標の保存に失敗: {e}")
+                        logging.error(f"ゴール保存エラー: {e}", exc_info=True)
                 else:
-                    st.warning("最終的な学習目標を入力してください。")
+                    st.warning("学習目標を入力してから次へ進んでください。")
 
-    def render_page3(self):
+    def render_step3(self):
         """アイディエーションページの表示"""
         st.title("Step3：アイディエーション ~探究学習の活動内容を決めよう！")
         
         # 現在のステップを表示
         self.make_sequence_bar()
 
-        # このページでやることのガイドを表示（インデックス指定）       
-        page_index = 3;
+        # このページでやることのガイドを表示       
+        page_index = 3
         dialog_key = f"dialog_closed_page{page_index}"
-        # 既に表示済みかチェック
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(3)
 
-        # --- DB操作の変更 (ゴールの取得) ---
+        # ユーザーの目標を取得
         user_goal_str = ""
         try:
             goal_result = self.conn.table("goals")\
@@ -392,125 +352,71 @@ class StreamlitApp:
                               .execute()
             if goal_result.data:
                 user_goal_str = goal_result.data[0]['goal']
-                st.session_state.user_goal_str = user_goal_str # セッションにも保存
+                st.session_state.user_goal_str = user_goal_str
                 st.write(f"あなたの探究活動の目標: {user_goal_str}")
-            elif 'final_goal' in st.session_state: # DBになくてもセッションにあれば使う
-                 user_goal_str = st.session_state.final_goal
-                 st.write(f"あなたの探究活動の目標 (セッションから): {user_goal_str}")
+            elif 'final_goal' in st.session_state:
+                user_goal_str = st.session_state.final_goal
+                st.write(f"あなたの探究活動の目標 (セッションから): {user_goal_str}")
             else:
                 st.warning("目標が登録されていません。前の画面で登録してください。")
-                # return ここで止めると以降の処理ができない
+                if st.button("目標設定ページに戻る", key="back_to_step2_from_step3"):
+                    self.set_page("step2")
+                    st.rerun()
+                return
         except Exception as e:
             st.error(f"目標の読み込みに失敗: {e}")
             logging.error(f"目標読み込みエラー: {e}", exc_info=True)
-            # return
-        # --- 変更ここまで ---
+            return
 
-        # 会話履歴の初期化（存在しない場合のみ）
-        if 'dialogue_log_plan' not in st.session_state:
-            st.session_state.dialogue_log_plan = []
-            
-            # 初期メッセージは会話履歴が空の時だけ追加する (目標が取得できていれば)
-            if user_goal_str:
-                ai_question = self.planner.generate_response(prompt=system_prompt, user_input=user_goal_str)
-                st.session_state.dialogue_log_plan.append({"role": "assistant", "content": ai_question})
-            # else: # 目標がない場合は初期質問をスキップ（あるいは別のメッセージ）
-            #     st.info("目標を設定してから、活動内容の相談を開始します。")
+        # 初期メッセージを生成（目標がある場合）
+        initial_message = None
+        if user_goal_str and 'dialogue_log_plan' not in st.session_state:
+            initial_message = self.planner.generate_response(prompt=system_prompt, user_input=user_goal_str)
 
-        # 対話履歴の表示
-        for msg in st.session_state.dialogue_log_plan:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+        # 統一された対話インターフェースを使用（無制限対話）
+        chat_status = self.render_chat_interface(
+            page_number="step3",
+            history_key='dialogue_log_plan',
+            input_key='plan_input',
+            placeholder='あなたの回答を入力してください...',
+            initial_message=initial_message,
+            max_exchanges=float('inf')  # 無制限対話に変更
+        )
 
-        # 対話回数をカウント（AIの発言回数をカウント）
-        ai_messages_count = sum(1 for msg in st.session_state.dialogue_log_plan if msg["role"] == "assistant")
-        user_messages_count = sum(1 for msg in st.session_state.dialogue_log_plan if msg["role"] == "user")
-        # 対話回数が6回未満の場合のみ、入力フィールドを表示
-        if user_messages_count < 3:
-            # ユーザー入力
-            user_message = st.chat_input("あなたの回答を入力してください", key="plan_input")
-            
-            if user_message:  # ユーザーが何か入力した場合のみ実行
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=3, sender="user", message_content=user_message)
-                # --- 追加ここまで ---
+        # 対話とは並行して、いつでも活動内容を整理できるエリアを表示
+        st.markdown("---")
+        st.subheader("📋 活動内容の整理")
+        st.write("AIとの対話を参考に、あなたの探究学習の活動内容を整理してみましょう。いい感じに言語化できたら「次へ」に進んでください。")
+        
+        # 学習計画を保存するテキストエリア
+        if 'learning_plan' not in st.session_state:
+            st.session_state.learning_plan = ""
+            # 過去のデータがあれば読み込む
+            try:
+                plan_result = self.conn.table("learning_plans")\
+                                    .select("nextStep")\
+                                    .eq("user_id", st.session_state.user_id)\
+                                    .order("created_at", desc=True)\
+                                    .limit(1)\
+                                    .execute()
+                if plan_result.data:
+                    st.session_state.learning_plan = plan_result.data[0]['nextStep']
+            except Exception as e:
+                logging.warning(f"過去の学習計画の読み込みに失敗: {e}")
+        
+        learning_plan_input = st.text_area(
+            "活動内容を整理しましょう", 
+            value=st.session_state.learning_plan, 
+            key="learning_plan_text_area",
+            height=150,
+            help="AIとの対話を踏まえて、あなたの探究学習の具体的な活動内容を自由に記述してください"
+        )
+        
+        # テキストエリアの内容が変更されたらセッションに保存
+        if learning_plan_input != st.session_state.learning_plan:
+            st.session_state.learning_plan = learning_plan_input
 
-                # 対話履歴に追加
-                st.session_state.dialogue_log_plan.append({"role": "user", "content": user_message})
-                
-                # AIの応答を生成
-                response = self.planner.generate_response(prompt=system_prompt, user_input=user_message)
-                
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=3, sender="AI", message_content=response)
-                # --- 追加ここまで ---
-
-                # 対話履歴に追加
-                st.session_state.dialogue_log_plan.append({"role": "assistant", "content": response})
-                
-                # 画面を再読み込みして最新の対話を表示
-                st.rerun()
-        else:
-            # 対話が完了した場合のメッセージ
-            st.success("活動内容を決める対話が完了しました。「次へ」ボタンをクリックして次のステップに進みましょう。")
-            
-            # 学習計画を保存するテキストエリア
-            if 'learning_plan' not in st.session_state:
-                st.session_state.learning_plan = "" # 初期化
-                 # 過去のデータがあれば読み込む
-                try:
-                    plan_result = self.conn.table("learning_plans")\
-                                        .select("nextStep")\
-                                        .eq("user_id", st.session_state.user_id)\
-                                        .order("created_at", desc=True)\
-                                        .limit(1)\
-                                        .execute()
-                    if plan_result.data:
-                        st.session_state.learning_plan = plan_result.data[0]['nextStep']
-                except Exception as e:
-                    logging.warning(f"過去の学習計画の読み込みに失敗: {e}")
-            
-            learning_plan_input = st.text_area("改めて活動内容を整理しましょう", value=st.session_state.learning_plan, key="learning_plan_text_area")
-            
-            if learning_plan_input != st.session_state.learning_plan:
-                st.session_state.learning_plan = learning_plan_input
-                 # --- DB操作の変更 --- 
-                try:
-                    # 対応する goal_id を取得 (user_goal_str を使う)
-                    goal_id = None
-                    current_goal_str = st.session_state.get('user_goal_str') # セッションから最新のゴール文字列を取得
-                    if current_goal_str:
-                         goal_result = self.conn.table("goals")\
-                                           .select("id")\
-                                           .eq("user_id", st.session_state.user_id)\
-                                           .eq("goal", current_goal_str)\
-                                           .order("created_at", desc=True)\
-                                           .limit(1)\
-                                           .execute()
-                         if goal_result.data:
-                             goal_id = goal_result.data[0]['id']
-                         else:
-                             st.warning(f"目標 '{current_goal_str}' のIDが見つかりません。先に目標を保存してください。")
-                    else:
-                         st.warning("目標情報がセッションにありません。活動計画を保存できませんでした。")
-
-                    if goal_id:
-                        # self.db_manager.save_learningPlans(st.session_state.user_id, user_goal_str, learning_plan_input)
-                        # Insert or Upsert
-                        self.conn.table("learning_plans").insert({
-                            "user_id": st.session_state.user_id,
-                            "goal_id": goal_id,
-                            "nextStep": learning_plan_input
-                        }).execute()
-                        st.success("活動計画を保存しました。")
-                        st.rerun()
-                    else:
-                         st.error("関連する目標が見つからなかったため、活動計画を保存できませんでした。")
-                except Exception as e:
-                     st.error(f"活動計画の保存に失敗: {e}")
-                     logging.error(f"活動計画保存エラー: {e}", exc_info=True)
-                # --- 変更ここまで --- 
-
+        # ナビゲーションボタン
         col1, col2 = st.columns(2)
         with col1:
             if st.button("前へ"):
@@ -518,16 +424,41 @@ class StreamlitApp:
                 st.rerun()
         with col2:
             if st.button("次へ"):
-                # 学習計画がセットされていれば次のページへ
-                if user_messages_count >= 6 and 'learning_plan' in st.session_state and st.session_state.learning_plan:
-                    self.next_page()
-                    st.rerun()
-                elif user_messages_count < 6:
-                    st.warning("まずは対話を完了させてください。")
+                if st.session_state.learning_plan.strip():
+                    # DBに保存してから次へ進む
+                    try:
+                        # 対応する goal_id を取得
+                        goal_id = None
+                        current_goal_str = st.session_state.get('user_goal_str')
+                        if current_goal_str:
+                            goal_result = self.conn.table("goals")\
+                                              .select("id")\
+                                              .eq("user_id", st.session_state.user_id)\
+                                              .eq("goal", current_goal_str)\
+                                              .order("created_at", desc=True)\
+                                              .limit(1)\
+                                              .execute()
+                            if goal_result.data:
+                                goal_id = goal_result.data[0]['id']
+                        
+                        if goal_id:
+                            self.conn.table("learning_plans").insert({
+                                "user_id": st.session_state.user_id,
+                                "goal_id": goal_id,
+                                "nextStep": st.session_state.learning_plan
+                            }).execute()
+                            st.success("活動計画を保存しました。")
+                            self.next_page()
+                            st.rerun()
+                        else:
+                            st.error("関連する目標が見つからなかったため、活動計画を保存できませんでした。")
+                    except Exception as e:
+                        st.error(f"活動計画の保存に失敗: {e}")
+                        logging.error(f"活動計画保存エラー: {e}", exc_info=True)
                 else:
-                    st.warning("活動内容を整理してください。")
+                    st.warning("活動内容を入力してから次へ進んでください。")
 
-    def render_page4(self):
+    def render_step4(self):
         """最終ページ（まとめ）の表示"""      
         st.title("Step4：まとめ")
         
@@ -658,9 +589,17 @@ class StreamlitApp:
                         # TODO: new_access_code はハッシュ化して保存するべき
                         insert_data = {"username": new_username, "password": new_access_code}
                         result = self.conn.table("users").insert(insert_data).execute()
-                        # resultの内容を確認して成功判定しても良い
-                        st.success("ユーザー登録が完了しました。ログインしてください。")
-                        success = True
+                        if result.data:
+                            # 登録成功後、自動的にログインしてホームに遷移
+                            user_id = result.data[0]["id"]
+                            st.session_state.authenticated = True
+                            st.session_state.user_id = user_id
+                            st.session_state.username = new_username
+                            st.session_state.page = "home"
+                            st.success("ユーザー登録が完了しました。探究学習を始めましょう！")
+                            st.rerun()
+                        else:
+                            st.error("ユーザー登録に失敗しました")
                     except Exception as e:
                         # PostgRESTエラーを解析して重複を判定することも可能
                         if "duplicate key value violates unique constraint" in str(e):
@@ -668,39 +607,69 @@ class StreamlitApp:
                         else:
                              st.error(f"ユーザー登録中にエラーが発生しました: {e}")
                         logging.error(f"ユーザー登録エラー: {e}", exc_info=True)
-                        success = False
 
     def setup_sidebar(self):
         """サイドバーの設定"""
-        if st.session_state.authenticated:
-            with st.sidebar:
-                st.write(f"ログイン中: {st.session_state.username}")
-                st.divider()
-
-                if st.session_state.page == "home":
-                    st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_home", use_container_width=True)
-                else:
-                    st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
-                    st.divider()
-                    st.button("1️⃣ Step 1: テーマ設定", on_click=self.navigate_to_page1, key="sidebar_nav_p1", use_container_width=True)
-                    st.button("2️⃣ Step 2: ゴール設定", on_click=self.navigate_to_page2, key="sidebar_nav_p2", use_container_width=True)
-                    st.button("3️⃣ Step 3: アイディエーション", on_click=self.navigate_to_page3, key="sidebar_nav_p3", use_container_width=True)
-                    st.button("4️⃣ Step 4: まとめ", on_click=self.navigate_to_page4, key="sidebar_nav_p4", use_container_width=True)
-                    st.divider()
-                    st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_general_inquiry, key="sidebar_nav_general_inquiry_other", use_container_width=True)
+        with st.sidebar:
+            st.markdown(f"こんにちは、{st.session_state.username}さん")
+            
+            # ログアウトボタンはページ横断で常に表示
+            if st.button("ログアウト", key="logout_button", use_container_width=True):
+                self.logout()
                 
-                st.divider()
-                if st.button("ログアウト", key="sidebar_logout", use_container_width=True):
-                    # ログアウト処理
-                    st.session_state.authenticated = False
-                    st.session_state.user_id = None
-                    st.session_state.username = None
-                    # 他のセッション状態もクリア
-                    keys_to_keep = {"authenticated", "user_id", "username"}
-                    for key in list(st.session_state.keys()):
-                        if key not in keys_to_keep:
-                            del st.session_state[key]
-                    st.rerun()
+            st.divider()
+            
+            # メインナビゲーション
+            st.write("🧭 **ナビゲーション**")
+            
+            current_page = st.session_state.page
+            
+            # ホームページボタン
+            if current_page != "home":
+                st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
+            else:
+                st.button("**🏠 ホーム** ⬅️", key="sidebar_nav_home_current", use_container_width=True, disabled=True)
+            
+            # 4ステップのナビゲーション（ホーム以外で表示）
+            if current_page != "home":
+                st.write("📚 **探究学習プロセス**")
+                step_buttons = [
+                    ("1️⃣ Step 1: テーマ設定", "step1"),
+                    ("2️⃣ Step 2: ゴール設定", "step2"),
+                    ("3️⃣ Step 3: アイディエーション", "step3"),
+                    ("4️⃣ Step 4: まとめ", "step4")
+                ]
+                
+                for label, step_id in step_buttons:
+                    # 現在のページは強調表示
+                    if current_page == step_id:
+                        st.button(f"**{label}** ⬅️", key=f"sidebar_nav_{step_id}_current", use_container_width=True, disabled=True)
+                    else:
+                        if step_id == "step1":
+                            st.button(label, on_click=self.navigate_to_step1, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step2":
+                            st.button(label, on_click=self.navigate_to_step2, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step3":
+                            st.button(label, on_click=self.navigate_to_step3, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step4":
+                            st.button(label, on_click=self.navigate_to_step4, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                            
+            st.divider()
+            
+            # その他の機能
+            st.write("🔧 **その他の機能**")
+            
+            # 相談窓口ボタン
+            if current_page != "inquiry":
+                st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
+            else:
+                st.button("**❓ 行き詰ってたらここにおいで！** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
+                
+            # プロフィール設定ボタン
+            if current_page != "profile":
+                st.button("⚙️ プロフィール設定", on_click=self.navigate_to_profile, key="sidebar_nav_profile", use_container_width=True)
+            else:
+                st.button("**⚙️ プロフィール設定** ⬅️", key="sidebar_nav_profile_current", use_container_width=True, disabled=True)
 
     def set_page(self, page_value):
         """ページを設定するヘルパー関数"""
@@ -719,125 +688,602 @@ class StreamlitApp:
         local_css("static/style.css") 
         # --- 追加ここまで ---
 
-        # サイドバーの設定
-        self.setup_sidebar()
-        
         # 認証状態の確認
         if not st.session_state.authenticated:
-            self.render_login_page()
+            # 未認証ユーザーの場合、ページに応じて表示
+            if st.session_state.page == "landing":
+                self.render_landing_page()
+            elif st.session_state.page == "login":
+                # サイドバーの設定（ログインページのみ）
+                self.setup_sidebar()
+                self.render_login_page()
+            else:
+                # その他の場合はランディングページにリダイレクト
+                self.set_page("landing")
+                st.rerun()
         else:
-            # 認証済みならページを表示
+            # 認証済みユーザーの場合
+            # サイドバーの設定
+            self.setup_sidebar()
+            
+            # ページを表示
             if st.session_state.page == "home":
                 self.render_home_page()
-            elif st.session_state.page == 1:
-                self.render_page1()
-            elif st.session_state.page == 2:
-                self.render_page2()
-            elif st.session_state.page == 3:
-                self.render_page3()
-            elif st.session_state.page == 4:
-                self.render_page4()
-            elif st.session_state.page == 5:
-                self.render_general_inquiry_page()
+            elif st.session_state.page == "profile":
+                self.render_profile_page()
+            elif st.session_state.page == "step1":
+                self.render_step1()
+            elif st.session_state.page == "step2":
+                self.render_step2()
+            elif st.session_state.page == "step3":
+                self.render_step3()
+            elif st.session_state.page == "step4":
+                self.render_step4()
+            elif st.session_state.page == "inquiry":
+                self.render_inquiry_page()
+            else:
+                # 認証済みユーザーが不正なページにいる場合はホームにリダイレクト
+                self.set_page("home")
+                st.rerun()
 
     # --- ヘルパーメソッドを追加 ---
-    def save_chat_log(self, page: int, sender: str, message_content: str):
-        """対話ログをSupabaseに保存する"""
+    def save_chat_log(self, page: str, sender: str, message_content: str):
+        """チャットログをデータベースに保存"""
         try:
             self.conn.table("chat_logs").insert({
                 "user_id": st.session_state.user_id,
-                "page": str(page), # ページ番号が文字列の場合も考慮してstr()でキャスト
+                "page": page,
                 "sender": sender,
                 "message": message_content
             }).execute()
-            logging.info(f"対話ログ保存成功: Page={page}, Sender={sender}")
         except Exception as e:
-            st.error(f"対話ログの保存に失敗しました: {e}")
-            logging.error(f"対話ログ保存エラー: Page={page}, Sender={sender}, Error={e}", exc_info=True)
-    # --- 追加ここまで ---
+            logging.error(f"チャットログ保存エラー: {e}", exc_info=True)
+    
 
-    def render_general_inquiry_page(self):
-        """なんでも相談窓口ページの表示"""
-        st.title("行き詰ってたらここにおいで！")
-        st.write("探究学習を進める上で困っていること、悩んでいることを自由に入力してください。AIアシスタントが相談に乗ります。")
 
-        # 「よくある困りごと」ボタンの例 (後で具体的な選択肢を追加)
-        common_issues = [
-            "何から始めたらいいかわからない",
-            "テーマが大きすぎる気がする",
-            "具体的な進め方がわからない",
-            "行き詰まってしまった",
-            "自分の探究テーマや問いの解像度を上げたい"
-        ]
+    def load_user_profile(self):
+        """ユーザーのプロフィール情報をロードする"""
+        try:
+            result = self.conn.table("user_profiles")\
+                        .select("profile_data")\
+                        .eq("user_id", st.session_state.user_id)\
+                        .execute()
+            if result.data:
+                profile_data = result.data[0]['profile_data']
+                return {
+                    "likes": profile_data.get("likes", []),
+                    "interests": profile_data.get("interests", []),
+                    "wants_to_try": profile_data.get("wants_to_try", [])
+                }
+            else:
+                return {"likes": [], "interests": [], "wants_to_try": []}
+        except Exception as e:
+            logging.error(f"プロフィール読み込みエラー: {e}", exc_info=True)
+            return {"likes": [], "interests": [], "wants_to_try": []}
+
+    def save_user_profile(self, likes: list, interests: list, wants_to_try: list):
+        """ユーザーのプロフィール情報を保存する（JSON形式）"""
+        try:
+            # プロフィールが既に存在するかチェック
+            existing = self.conn.table("user_profiles")\
+                        .select("id")\
+                        .eq("user_id", st.session_state.user_id)\
+                        .execute()
+            
+            profile_data = {
+                "likes": likes,
+                "interests": interests,
+                "wants_to_try": wants_to_try
+            }
+            
+            if existing.data:
+                # 既存のプロフィールを更新
+                result = self.conn.table("user_profiles")\
+                          .update({"profile_data": profile_data})\
+                          .eq("user_id", st.session_state.user_id)\
+                          .execute()
+            else:
+                # 新規プロフィールを作成
+                insert_data = {
+                    "user_id": st.session_state.user_id,
+                    "profile_data": profile_data
+                }
+                result = self.conn.table("user_profiles")\
+                          .insert(insert_data)\
+                          .execute()
+            
+            return True
+        except Exception as e:
+            logging.error(f"プロフィール保存エラー: {e}", exc_info=True)
+            return False
+
+    def render_tag_input(self, label: str, items: list, key: str, placeholder: str = "", help_text: str = ""):
+        """動的タグ入力ウィジェットをレンダリング（編集モード付き）"""
+        st.write(f"**{label}**")
+        if help_text:
+            st.caption(help_text)
         
-        # general_inquiry_historyが存在しない場合は初期化
-        if 'general_inquiry_history' not in st.session_state:
-            st.session_state.general_inquiry_history = []
+        # 編集モードの状態管理
+        edit_mode_key = f"edit_mode_{key}"
+        if edit_mode_key not in st.session_state:
+            st.session_state[edit_mode_key] = False
         
-        # selectbox のキーを修正し、コールバック関数または st.form を使った制御を検討
-        # ここではシンプルに、選択肢が変更されたらそれを表示する形にする
+        # 2カラムレイアウト
+        col1, col2 = st.columns([1, 1])
         
-        # ユーザーが選択した共通の問題を処理するための列
-        col1, col2 = st.columns([3,1])
-        with col1:
-            selected_issue = st.selectbox(
-                "もしかして、こういうことで困っていますか？", 
-                options=["選択してください"] + common_issues, 
-                key="common_issue_selector"
+        with col1:            
+            # 新しいタグ追加用の入力フィールド
+            new_item = st.text_input(
+                "項目名を入力",
+                key=f"new_{key}",
+                placeholder=placeholder,
+                label_visibility="collapsed"
             )
+            
+            # 追加ボタンを入力欄の直下に配置
+            if st.button("➕ 追加", key=f"add_{key}", disabled=not new_item.strip(), use_container_width=True):
+                if new_item.strip():
+                    if new_item.strip() not in items:
+                        items.append(new_item.strip())
+                        st.success(f"✅ '{new_item.strip()}'を追加しました！")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ 既に存在しています")
+            
+            # 一括追加機能
+            with st.expander("📝 一括追加"):
+                bulk_input = st.text_area(
+                    "カンマ区切りで入力",
+                    key=f"bulk_{key}",
+                    placeholder="例: 音楽, 映画, 読書",
+                    help="カンマ(,)で区切って複数項目を追加",
+                    height=80
+                )
+                if st.button("一括追加", key=f"bulk_add_{key}", use_container_width=True):
+                    if bulk_input.strip():
+                        new_items = [item.strip() for item in bulk_input.split(",") if item.strip()]
+                        added_count = 0
+                        for item in new_items:
+                            if item and item not in items:
+                                items.append(item)
+                                added_count += 1
+                        
+                        if added_count > 0:
+                            st.success(f"✅ {added_count}個追加しました！")
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ 新しい項目はありませんでした")
+        
         with col2:
-            st.write("") # レイアウト調整用
-            st.write("") # レイアウト調整用
-            if selected_issue != "選択してください":
-                if st.button("これで相談", key="common_issue_submit_button"):
-                    st.session_state.general_inquiry_history.append({"role": "user", "content": selected_issue})
-                    ai_response, st.session_state.general_inquiry_history = self.planner.handle_general_inquiry(
-                        selected_issue, 
-                        st.session_state.general_inquiry_history
-                    )
-                    self.save_chat_log(page=5, sender="user", message_content=selected_issue)
-                    self.save_chat_log(page=5, sender="AI", message_content=ai_response)
-                    # selectboxをリセットするためにキーを変更するか、st.formを使うことを検討
-                    # ここではシンプルにrerun
-                    st.rerun()
+            if items:
+                # 登録数と編集ボタン
+                col2_header1, col2_header2 = st.columns([2, 1])
+                # タグ一覧の表示
+                for i, item in enumerate(items):
+                    if st.session_state[edit_mode_key]:
+                        # 編集モード: 削除ボタン付きで表示
+                        tag_col1, tag_col2 = st.columns([4, 1])
+                        with tag_col1:
+                            st.write(f"🏷️ {item}")
+                        with tag_col2:
+                            if st.button("✕", key=f"delete_{key}_{i}_{item}", help=f"'{item}'を削除"):
+                                items.remove(item)
+                                st.success(f"🗑️ '{item}'を削除しました")
+                                st.rerun()
+                    else:
+                        # 表示モード: 削除ボタンなし
+                        st.write(f"🏷️ {item}")
+
+                # 編集モードの切り替えボタン
+                if st.session_state[edit_mode_key]:
+                    if st.button("✅ 完了", key=f"finish_edit_{key}", use_container_width=True):
+                        st.session_state[edit_mode_key] = False
+                        st.success("📝 編集を完了しました")
+                        st.rerun()
+                else:
+                    if st.button("✏️ 編集", key=f"start_edit_{key}", use_container_width=True):
+                        st.session_state[edit_mode_key] = True
+                        st.info("💡 各タグの✕ボタンで削除できます")
+                        st.rerun()             
+
+                # 編集モード中の追加操作
+                if st.session_state[edit_mode_key]:
+                    st.divider()
+                    col2_action1, col2_action2 = st.columns(2)
+                    with col2_action1:
+                        if st.button("🔄 並び替え", key=f"sort_{key}", use_container_width=True):
+                            items.sort()
+                            st.success("🔄 アルファベット順に並び替えました")
+                            st.rerun()
+                    with col2_action2:
+                        if st.button("🗑️ 全削除", key=f"clear_all_{key}", use_container_width=True):
+                            if st.session_state.get(f"confirm_clear_{key}", False):
+                                items.clear()
+                                st.session_state[edit_mode_key] = False
+                                st.success("🗑️ 全て削除しました")
+                                st.rerun()
+                            else:
+                                st.session_state[f"confirm_clear_{key}"] = True
+                                st.warning("⚠️ もう一度押すと全削除されます")
+                                st.rerun()
+                    
+                    # 確認状態をリセット（他のボタンが押された場合）
+                    if f"confirm_clear_{key}" in st.session_state and st.session_state[f"confirm_clear_{key}"] == True:
+                        # 少し待ってから確認状態をリセット
+                        import time
+                        time.sleep(0.1)
+                        if st.session_state.get(f"confirm_clear_{key}", False):
+                            st.session_state[f"confirm_clear_{key}"] = False
+            else:
+                st.info("📝 まだタグが追加されていません")
+                st.caption("👈 左側の入力欄からタグを追加してください")
+        
+        return items
+
+    def render_chat_interface(self, 
+                             page_number: str, 
+                             history_key: str, 
+                             input_key: str, 
+                             placeholder: str = "回答を入力してください...",
+                             initial_message: str = None,
+                             max_exchanges: int = 3):
+        """統一された対話インターフェースをレンダリング
+        
+        Args:
+            page_number: ページ番号（ログ保存用）
+            history_key: セッション状態の履歴キー
+            input_key: 入力フィールドのキー
+            placeholder: 入力フィールドのプレースホルダー
+            initial_message: 初期メッセージ（AIからの最初の発話）
+            max_exchanges: 最大対話回数（float('inf')で無制限）
+            
+        Returns:
+            dict: 対話の状態情報
+            - is_complete: 対話が完了したか
+            - user_message_count: ユーザーメッセージ数
+            - ai_message_count: AIメッセージ数
+        """
+        # 対話履歴の初期化
+        if history_key not in st.session_state:
+            st.session_state[history_key] = []
+            
+            # 初期メッセージがある場合は追加
+            if initial_message:
+                st.session_state[history_key].append({"role": "assistant", "content": initial_message})
 
         # 対話履歴の表示
         chat_container = st.container()
         with chat_container:
-            for msg in st.session_state.general_inquiry_history:
+            for msg in st.session_state[history_key]:
                 with st.chat_message(msg["role"]):
                     st.write(msg["content"])
 
-        user_input = st.chat_input("相談内容を入力してください...", key="general_inquiry_input")
+        # 対話回数をカウント
+        user_message_count = sum(1 for msg in st.session_state[history_key] if msg["role"] == "user")
+        ai_message_count = sum(1 for msg in st.session_state[history_key] if msg["role"] == "assistant")
+        
+        # 無制限対話の場合は常にFalse、そうでなければ上限チェック
+        is_complete = False if max_exchanges == float('inf') else user_message_count >= max_exchanges
 
-        if user_input:
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=5, sender="user", message_content=user_input)
-                # --- 追加ここまで ---
-
+        # 対話が完了していない場合のみ入力フィールドを表示
+        if not is_complete:
+            # カスタム入力フィールド（Ctrl+Enterで送信、Enterで改行）
+            st.markdown("""
+            <style>
+            .custom-input-container {
+                position: relative;
+                margin: 10px 0;
+            }
+            .input-help {
+                font-size: 0.8rem;
+                color: #666;
+                margin-bottom: 5px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<div class="input-help">💡 Enterで改行、Ctrl+Enterで送信</div>', unsafe_allow_html=True)
+            
+            # セッション状態で入力値を管理
+            input_state_key = f"{input_key}_text"
+            if input_state_key not in st.session_state:
+                st.session_state[input_state_key] = ""
+            
+            # フォームを使用してCtrl+Enterを処理
+            with st.form(key=f"{input_key}_form"):
+                user_input = st.text_area(
+                    label="メッセージを入力",
+                    value=st.session_state[input_state_key],
+                    placeholder=placeholder + "\n\n💡 Ctrl+Enterで送信、Enterで改行",
+                    height=100,
+                    key=f"{input_key}_textarea",
+                    label_visibility="collapsed"
+                )
+                
+                # JavaScript for Ctrl+Enter functionality
+                st.markdown(f"""
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {{
+                    const textArea = document.querySelector('textarea[data-testid="{input_key}_textarea"]');
+                    if (textArea) {{
+                        textArea.addEventListener('keydown', function(e) {{
+                            if (e.ctrlKey && e.key === 'Enter') {{
+                                e.preventDefault();
+                                const submitButton = document.querySelector('button[data-testid="{input_key}_submit"]');
+                                if (submitButton) {{
+                                    submitButton.click();
+                                }}
+                            }}
+                        }});
+                    }}
+                }});
+                </script>
+                """, unsafe_allow_html=True)
+                
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    submit_clicked = st.form_submit_button(
+                        "📤 送信 (Ctrl+Enter)", 
+                        use_container_width=True,
+                        type="primary"
+                    )
+            
+            # 送信処理
+            if submit_clicked and user_input.strip():
+                # ユーザーメッセージのログ保存
+                self.save_chat_log(page=page_number, sender="user", message_content=user_input)
+                
                 # 対話履歴に追加
-                st.session_state.general_inquiry_history.append({"role": "user", "content": user_input})
+                st.session_state[history_key].append({"role": "user", "content": user_input})
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_input)
                 
-                # --- ログ保存処理を追加 ---
-                self.save_chat_log(page=5, sender="AI", message_content=response)
-                # --- 追加ここまで ---
-
-                # 対話履歴に追加
-                st.session_state.general_inquiry_history.append({"role": "assistant", "content": response})
+                # AIメッセージのログ保存
+                self.save_chat_log(page=page_number, sender="AI", message_content=response)
                 
-                # 画面を再読み込みして最新の対話を表示
+                # 対話履歴に追加
+                st.session_state[history_key].append({"role": "assistant", "content": response})
+                
+                # 入力フィールドをクリア
+                st.session_state[input_state_key] = ""
+                
+                # 画面を再読み込み
                 st.rerun()
+            elif submit_clicked and not user_input.strip():
+                st.warning("メッセージを入力してから送信してください。")
         
-        st.divider()
-        if st.button("ステップ選択に戻る", key="back_to_steps_from_general_inquiry"):
-            self.set_page(1) # set_page を使う
-            st.rerun()
-        if st.button("ホームページに戻る", key="back_to_home_from_general_inquiry"):
+        return {
+            "is_complete": is_complete,
+            "user_message_count": user_message_count,
+            "ai_message_count": ai_message_count
+        }
+
+    def render_inquiry_page(self):
+        """なんでも相談窓口ページの表示"""
+        st.title("❓ なんでも相談窓口")
+        st.write("探究学習に関するあらゆる疑問や悩みをAIアシスタントに相談できます。")
+        st.info("💡 困ったことがあれば、何でもお気軽にお聞きください！")
+        
+        # 統一された対話インターフェースを使用
+        chat_status = self.render_chat_interface(
+            page_number="inquiry",
+            history_key='general_inquiry_history',
+            input_key='general_inquiry_input',
+            placeholder='相談内容を入力してください...',
+            initial_message=None,  # 初期メッセージなし
+            max_exchanges=float('inf')  # 無制限対話
+        )
+        
+        # 履歴クリアボタン
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🗑️ 履歴をクリア", key="clear_inquiry_history", use_container_width=True):
+                if 'general_inquiry_history' in st.session_state:
+                    st.session_state.general_inquiry_history = []
+                    st.success("履歴をクリアしました。")
+                    st.rerun()
+
+    def navigate_to_step1(self):
+        """Step1に移動"""
+        self.set_page("step1")
+
+    def navigate_to_step2(self):
+        """Step2に移動"""
+        self.set_page("step2")
+
+    def navigate_to_step3(self):
+        """Step3に移動"""
+        self.set_page("step3")
+
+    def navigate_to_step4(self):
+        """Step4に移動"""
+        self.set_page("step4")
+
+    def navigate_to_inquiry(self):
+        """相談窓口に移動"""
+        self.set_page("inquiry")
+
+    def navigate_to_profile(self):
+        """プロフィール設定に移動"""
+        self.set_page("profile")
+
+    def navigate_to_home(self):
+        """ホームページに移動"""
+        self.set_page("home")
+
+    def render_profile_page(self):
+        """プロフィール設定ページを表示"""
+        st.title("🎯 プロフィール設定")
+        st.markdown("---")
+        
+        # プロフィール情報をロード
+        profile = self.load_user_profile()
+        
+        # 「好きなこと」セクションのみ表示
+        st.subheader("💖 好きなこと・興味関心")
+        st.markdown("あなたの興味や関心を教えてください。これらの情報は、あなたに最適な探究学習を提案するために使用されます。")
+        
+        # 2カラムレイアウト
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("#### 🔍 新しい項目を追加")
+            
+        with col2:
+            st.markdown("#### 📋 現在の登録項目")
+        
+        # タグ入力ウィジェット
+        likes = profile["likes"]
+        self.render_tag_input(
+            label="",
+            items=likes,
+            key="likes",
+            placeholder="例: 音楽、映画、読書、スポーツ",
+            help_text="興味のあることを自由に追加してください"
+        )
+        
+        # 保存ボタン
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("💾 保存", key="save_profile", use_container_width=True, type="primary"):
+                if self.save_user_profile(likes, [], []):  # 現在は likes のみを保存
+                    st.success("✅ プロフィールを保存しました！")
+                    st.balloons()
+                else:
+                    st.error("❌ 保存に失敗しました。再試行してください。")
+        
+        # ホームに戻るボタン
+        st.markdown("---")
+        if st.button("🏠 ホームに戻る", key="profile_to_home", use_container_width=True):
             self.set_page("home")
             st.rerun()
+
+    def render_landing_page(self):
+        """魅力的なランディングページを表示"""
+        # ヘッダー部分
+        st.markdown("""
+        <div class="landing-header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <h1 class="main-title">🔍 探Qメイト</h1>
+                    <p class="subtitle">AI と一緒に、あなただけの探究学習を始めよう</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 隠しボタン（実際の処理用）
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🚀 今すぐ始める", key="start-btn", use_container_width=True, type="primary"):
+                self.set_page("login")
+                st.rerun()
+        
+        # 特徴セクション
+        st.markdown("""
+        <div class="features-section">
+            <h2 class="section-title">✨ なぜ探Qメイトなのか？</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>個人最適化された学習</h3>
+                    <p>あなたの興味・関心に基づいて、AIが最適な探究テーマを提案。一人ひとりに合わせた学習体験を提供します。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>AI チューターの伴走</h3>
+                    <p>最新のGPT-4を活用したAIチューターが、あなたの学習を24時間サポート。質問や相談にいつでも対応します。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>段階的な学習設計</h3>
+                    <p>テーマ設定から目標設定、活動計画まで、4つのステップで体系的に探究学習を組み立てることができます。</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 学習フローセクション
+        st.markdown("""
+        <div class="flow-section">
+            <h2 class="section-title">🛤️ 学習の流れ</h2>
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>🎯 テーマ発見</h3>
+                        <p>あなたの興味・関心から探究したいテーマを見つけます</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>🎖️ 目標設定</h3>
+                        <p>AIとの対話を通じて具体的な学習目標を設定します</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>📋 計画作成</h3>
+                        <p>目標達成のための具体的な活動計画を立てます</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>🎉 成果まとめ</h3>
+                        <p>学習成果を整理し、次のステップを見つけます</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        #使ってくれた生徒や先生の感想
+        
+        # CTA セクション
+        st.markdown("""
+        <div class="cta-section-bottom">
+            <h2 class="cta-title">🌟 今すぐ探究学習を始めよう！</h2>
+            <p class="cta-description">AIと一緒に、あなたの興味を深い学びに変えませんか？</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 最終CTAボタン
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🚀 無料で始める", key="final-cta", use_container_width=True, type="primary"):
+                self.set_page("login")
+                st.rerun()
+        
+        # フッター
+        st.markdown("""
+        <div class="footer">
+            <p>© 2024 探Qメイト - AIが支援する探究学習プラットフォーム</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    def logout(self):
+        """ログアウト処理"""
+        st.session_state.authenticated = False
+        st.session_state.user_id = None
+        st.session_state.username = None
+        
+        # セッション状態をクリア（必要な項目のみ保持）
+        keys_to_keep = {"authenticated", "user_id", "username", "page"}
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
+                
+        # ランディングページにリダイレクト
+        self.set_page("landing")
+        st.rerun()
 
     def render_home_page(self):
         """ホームページの表示"""
@@ -847,31 +1293,12 @@ class StreamlitApp:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("課題設定プロセスを開始する", key="start_process_button"):
-                self.set_page(1) # ステップ1へ
+                self.set_page("step1")
                 st.rerun()
         with col2:
             if st.button("行き詰ってたらここにおいで！", key="goto_general_inquiry_button"):
-                self.set_page(5)
+                self.set_page("inquiry")
                 st.rerun()
-
-    def navigate_to_home(self):
-        self.set_page("home")
-
-    def navigate_to_page1(self):
-        self.set_page(1)
-
-    def navigate_to_page2(self):
-        self.set_page(2)
-
-    def navigate_to_page3(self):
-        self.set_page(3)
-
-    def navigate_to_page4(self):
-        self.set_page(4)
-
-    def navigate_to_general_inquiry(self):
-        self.set_page(5)
-
 
 # アプリケーション実行
 if __name__ == "__main__":
