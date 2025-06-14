@@ -2,7 +2,6 @@ import streamlit as st
 from streamlit_chat import message
 from st_supabase_connection import SupabaseConnection
 import logging
-from datetime import datetime
 
 from module.llm_api import learning_plannner
 from prompt.prompt import system_prompt
@@ -50,30 +49,12 @@ class StreamlitApp:
             st.session_state.general_inquiry_history = []
         if "is_initial_setup" not in st.session_state:
             st.session_state.is_initial_setup = False
-        
-        # プロジェクト関連のセッション状態
-        if "current_project_id" not in st.session_state:
-            st.session_state.current_project_id = None
-        if "selected_project_id" not in st.session_state:
-            st.session_state.selected_project_id = None
 
     def _initialize_supabase_tables(self):
         """Supabaseテーブルの初期化（必要に応じて）"""
         # 本来はSupabase側で事前にテーブルを作成するべきですが、
         # 開発段階では自動作成を試行することも可能です
-        
-        # プロジェクトテーブルの初期化
-        try:
-            # プロジェクトテーブルが存在するかチェック
-            self.conn.table("projects").select("id").limit(1).execute()
-        except Exception as e:
-            logging.info("プロジェクトテーブルの初期化が必要です")
-            
-        # プロジェクト進捗テーブルの初期化
-        try:
-            self.conn.table("project_progress").select("id").limit(1).execute()
-        except Exception as e:
-            logging.info("プロジェクト進捗テーブルの初期化が必要です")
+        logging.info("Supabaseテーブルの初期化を試みます (注意: テーブルは事前に作成することを推奨)")
 
     def next_page(self):
         """次のページに進む"""
@@ -185,80 +166,34 @@ class StreamlitApp:
             st.write(dialog_content[step_number])
             st.session_state[dialog_key] = True
 
-
     def render_step1(self):
         """テーマ設定ページの表示"""      
         st.title("Step1: 自分の興味から探究学習のテーマを決める！")
 
         # 現在のステップを表示
         self.make_sequence_bar()
-        
-        # アクティブプロジェクトがない場合の警告
-        active_project = self.get_active_project()
-        if not active_project:
-            st.warning("アクティブなプロジェクトがありません。")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("ダッシュボードに戻る", key="no_project_dashboard"):
-                    self.set_page("dashboard")
-                    st.rerun()
-            with col2:
-                if st.button("新しいプロジェクトを作成", key="no_project_create"):
-                    self.set_page("project_create")
-                    st.rerun()
-            return
-        
-        # プロジェクト情報を表示
-        st.info(f"📝 現在のプロジェクト: **{active_project['title']}**")
-        st.session_state.current_project_id = active_project['id']
-        
-        # 既存のテーマがあるかチェック
-        existing_theme = ""
-        progress_data = self.get_project_progress(active_project['id'])
-        step1_progress = next((p for p in progress_data if p['step_name'] == 'step1'), None)
-        if step1_progress and step1_progress.get('data', {}).get('theme'):
-            existing_theme = step1_progress['data']['theme']
 
-        theme = st.text_input(
-            "あなたが探究したいテーマを入力してください。", 
-            value=existing_theme,
-            placeholder="例：AIによるメタ認知支援",
-            help="プロジェクトで探究したい具体的なテーマを入力してください"
-        )
+        theme = st.text_input("あなたが探究したいテーマを入力してください。例：AIによるメタ認知支援")
 
         if st.button("テーマを決定する"):
             if theme:
                 try:
-                    # プロジェクト進捗として保存
-                    success = self.update_project_progress(
-                        active_project['id'], 
-                        'step1', 
-                        {'theme': theme}, 
-                        'completed'
-                    )
-                    
-                    if success:
-                        st.success(f"テーマ '{theme}' を保存しました！")
-                        st.session_state.user_theme = theme
-                    else:
-                        st.error("テーマの保存に失敗しました。")
-                        
+                    self.conn.table("interests").insert({"user_id": st.session_state.user_id, "interest": theme}).execute()
+                    st.success(f"テーマ '{theme}' を保存しました！")
+                    st.session_state.user_theme = theme
                 except Exception as e:
                     st.error(f"テーマの保存に失敗: {str(e)}")
                     logging.error(f"テーマ保存エラー: {e}", exc_info=True)
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("ダッシュボードに戻る", key="back_to_dashboard_from_step1"):
-                self.set_page("dashboard")
+            if st.button("ホームへ戻る", key="back_to_home_from_step1"):
+                self.set_page("home")
                 st.rerun()
         with col2:
             if st.button("次へ"):
-                if theme:
-                    self.next_page()
-                    st.rerun()
-                else:
-                    st.warning("テーマを入力してから次へ進んでください。")
+                self.next_page()
+                st.rerun()
 
         # このページでやることのガイドを表示
         page_index = 1
@@ -627,7 +562,7 @@ class StreamlitApp:
                         st.session_state.authenticated = True
                         st.session_state.user_id = user_id
                         st.session_state.username = username
-                        st.session_state.page = "dashboard" # ログイン後ダッシュボードへ
+                        st.session_state.page = "home" # ログイン後ホームページへ
                         st.success("ログインしました！")
                         st.rerun()
                     else:
@@ -660,7 +595,7 @@ class StreamlitApp:
                             st.session_state.authenticated = True
                             st.session_state.user_id = user_id
                             st.session_state.username = new_username
-                            st.session_state.page = "dashboard"
+                            st.session_state.page = "home"
                             st.success("ユーザー登録が完了しました。探究学習を始めましょう！")
                             st.rerun()
                         else:
@@ -685,66 +620,50 @@ class StreamlitApp:
             st.divider()
             
             # メインナビゲーション
-            st.write("🧭 **メインナビゲーション**")
+            st.write("🧭 **ナビゲーション**")
             
             current_page = st.session_state.page
             
-            # ダッシュボードボタン
-            if current_page not in ["home", "dashboard"]:
-                st.button("🏠 ダッシュボード", on_click=self.navigate_to_dashboard, key="sidebar_nav_dashboard", use_container_width=True)
+            # ホームページボタン
+            if current_page != "home":
+                st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
             else:
-                st.button("**🏠 ダッシュボード** ⬅️", key="sidebar_nav_dashboard_current", use_container_width=True, disabled=True)
+                st.button("**🏠 ホーム** ⬅️", key="sidebar_nav_home_current", use_container_width=True, disabled=True)
             
-            # プロジェクト関連ナビゲーション
-            if current_page in ["step1", "step2", "step3", "step4"]:
-                st.divider()
-                st.write("📚 **現在のプロジェクト**")
+            # 4ステップのナビゲーション（ホーム以外で表示）
+            if current_page != "home":
+                st.write("📚 **探究学習プロセス**")
+                step_buttons = [
+                    ("1️⃣ Step 1: テーマ設定", "step1"),
+                    ("2️⃣ Step 2: ゴール設定", "step2"),
+                    ("3️⃣ Step 3: アイディエーション", "step3"),
+                    ("4️⃣ Step 4: まとめ", "step4")
+                ]
                 
-                # アクティブプロジェクト情報を表示
-                active_project = self.get_active_project()
-                if active_project:
-                    st.markdown(f"**{active_project['title']}**")
-                    
-                    # 4ステップのナビゲーション
-                    step_buttons = [
-                        ("1️⃣ テーマ設定", "step1"),
-                        ("2️⃣ ゴール設定", "step2"),
-                        ("3️⃣ アイディエーション", "step3"),
-                        ("4️⃣ まとめ", "step4")
-                    ]
-                    
-                    for label, step_id in step_buttons:
-                        # 現在のページは強調表示
-                        if current_page == step_id:
-                            st.button(f"**{label}** ⬅️", key=f"sidebar_nav_{step_id}_current", use_container_width=True, disabled=True)
-                        else:
-                            if step_id == "step1":
-                                st.button(label, on_click=self.navigate_to_step1, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                            elif step_id == "step2":
-                                st.button(label, on_click=self.navigate_to_step2, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                            elif step_id == "step3":
-                                st.button(label, on_click=self.navigate_to_step3, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                            elif step_id == "step4":
-                                st.button(label, on_click=self.navigate_to_step4, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                else:
-                    st.info("プロジェクトが見つかりません")
-                    
+                for label, step_id in step_buttons:
+                    # 現在のページは強調表示
+                    if current_page == step_id:
+                        st.button(f"**{label}** ⬅️", key=f"sidebar_nav_{step_id}_current", use_container_width=True, disabled=True)
+                    else:
+                        if step_id == "step1":
+                            st.button(label, on_click=self.navigate_to_step1, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step2":
+                            st.button(label, on_click=self.navigate_to_step2, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step3":
+                            st.button(label, on_click=self.navigate_to_step3, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step4":
+                            st.button(label, on_click=self.navigate_to_step4, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                            
             st.divider()
             
             # その他の機能
             st.write("🔧 **その他の機能**")
             
-            # プロジェクト作成ボタン
-            if current_page != "project_create":
-                st.button("💡 新しいプロジェクト", on_click=self.navigate_to_project_create, key="sidebar_nav_project_create", use_container_width=True)
-            else:
-                st.button("**💡 新しいプロジェクト** ⬅️", key="sidebar_nav_project_create_current", use_container_width=True, disabled=True)
-            
             # 相談窓口ボタン
             if current_page != "inquiry":
-                st.button("❓ AI相談", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
+                st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
             else:
-                st.button("**❓ AI相談** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
+                st.button("**❓ 行き詰ってたらここにおいで！** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
                 
             # プロフィール設定ボタン
             if current_page != "profile":
@@ -788,14 +707,10 @@ class StreamlitApp:
             self.setup_sidebar()
             
             # ページを表示
-            if st.session_state.page == "home" or st.session_state.page == "dashboard":
-                self.render_dashboard()
+            if st.session_state.page == "home":
+                self.render_home_page()
             elif st.session_state.page == "profile":
                 self.render_profile_page()
-            elif st.session_state.page == "project_create":
-                self.render_project_create_page()
-            elif st.session_state.page == "project_detail":
-                self.render_project_detail_page()
             elif st.session_state.page == "step1":
                 self.render_step1()
             elif st.session_state.page == "step2":
@@ -807,20 +722,16 @@ class StreamlitApp:
             elif st.session_state.page == "inquiry":
                 self.render_inquiry_page()
             else:
-                # 認証済みユーザーが不正なページにいる場合はダッシュボードにリダイレクト
-                self.set_page("dashboard")
+                # 認証済みユーザーが不正なページにいる場合はホームにリダイレクト
+                self.set_page("home")
                 st.rerun()
 
     # --- ヘルパーメソッドを追加 ---
     def save_chat_log(self, page: str, sender: str, message_content: str):
-        """チャットログをデータベースに保存（プロジェクトと関連付け）"""
+        """チャットログをデータベースに保存"""
         try:
-            # 現在のプロジェクトIDを取得
-            project_id = st.session_state.get('current_project_id')
-            
             self.conn.table("chat_logs").insert({
                 "user_id": st.session_state.user_id,
-                "project_id": project_id,  # プロジェクトIDを追加
                 "page": page,
                 "sender": sender,
                 "message": message_content
@@ -828,32 +739,7 @@ class StreamlitApp:
         except Exception as e:
             logging.error(f"チャットログ保存エラー: {e}", exc_info=True)
     
-    def load_chat_history(self, page: str, project_id: int = None):
-        """特定のページとプロジェクトのチャット履歴を読み込み"""
-        try:
-            query = self.conn.table("chat_logs")\
-                            .select("sender, message, created_at")\
-                            .eq("user_id", st.session_state.user_id)\
-                            .eq("page", page)\
-                            .order("created_at")
-            
-            # プロジェクトIDが指定されている場合は絞り込み
-            if project_id:
-                query = query.eq("project_id", project_id)
-            else:
-                # 現在のプロジェクトIDで絞り込み
-                current_project_id = st.session_state.get('current_project_id')
-                if current_project_id:
-                    query = query.eq("project_id", current_project_id)
-            
-            result = query.execute()
-            
-            if result.data:
-                return [{"sender": row["sender"], "message": row["message"]} for row in result.data]
-            return []
-        except Exception as e:
-            logging.error(f"チャット履歴読み込みエラー: {e}", exc_info=True)
-            return []
+
 
     def load_user_profile(self):
         """ユーザーのプロフィール情報をロードする"""
@@ -1198,8 +1084,6 @@ class StreamlitApp:
                     st.success("履歴をクリアしました。")
                     st.rerun()
 
-
-
     def navigate_to_step1(self):
         """Step1に移動"""
         self.set_page("step1")
@@ -1224,13 +1108,9 @@ class StreamlitApp:
         """プロフィール設定に移動"""
         self.set_page("profile")
 
-    def navigate_to_dashboard(self):
-        """ダッシュボードに移動"""
-        self.set_page("dashboard")
-
-    def navigate_to_project_create(self):
-        """プロジェクト作成ページに移動"""
-        self.set_page("project_create")
+    def navigate_to_home(self):
+        """ホームページに移動"""
+        self.set_page("home")
 
     def render_profile_page(self):
         """プロフィール設定ページを表示"""
@@ -1274,10 +1154,10 @@ class StreamlitApp:
                 else:
                     st.error("❌ 保存に失敗しました。再試行してください。")
         
-        # ダッシュボードに戻るボタン
+        # ホームに戻るボタン
         st.markdown("---")
-        if st.button("🏠 ダッシュボードに戻る", key="profile_to_dashboard", use_container_width=True):
-            self.set_page("dashboard")
+        if st.button("🏠 ホームに戻る", key="profile_to_home", use_container_width=True):
+            self.set_page("home")
             st.rerun()
 
     def render_landing_page(self):
@@ -1405,428 +1285,20 @@ class StreamlitApp:
         self.set_page("landing")
         st.rerun()
 
-    # --- プロジェクト管理メソッド ---
-    
-    def create_project(self, title: str, description: str = ""):
-        """新しいプロジェクトを作成"""
-        try:
-            result = self.conn.table("projects").insert({
-                "user_id": st.session_state.user_id,
-                "title": title,
-                "description": description,
-                "status": "active",
-                "current_step": "step1"
-            }).execute()
-            
-            if result.data:
-                project_id = result.data[0]["id"]
-                # プロジェクト進捗の初期化
-                self.conn.table("project_progress").insert({
-                    "project_id": project_id,
-                    "step_name": "step1",
-                    "status": "in_progress",
-                    "data": {}
-                }).execute()
-                return project_id
-            return None
-        except Exception as e:
-            logging.error(f"プロジェクト作成エラー: {e}", exc_info=True)
-            return None
-    
-    def get_user_projects(self):
-        """ユーザーのプロジェクト一覧を取得"""
-        try:
-            result = self.conn.table("projects")\
-                            .select("*")\
-                            .eq("user_id", st.session_state.user_id)\
-                            .order("created_at", desc=True)\
-                            .execute()
-            return result.data if result.data else []
-        except Exception as e:
-            logging.error(f"プロジェクト一覧取得エラー: {e}", exc_info=True)
-            return []
-    
-    def get_active_project(self):
-        """アクティブなプロジェクトを取得"""
-        try:
-            result = self.conn.table("projects")\
-                            .select("*")\
-                            .eq("user_id", st.session_state.user_id)\
-                            .eq("status", "active")\
-                            .order("updated_at", desc=True)\
-                            .limit(1)\
-                            .execute()
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logging.error(f"アクティブプロジェクト取得エラー: {e}", exc_info=True)
-            return None
-    
-    def update_project_progress(self, project_id: int, step_name: str, data: dict, status: str = "in_progress"):
-        """プロジェクトの進捗を更新"""
-        try:
-            # 既存の進捗があるかチェック
-            existing = self.conn.table("project_progress")\
-                             .select("id")\
-                             .eq("project_id", project_id)\
-                             .eq("step_name", step_name)\
-                             .execute()
-            
-            if existing.data:
-                # 更新
-                self.conn.table("project_progress")\
-                        .update({"data": data, "status": status})\
-                        .eq("id", existing.data[0]["id"])\
-                        .execute()
-            else:
-                # 新規作成
-                self.conn.table("project_progress").insert({
-                    "project_id": project_id,
-                    "step_name": step_name,
-                    "status": status,
-                    "data": data
-                }).execute()
-            
-            # プロジェクトの現在ステップも更新
-            self.conn.table("projects")\
-                    .update({"current_step": step_name})\
-                    .eq("id", project_id)\
-                    .execute()
-                    
-            return True
-        except Exception as e:
-            logging.error(f"プロジェクト進捗更新エラー: {e}", exc_info=True)
-            return False
-    
-    def get_project_progress(self, project_id: int):
-        """プロジェクトの進捗を取得"""
-        try:
-            result = self.conn.table("project_progress")\
-                            .select("*")\
-                            .eq("project_id", project_id)\
-                            .order("created_at")\
-                            .execute()
-            return result.data if result.data else []
-        except Exception as e:
-            logging.error(f"プロジェクト進捗取得エラー: {e}", exc_info=True)
-            return []
+    def render_home_page(self):
+        """ホームページの表示"""
+        st.title(f"ようこそ、{st.session_state.username}さん！")
+        st.write("どちらの機能を利用しますか？")
 
-    def render_dashboard(self):
-        """新しいダッシュボードページ"""
-        st.title("🏠 ダッシュボード")
-        
-        # ユーザー情報表示
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"### こんにちは、{st.session_state.username}さん！")
-        with col2:
-            current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
-            st.caption(f"📅 {current_time}")
-        
-        st.divider()
-        
-        # アクティブなプロジェクトの表示
-        active_project = self.get_active_project()
-        
-        if active_project:
-            self.render_active_project_card(active_project)
-        else:
-            self.render_new_project_prompt()
-        
-        st.divider()
-        
-        # プロジェクト一覧
-        self.render_projects_overview()
-        
-        # クイックアクション
-        st.divider()
-        self.render_quick_actions()
-    
-    def render_active_project_card(self, project):
-        """アクティブプロジェクトのカード表示"""
-        st.markdown("### 🎯 現在のプロジェクト")
-        
-        with st.container():
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.markdown(f"**{project['title']}**")
-                if project.get('description'):
-                    st.markdown(f"*{project['description']}*")
-                
-                # 進捗表示
-                progress = self.get_project_progress(project['id'])
-                current_step = project.get('current_step', 'step1')
-                
-                # ステップ進捗バー
-                steps = ['step1', 'step2', 'step3', 'step4']
-                current_index = steps.index(current_step) if current_step in steps else 0
-                progress_percentage = (current_index / (len(steps) - 1)) * 100
-                
-                st.progress(progress_percentage / 100)
-                st.caption(f"進捗: {current_index + 1}/{len(steps)} ステップ完了")
-                
-            with col2:
-                if st.button("続きから始める", key="continue_project", type="primary", use_container_width=True):
-                    # アクティブプロジェクトのIDをセッションに保存
-                    st.session_state.current_project_id = project['id']
-                    self.set_page(current_step)
-                    st.rerun()
-                
-                if st.button("詳細を見る", key="view_project_details", use_container_width=True):
-                    st.session_state.selected_project_id = project['id']
-                    self.set_page("project_detail")
-                    st.rerun()
-    
-    def render_new_project_prompt(self):
-        """新しいプロジェクト作成のプロンプト"""
-        st.markdown("### 🚀 新しい探究プロジェクトを始めましょう")
-        
-        with st.container():
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.markdown("""
-                **探究学習の旅を始めませんか？**
-                
-                🎯 あなたの興味・関心から探究テーマを発見  
-                💭 AIとの対話で学習目標を明確化  
-                📋 具体的な活動計画を立案  
-                🎉 学習成果をまとめて次のステップへ
-                """)
-                
-            with col2:
-                if st.button("新しいプロジェクトを開始", key="start_new_project", type="primary", use_container_width=True):
-                    self.set_page("project_create")
-                    st.rerun()
-    
-    def render_projects_overview(self):
-        """プロジェクト一覧の概要表示"""
-        st.markdown("### 📚 あなたのプロジェクト")
-        
-        projects = self.get_user_projects()
-        
-        if not projects:
-            st.info("まだプロジェクトがありません。新しいプロジェクトを始めてみましょう！")
-            return
-        
-        # プロジェクトをステータス別に分類
-        active_projects = [p for p in projects if p['status'] == 'active']
-        completed_projects = [p for p in projects if p['status'] == 'completed']
-        
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.markdown("#### 🔥 進行中")
-            if active_projects:
-                for project in active_projects[:3]:  # 最大3件まで表示
-                    with st.expander(f"📝 {project['title']}", expanded=False):
-                        if project.get('description'):
-                            st.write(project['description'])
-                        
-                        current_step = project.get('current_step', 'step1')
-                        step_names = {
-                            'step1': 'テーマ設定',
-                            'step2': 'ゴール設定', 
-                            'step3': 'アイディエーション',
-                            'step4': 'まとめ'
-                        }
-                        st.caption(f"現在のステップ: {step_names.get(current_step, current_step)}")
-                        
-                        if st.button("続きから", key=f"continue_{project['id']}", use_container_width=True):
-                            st.session_state.current_project_id = project['id']
-                            self.set_page(current_step)
-                            st.rerun()
-            else:
-                st.info("進行中のプロジェクトはありません")
-        
-        with col2:
-            st.markdown("#### ✅ 完了済み")
-            if completed_projects:
-                for project in completed_projects[:3]:  # 最大3件まで表示
-                    with st.expander(f"🎉 {project['title']}", expanded=False):
-                        if project.get('description'):
-                            st.write(project['description'])
-                        st.caption("✨ 完了済み")
-                        
-                        if st.button("振り返る", key=f"review_{project['id']}", use_container_width=True):
-                            st.session_state.selected_project_id = project['id']
-                            self.set_page("project_detail")
-                            st.rerun()
-            else:
-                st.info("完了済みのプロジェクトはありません")
-    
-    def render_quick_actions(self):
-        """クイックアクション"""
-        st.markdown("### ⚡ クイックアクション")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("💡 新しいプロジェクト", key="quick_new_project", use_container_width=True):
-                self.set_page("project_create")
+            if st.button("課題設定プロセスを開始する", key="start_process_button"):
+                self.set_page("step1")
                 st.rerun()
-        
         with col2:
-            if st.button("❓ AI相談", key="quick_inquiry", use_container_width=True):
+            if st.button("行き詰ってたらここにおいで！", key="goto_general_inquiry_button"):
                 self.set_page("inquiry")
                 st.rerun()
-        
-        with col3:
-            if st.button("⚙️ プロフィール設定", key="quick_profile", use_container_width=True):
-                self.set_page("profile")
-                st.rerun()
-
-    def render_project_create_page(self):
-        """プロジェクト作成ページ"""
-        st.title("💡 新しい探究プロジェクトを作成")
-        
-        with st.form("create_project_form"):
-            st.markdown("### プロジェクト情報")
-            
-            project_title = st.text_input(
-                "プロジェクトのタイトル",
-                placeholder="例: AIによるメタ認知支援の研究",
-                help="あなたの探究したいテーマを簡潔に表現してください"
-            )
-            
-            project_description = st.text_area(
-                "プロジェクトの説明（任意）",
-                placeholder="このプロジェクトで何を探究したいか、どんな目標があるかを自由に記述してください",
-                help="後から変更することも可能です"
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.form_submit_button("キャンセル", use_container_width=True):
-                    self.set_page("dashboard")
-                    st.rerun()
-            
-            with col2:
-                if st.form_submit_button("プロジェクトを作成", type="primary", use_container_width=True):
-                    if project_title.strip():
-                        # 既存のアクティブプロジェクトがあれば非アクティブ化
-                        existing_active = self.get_active_project()
-                        if existing_active:
-                            try:
-                                self.conn.table("projects")\
-                                        .update({"status": "paused"})\
-                                        .eq("id", existing_active["id"])\
-                                        .execute()
-                            except Exception as e:
-                                logging.warning(f"既存プロジェクトの一時停止に失敗: {e}")
-                        
-                        # 新しいプロジェクトを作成
-                        project_id = self.create_project(project_title, project_description)
-                        
-                        if project_id:
-                            st.success("プロジェクトを作成しました！")
-                            st.session_state.current_project_id = project_id
-                            # Step1に遷移
-                            self.set_page("step1")
-                            st.rerun()
-                        else:
-                            st.error("プロジェクトの作成に失敗しました。再試行してください。")
-                    else:
-                        st.error("プロジェクトのタイトルを入力してください。")
-    
-    def render_project_detail_page(self):
-        """プロジェクト詳細ページ"""
-        if 'selected_project_id' not in st.session_state:
-            st.error("プロジェクトが選択されていません。")
-            if st.button("ダッシュボードに戻る"):
-                self.set_page("dashboard")
-                st.rerun()
-            return
-        
-        project_id = st.session_state.selected_project_id
-        
-        # プロジェクト情報を取得
-        try:
-            project_result = self.conn.table("projects")\
-                                   .select("*")\
-                                   .eq("id", project_id)\
-                                   .execute()
-            
-            if not project_result.data:
-                st.error("プロジェクトが見つかりません。")
-                return
-            
-            project = project_result.data[0]
-            
-        except Exception as e:
-            st.error(f"プロジェクト情報の取得に失敗しました: {e}")
-            return
-        
-        # ヘッダー
-        st.title(f"📝 {project['title']}")
-        if project.get('description'):
-            st.markdown(f"*{project['description']}*")
-        
-        # ステータス表示
-        status_emoji = {"active": "🔥", "completed": "✅", "paused": "⏸️"}
-        status_text = {"active": "進行中", "completed": "完了", "paused": "一時停止"}
-        
-        col1, col2, col3 = st.columns([2, 1, 1])
-        with col1:
-            st.markdown(f"**ステータス:** {status_emoji.get(project['status'], '❓')} {status_text.get(project['status'], project['status'])}")
-        with col2:
-            if project['status'] == 'active' and st.button("続きから", type="primary", use_container_width=True):
-                st.session_state.current_project_id = project_id
-                self.set_page(project.get('current_step', 'step1'))
-                st.rerun()
-        with col3:
-            if st.button("ダッシュボードに戻る", use_container_width=True):
-                self.set_page("dashboard")
-                st.rerun()
-        
-        st.divider()
-        
-        # 進捗詳細
-        progress_data = self.get_project_progress(project_id)
-        self.render_project_progress_detail(progress_data, project.get('current_step', 'step1'))
-    
-    def render_project_progress_detail(self, progress_data, current_step):
-        """プロジェクト進捗の詳細表示"""
-        st.markdown("### 📊 進捗詳細")
-        
-        steps = [
-            ("step1", "🎯 テーマ設定", "探究したいテーマを決定"),
-            ("step2", "💭 ゴール設定", "学習目標を明確化"),
-            ("step3", "📋 アイディエーション", "具体的な活動計画を立案"),
-            ("step4", "🎉 まとめ", "学習成果をまとめ")
-        ]
-        
-        progress_dict = {item['step_name']: item for item in progress_data}
-        
-        for step_id, step_title, step_desc in steps:
-            with st.expander(f"{step_title} - {step_desc}", expanded=step_id == current_step):
-                step_progress = progress_dict.get(step_id)
-                
-                if step_progress:
-                    status = step_progress['status']
-                    data = step_progress.get('data', {})
-                    
-                    # ステータス表示
-                    status_colors = {
-                        'completed': '🟢',
-                        'in_progress': '🟡', 
-                        'not_started': '⚪'
-                    }
-                    st.markdown(f"**ステータス:** {status_colors.get(status, '❓')} {status}")
-                    
-                    # データ表示
-                    if data:
-                        st.markdown("**保存されたデータ:**")
-                        for key, value in data.items():
-                            if value:
-                                st.markdown(f"- **{key}:** {value}")
-                    
-                    # 更新日時
-                    if step_progress.get('updated_at'):
-                        st.caption(f"最終更新: {step_progress['updated_at']}")
-                else:
-                    st.info("まだ開始されていません")
 
 # アプリケーション実行
 if __name__ == "__main__":
