@@ -47,6 +47,7 @@ class StreamlitApp:
         """セッション状態の初期化"""
         if "page" not in st.session_state:
             st.session_state.page = "landing"  # 初期ページをランディングページに設定
+            st.session_state.page = "landing"  # 初期ページをランディングページに設定
         if "authenticated" not in st.session_state:
             st.session_state.authenticated = False
         if "user_id" not in st.session_state:
@@ -57,8 +58,13 @@ class StreamlitApp:
             st.session_state.general_inquiry_history = []
         if "is_initial_setup" not in st.session_state:
             st.session_state.is_initial_setup = False
+        if "is_initial_setup" not in st.session_state:
+            st.session_state.is_initial_setup = False
 
     def _initialize_supabase_tables(self):
+        """Supabaseテーブルの初期化（必要に応じて）"""
+        # 本来はSupabase側で事前にテーブルを作成するべきですが、
+        # 開発段階では自動作成を試行することも可能です
         """Supabaseテーブルの初期化（必要に応じて）"""
         # 本来はSupabase側で事前にテーブルを作成するべきですが、
         # 開発段階では自動作成を試行することも可能です
@@ -66,6 +72,14 @@ class StreamlitApp:
 
     def next_page(self):
         """次のページに進む"""
+        current_page = st.session_state.page
+        if current_page == "step1":
+            st.session_state.page = "step2"
+        elif current_page == "step2":
+            st.session_state.page = "step3"
+        elif current_page == "step3":
+            st.session_state.page = "step4"
+        # step4からは自動で次に進まない（ユーザーが明示的に選択）
         current_page = st.session_state.page
         if current_page == "step1":
             st.session_state.page = "step2"
@@ -84,10 +98,28 @@ class StreamlitApp:
             st.session_state.page = "step2"
         elif current_page == "step4":
             st.session_state.page = "step3"
+        current_page = st.session_state.page
+        if current_page == "step2":
+            st.session_state.page = "step1"
+        elif current_page == "step3":
+            st.session_state.page = "step2"
+        elif current_page == "step4":
+            st.session_state.page = "step3"
 
     def is_active(self, step_number):
         """指定されたステップが現在のページと同じかそれ以前なら'active'を返す"""
         current_page = st.session_state.page
+        
+        # ページ識別子を数字にマッピング
+        page_mapping = {
+            "step1": 1,
+            "step2": 2, 
+            "step3": 3,
+            "step4": 4
+        }
+        
+        current_step = page_mapping.get(current_page, 0)
+        return "active" if step_number <= current_step else ""
         
         # ページ識別子を数字にマッピング
         page_mapping = {
@@ -178,6 +210,7 @@ class StreamlitApp:
             st.session_state[dialog_key] = True
 
     def render_step1(self):
+    def render_step1(self):
         """テーマ設定ページの表示"""      
         st.title("Step1: 自分の興味から探究学習のテーマを決める！")
 
@@ -199,6 +232,7 @@ class StreamlitApp:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("ホームへ戻る", key="back_to_home_from_step1"):
+            if st.button("ホームへ戻る", key="back_to_home_from_step1"):
                 self.set_page("home")
                 st.rerun()
         with col2:
@@ -208,10 +242,13 @@ class StreamlitApp:
 
         # このページでやることのガイドを表示
         page_index = 1
+        # このページでやることのガイドを表示
+        page_index = 1
         dialog_key = f"dialog_closed_page{page_index}"
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(1)
 
+    def render_step2(self):
     def render_step2(self):
         """ゴール設定ページの表示"""      
         st.title("Step2：探究学習の目標を決めよう！")
@@ -219,6 +256,8 @@ class StreamlitApp:
         # 現在のステップを表示
         self.make_sequence_bar()
 
+        # このページでやることのガイドを表示
+        page_index = 2
         # このページでやることのガイドを表示
         page_index = 2
         dialog_key = f"dialog_closed_page{page_index}"
@@ -334,7 +373,9 @@ class StreamlitApp:
                         logging.error(f"ゴール保存エラー: {e}", exc_info=True)
                 else:
                     st.warning("学習目標を入力してから次へ進んでください。")
+                    st.warning("学習目標を入力してから次へ進んでください。")
 
+    def render_step3(self):
     def render_step3(self):
         """アイディエーションページの表示"""
         st.title("Step3：アイディエーション ~探究学習の活動内容を決めよう！")
@@ -344,10 +385,13 @@ class StreamlitApp:
 
         # このページでやることのガイドを表示       
         page_index = 3
+        # このページでやることのガイドを表示       
+        page_index = 3
         dialog_key = f"dialog_closed_page{page_index}"
         if dialog_key not in st.session_state or not st.session_state[dialog_key]:
             self.show_guide_dialog(3)
 
+        # ユーザーの目標を取得
         # ユーザーの目標を取得
         user_goal_str = ""
         try:
@@ -360,12 +404,20 @@ class StreamlitApp:
             if goal_result.data:
                 user_goal_str = goal_result.data[0]['goal']
                 st.session_state.user_goal_str = user_goal_str
+                st.session_state.user_goal_str = user_goal_str
                 st.write(f"あなたの探究活動の目標: {user_goal_str}")
+            elif 'final_goal' in st.session_state:
+                user_goal_str = st.session_state.final_goal
+                st.write(f"あなたの探究活動の目標 (セッションから): {user_goal_str}")
             elif 'final_goal' in st.session_state:
                 user_goal_str = st.session_state.final_goal
                 st.write(f"あなたの探究活動の目標 (セッションから): {user_goal_str}")
             else:
                 st.warning("目標が登録されていません。前の画面で登録してください。")
+                if st.button("目標設定ページに戻る", key="back_to_step2_from_step3"):
+                    self.set_page("step2")
+                    st.rerun()
+                return
                 if st.button("目標設定ページに戻る", key="back_to_step2_from_step3"):
                     self.set_page("step2")
                     st.rerun()
@@ -460,7 +512,9 @@ class StreamlitApp:
                         logging.error(f"活動計画保存エラー: {e}", exc_info=True)
                 else:
                     st.warning("活動内容を入力してから次へ進んでください。")
+                    st.warning("活動内容を入力してから次へ進んでください。")
 
+    def render_step4(self):
     def render_step4(self):
         """最終ページ（まとめ）の表示"""      
         st.title("Step4：まとめ")
@@ -603,6 +657,17 @@ class StreamlitApp:
                             st.rerun()
                         else:
                             st.error("ユーザー登録に失敗しました")
+                        if result.data:
+                            # 登録成功後、自動的にログインしてホームに遷移
+                            user_id = result.data[0]["id"]
+                            st.session_state.authenticated = True
+                            st.session_state.user_id = user_id
+                            st.session_state.username = new_username
+                            st.session_state.page = "home"
+                            st.success("ユーザー登録が完了しました。探究学習を始めましょう！")
+                            st.rerun()
+                        else:
+                            st.error("ユーザー登録に失敗しました")
                     except Exception as e:
                         # PostgRESTエラーを解析して重複を判定することも可能
                         if "duplicate key value violates unique constraint" in str(e):
@@ -613,6 +678,66 @@ class StreamlitApp:
 
     def setup_sidebar(self):
         """サイドバーの設定"""
+        with st.sidebar:
+            st.markdown(f"こんにちは、{st.session_state.username}さん")
+            
+            # ログアウトボタンはページ横断で常に表示
+            if st.button("ログアウト", key="logout_button", use_container_width=True):
+                self.logout()
+                
+            st.divider()
+            
+            # メインナビゲーション
+            st.write("🧭 **ナビゲーション**")
+            
+            current_page = st.session_state.page
+            
+            # ホームページボタン
+            if current_page != "home":
+                st.button("🏠 ホームへ戻る", on_click=self.navigate_to_home, key="sidebar_nav_home", use_container_width=True)
+            else:
+                st.button("**🏠 ホーム** ⬅️", key="sidebar_nav_home_current", use_container_width=True, disabled=True)
+            
+            # 4ステップのナビゲーション（ホーム以外で表示）
+            if current_page != "home":
+                st.write("📚 **探究学習プロセス**")
+                step_buttons = [
+                    ("1️⃣ Step 1: テーマ設定", "step1"),
+                    ("2️⃣ Step 2: ゴール設定", "step2"),
+                    ("3️⃣ Step 3: アイディエーション", "step3"),
+                    ("4️⃣ Step 4: まとめ", "step4")
+                ]
+                
+                for label, step_id in step_buttons:
+                    # 現在のページは強調表示
+                    if current_page == step_id:
+                        st.button(f"**{label}** ⬅️", key=f"sidebar_nav_{step_id}_current", use_container_width=True, disabled=True)
+                    else:
+                        if step_id == "step1":
+                            st.button(label, on_click=self.navigate_to_step1, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step2":
+                            st.button(label, on_click=self.navigate_to_step2, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step3":
+                            st.button(label, on_click=self.navigate_to_step3, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                        elif step_id == "step4":
+                            st.button(label, on_click=self.navigate_to_step4, key=f"sidebar_nav_{step_id}", use_container_width=True)
+                            
+            st.divider()
+            
+            # その他の機能
+            st.write("🔧 **その他の機能**")
+            
+            # 相談窓口ボタン
+            if current_page != "inquiry":
+                st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
+            else:
+                st.button("**❓ 行き詰ってたらここにおいで！** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
+                
+            # プロフィール設定ボタン
+            if current_page != "profile":
+                st.button("⚙️ プロフィール設定", on_click=self.navigate_to_profile, key="sidebar_nav_profile", use_container_width=True)
+            else:
+                st.button("**⚙️ プロフィール設定** ⬅️", key="sidebar_nav_profile_current", use_container_width=True, disabled=True)
         with st.sidebar:
             st.markdown(f"こんにちは、{st.session_state.username}さん")
             
@@ -691,8 +816,26 @@ class StreamlitApp:
         local_css("static/style.css") 
         # --- 追加ここまで ---
 
+
         # 認証状態の確認
         if not st.session_state.authenticated:
+            # 未認証ユーザーの場合、ページに応じて表示
+            if st.session_state.page == "landing":
+                self.render_landing_page()
+            elif st.session_state.page == "login":
+                # サイドバーの設定（ログインページのみ）
+                self.setup_sidebar()
+                self.render_login_page()
+            else:
+                # その他の場合はランディングページにリダイレクト
+                self.set_page("landing")
+                st.rerun()
+        else:
+            # 認証済みユーザーの場合
+            # サイドバーの設定
+            self.setup_sidebar()
+            
+            # ページを表示
             # 未認証ユーザーの場合、ページに応じて表示
             if st.session_state.page == "landing":
                 self.render_landing_page()
@@ -728,13 +871,32 @@ class StreamlitApp:
                 # 認証済みユーザーが不正なページにいる場合はホームにリダイレクト
                 self.set_page("home")
                 st.rerun()
+            elif st.session_state.page == "profile":
+                self.render_profile_page()
+            elif st.session_state.page == "step1":
+                self.render_step1()
+            elif st.session_state.page == "step2":
+                self.render_step2()
+            elif st.session_state.page == "step3":
+                self.render_step3()
+            elif st.session_state.page == "step4":
+                self.render_step4()
+            elif st.session_state.page == "inquiry":
+                self.render_inquiry_page()
+            else:
+                # 認証済みユーザーが不正なページにいる場合はホームにリダイレクト
+                self.set_page("home")
+                st.rerun()
 
     # --- ヘルパーメソッドを追加 ---
+    def save_chat_log(self, page: str, sender: str, message_content: str):
+        """チャットログをデータベースに保存"""
     def save_chat_log(self, page: str, sender: str, message_content: str):
         """チャットログをデータベースに保存"""
         try:
             self.conn.table("chat_logs").insert({
                 "user_id": st.session_state.user_id,
+                "page": page,
                 "page": page,
                 "sender": sender,
                 "message": message_content
@@ -1115,6 +1277,7 @@ class StreamlitApp:
         chat_container = st.container()
         with chat_container:
             for msg in st.session_state[history_key]:
+            for msg in st.session_state[history_key]:
                 with st.chat_message(msg["role"]):
                     st.write(msg["content"])
 
@@ -1195,6 +1358,7 @@ class StreamlitApp:
                 
                 # 対話履歴に追加
                 st.session_state[history_key].append({"role": "user", "content": user_input})
+                st.session_state[history_key].append({"role": "user", "content": user_input})
                 
                 # AIの応答を生成
                 response = self.planner.generate_response(prompt=system_prompt, user_input=user_input)
@@ -1202,9 +1366,17 @@ class StreamlitApp:
                 # AIメッセージのログ保存
                 self.save_chat_log(page=page_number, sender="AI", message_content=response)
                 
+                # AIメッセージのログ保存
+                self.save_chat_log(page=page_number, sender="AI", message_content=response)
+                
                 # 対話履歴に追加
                 st.session_state[history_key].append({"role": "assistant", "content": response})
+                st.session_state[history_key].append({"role": "assistant", "content": response})
                 
+                # 入力フィールドをクリア
+                st.session_state[input_state_key] = ""
+                
+                # 画面を再読み込み
                 # 入力フィールドをクリア
                 st.session_state[input_state_key] = ""
                 
@@ -1461,6 +1633,132 @@ class StreamlitApp:
         # ランディングページにリダイレクト
         self.set_page("landing")
         st.rerun()
+            st.rerun()
+
+    def render_landing_page(self):
+        """魅力的なランディングページを表示"""
+        # ヘッダー部分
+        st.markdown("""
+        <div class="landing-header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <h1 class="main-title">🔍 探Qメイト</h1>
+                    <p class="subtitle">AI と一緒に、あなただけの探究学習を始めよう</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 隠しボタン（実際の処理用）
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🚀 今すぐ始める", key="start-btn", use_container_width=True, type="primary"):
+                self.set_page("login")
+                st.rerun()
+        
+        # 特徴セクション
+        st.markdown("""
+        <div class="features-section">
+            <h2 class="section-title">✨ なぜ探Qメイトなのか？</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>個人最適化された学習</h3>
+                    <p>あなたの興味・関心に基づいて、AIが最適な探究テーマを提案。一人ひとりに合わせた学習体験を提供します。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>AI チューターの伴走</h3>
+                    <p>最新のGPT-4を活用したAIチューターが、あなたの学習を24時間サポート。質問や相談にいつでも対応します。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>段階的な学習設計</h3>
+                    <p>テーマ設定から目標設定、活動計画まで、4つのステップで体系的に探究学習を組み立てることができます。</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 学習フローセクション
+        st.markdown("""
+        <div class="flow-section">
+            <h2 class="section-title">🛤️ 学習の流れ</h2>
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>🎯 テーマ発見</h3>
+                        <p>あなたの興味・関心から探究したいテーマを見つけます</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>🎖️ 目標設定</h3>
+                        <p>AIとの対話を通じて具体的な学習目標を設定します</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>📋 計画作成</h3>
+                        <p>目標達成のための具体的な活動計画を立てます</p>
+                    </div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>🎉 成果まとめ</h3>
+                        <p>学習成果を整理し、次のステップを見つけます</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        #使ってくれた生徒や先生の感想
+        
+        # CTA セクション
+        st.markdown("""
+        <div class="cta-section-bottom">
+            <h2 class="cta-title">🌟 今すぐ探究学習を始めよう！</h2>
+            <p class="cta-description">AIと一緒に、あなたの興味を深い学びに変えませんか？</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 最終CTAボタン
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🚀 無料で始める", key="final-cta", use_container_width=True, type="primary"):
+                self.set_page("login")
+                st.rerun()
+        
+        # フッター
+        st.markdown("""
+        <div class="footer">
+            <p>© 2024 探Qメイト - AIが支援する探究学習プラットフォーム</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    def logout(self):
+        """ログアウト処理"""
+        st.session_state.authenticated = False
+        st.session_state.user_id = None
+        st.session_state.username = None
+        
+        # セッション状態をクリア（必要な項目のみ保持）
+        keys_to_keep = {"authenticated", "user_id", "username", "page"}
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
+                
+        # ランディングページにリダイレクト
+        self.set_page("landing")
+        st.rerun()
 
     def render_home_page(self):
         """ホームページの表示"""
@@ -1471,9 +1769,11 @@ class StreamlitApp:
         with col1:
             if st.button("課題設定プロセスを開始する", key="start_process_button"):
                 self.set_page("step1")
+                self.set_page("step1")
                 st.rerun()
         with col2:
             if st.button("行き詰ってたらここにおいで！", key="goto_general_inquiry_button"):
+                self.set_page("inquiry")
                 self.set_page("inquiry")
                 st.rerun()
 
