@@ -14,8 +14,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- 追加: 外部CSSファイルを読み込むヘルパー関数 ---   
 def local_css(file_name):
-    with open(file_name, encoding='utf-8') as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    try:
+        with open(file_name, encoding='utf-8') as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+            logging.info(f"CSSファイル '{file_name}' を正常に読み込みました。")
+    except FileNotFoundError:
+        logging.error(f"CSSファイル '{file_name}' が見つかりません。")
+        st.error(f"⚠️ CSSファイル '{file_name}' が見つかりません。デザインが正しく表示されない可能性があります。")
+    except Exception as e:
+        logging.error(f"CSSファイル '{file_name}' の読み込み中にエラーが発生しました: {e}")
+        st.error(f"⚠️ CSSファイルの読み込み中にエラーが発生しました: {e}")
 # --- 追加ここまで ---
 
 class StreamlitApp:
