@@ -272,11 +272,6 @@ class StreamlitApp:
         
         # 過去の目標を確認する機能を追加
         col_main, col_history = st.columns([3, 1])
-        
-        with col_history:
-            if st.button("📜 過去の目標を見る", key="show_past_goals", help="これまでに設定した目標を確認できます"):
-                self.show_goal_history()
-        
         with col_main:
             # 最終目標を保存するテキストエリア（常に空白から開始）
             if 'final_goal' not in st.session_state:
