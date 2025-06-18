@@ -191,7 +191,7 @@ class StreamlitApp:
                 try:
                     self.conn.table("interests").insert({"user_id": st.session_state.user_id, "interest": theme}).execute()
                     st.success(f"テーマ '{theme}' を保存しました！")
-                    st.session_state.user_theme = theme
+                    st.session_state.user_theme_str = theme
                 except Exception as e:
                     st.error(f"テーマの保存に失敗: {str(e)}")
                     logging.error(f"テーマ保存エラー: {e}", exc_info=True)
