@@ -228,23 +228,29 @@ class StreamlitApp:
         # ユーザーテーマの取得
         user_theme_str = ""
         try:
-            user_theme_result = self.conn.table("interests")\
-                                      .select("interest")\
-                                      .eq("user_id", st.session_state.user_id)\
-                                      .order("created_at", desc=True)\
-                                      .limit(1)\
-                                      .execute()
-            
-            if user_theme_result.data:
-                user_theme_str = user_theme_result.data[0]['interest']
+            # セッションに保存されているテーマがあるか確認（ホームページからの直接アクセス用）
+            if 'user_theme_str' in st.session_state and st.session_state.user_theme_str:
+                user_theme_str = st.session_state.user_theme_str
                 st.write(f"あなたの探究テーマ: {user_theme_str}")
-                st.session_state.user_theme_str = user_theme_str
             else:
-                st.warning("テーマが登録されていません。前の画面で登録してください。")
-                if st.button("テーマ登録ページに戻る", key="back_to_step1_from_step2"):
-                    self.set_page("step1")
-                    st.rerun()
-                return
+                # セッションにない場合はDBから最新を取得
+                user_theme_result = self.conn.table("interests")\
+                                          .select("interest")\
+                                          .eq("user_id", st.session_state.user_id)\
+                                          .order("created_at", desc=True)\
+                                          .limit(1)\
+                                          .execute()
+                
+                if user_theme_result.data:
+                    user_theme_str = user_theme_result.data[0]['interest']
+                    st.write(f"あなたの探究テーマ: {user_theme_str}")
+                    st.session_state.user_theme_str = user_theme_str
+                else:
+                    st.warning("テーマが登録されていません。前の画面で登録してください。")
+                    if st.button("テーマ登録ページに戻る", key="back_to_step1_from_step2"):
+                        self.set_page("step1")
+                        st.rerun()
+                    return
         except Exception as e:
             st.error(f"テーマの読み込みに失敗: {e}")
             logging.error(f"テーマ読み込みエラー: {e}", exc_info=True)
@@ -628,29 +634,7 @@ class StreamlitApp:
             else:
                 st.button("**🏠 ホーム** ⬅️", key="sidebar_nav_home_current", use_container_width=True, disabled=True)
             
-            # 4ステップのナビゲーション（ホーム以外で表示）
-            if current_page != "home":
-                st.write("📚 **探究学習プロセス**")
-                step_buttons = [
-                    ("1️⃣ Step 1: テーマ設定", "step1"),
-                    ("2️⃣ Step 2: ゴール設定", "step2"),
-                    ("3️⃣ Step 3: アイディエーション", "step3"),
-                    ("4️⃣ Step 4: まとめ", "step4")
-                ]
-                
-                for label, step_id in step_buttons:
-                    # 現在のページは強調表示
-                    if current_page == step_id:
-                        st.button(f"**{label}** ⬅️", key=f"sidebar_nav_{step_id}_current", use_container_width=True, disabled=True)
-                    else:
-                        if step_id == "step1":
-                            st.button(label, on_click=self.navigate_to_step1, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                        elif step_id == "step2":
-                            st.button(label, on_click=self.navigate_to_step2, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                        elif step_id == "step3":
-                            st.button(label, on_click=self.navigate_to_step3, key=f"sidebar_nav_{step_id}", use_container_width=True)
-                        elif step_id == "step4":
-                            st.button(label, on_click=self.navigate_to_step4, key=f"sidebar_nav_{step_id}", use_container_width=True)
+
                             
             st.divider()
             
@@ -659,9 +643,9 @@ class StreamlitApp:
             
             # 相談窓口ボタン
             if current_page != "inquiry":
-                st.button("❓ 行き詰ってたらここにおいで！", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
+                st.button("いつでもAI相談", on_click=self.navigate_to_inquiry, key="sidebar_nav_inquiry", use_container_width=True)
             else:
-                st.button("**❓ 行き詰ってたらここにおいで！** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
+                st.button("**いつでもAI相談** ⬅️", key="sidebar_nav_inquiry_current", use_container_width=True, disabled=True)
                 
             # プロフィール設定ボタン
             if current_page != "profile":
@@ -1568,15 +1552,83 @@ class StreamlitApp:
     def render_home_page(self):
         """ホームページの表示"""
         st.title(f"ようこそ、{st.session_state.username}さん！")
-        st.write("どちらの機能を利用しますか？")
+        st.write("今日も知的好奇心の飽くなき探究を楽しもう！")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("課題設定プロセスを開始する", key="start_process_button"):
-                self.set_page("step1")
-                st.rerun()
+        # 探究学習の状況を確認
+        learning_status = self.get_learning_status()
+        
+        # 探究学習の状況に応じてオプションを表示
+        if learning_status["has_any_data"]:
+            st.subheader("📚 あなたの探究学習")
+            
+            # 現在の状況を表示
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if learning_status["latest_theme"]:
+                    st.write(f"**最新のテーマ**: {learning_status['latest_theme']}")
+                if learning_status["latest_goal"]:
+                    st.write(f"**最新の目標**: {learning_status['latest_goal']}")
+                if learning_status["latest_plan"]:
+                    st.write(f"**最新の活動内容**: {learning_status['latest_plan']}")
+            
+            with col2:
+                # 進捗状況を表示
+                progress = learning_status["progress_step"]
+                st.metric("進捗", f"Step {progress}/4")
+            
+            st.markdown("---")
+            
+            # 選択肢を提供
+            st.subheader("🚀 次にしたいことを選んでください")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📝 新しい探究を始める", key="new_learning", use_container_width=True):
+                    self.set_page("step1")
+                    st.rerun()
+            
+            with col2:
+                # 続きから始めるボタン（次のステップがある場合のみ）
+                if progress < 4:
+                    next_step = f"step{progress + 1}"
+                    step_names = {
+                        "step2": "目標設定",
+                        "step3": "活動計画",
+                        "step4": "まとめ"
+                    }
+                    button_text = f"▶️ 続きから（{step_names.get(next_step, '次へ')}）"
+                    if st.button(button_text, key="continue_learning", use_container_width=True):
+                        self.set_page(next_step)
+                        st.rerun()
+                else:
+                    # 完了している場合は新しいサイクルを開始
+                    if st.button("🔄 新しいサイクルを開始", key="new_cycle", use_container_width=True):
+                        self.set_page("step1")
+                        st.rerun()
+            
+            with col3:
+                # 最新テーマで新しい目標を設定（テーマがある場合のみ）
+                if learning_status["latest_theme"]:
+                    if st.button("🎯 同じテーマで新しい目標", key="new_goal_same_theme", use_container_width=True):
+                        # 最新テーマをセッションに保存してStep2へ
+                        st.session_state.user_theme_str = learning_status["latest_theme"]
+                        self.set_page("step2")
+                        st.rerun()
+        else:
+            # 初回ユーザーの場合
+            st.info("🌟 初めての探究学習ですね！早速始めてみましょう。")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📝 探究学習を始める", key="start_first_learning", use_container_width=True, type="primary"):
+                    self.set_page("step1")
+                    st.rerun()
+        
+        # いつでもAI相談ボタンは常に表示
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("行き詰ってたらここにおいで！", key="goto_general_inquiry_button"):
+            if st.button("💬 いつでもAI相談", key="goto_general_inquiry_button", use_container_width=True):
                 self.set_page("inquiry")
                 st.rerun()
 
