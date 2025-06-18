@@ -879,6 +879,67 @@ class StreamlitApp:
     
 
 
+    def get_learning_status(self):
+        """ユーザーの探究学習状況を取得する"""
+        try:
+            # 最新のテーマ、目標、活動内容を取得
+            theme_result = self.conn.table("interests")\
+                                .select("interest")\
+                                .eq("user_id", st.session_state.user_id)\
+                                .order("created_at", desc=True)\
+                                .limit(1)\
+                                .execute()
+            
+            goal_result = self.conn.table("goals")\
+                              .select("goal")\
+                              .eq("user_id", st.session_state.user_id)\
+                              .order("created_at", desc=True)\
+                              .limit(1)\
+                              .execute()
+            
+            plan_result = self.conn.table("learning_plans")\
+                              .select("nextStep")\
+                              .eq("user_id", st.session_state.user_id)\
+                              .order("created_at", desc=True)\
+                              .limit(1)\
+                              .execute()
+            
+            # データを整理
+            latest_theme = theme_result.data[0]['interest'] if theme_result.data else None
+            latest_goal = goal_result.data[0]['goal'] if goal_result.data else None
+            latest_plan = plan_result.data[0]['nextStep'] if plan_result.data else None
+            
+            # 進捗状況を判定
+            progress_step = 0
+            if latest_theme:
+                progress_step = 1
+            if latest_goal:
+                progress_step = 2
+            if latest_plan:
+                progress_step = 3
+            # まとめステップは実際のデータがないため、活動内容があれば4とみなす可能性もある
+            # ここでは簡単に3までとする
+            
+            has_any_data = latest_theme or latest_goal or latest_plan
+            
+            return {
+                "has_any_data": has_any_data,
+                "latest_theme": latest_theme,
+                "latest_goal": latest_goal,
+                "latest_plan": latest_plan,
+                "progress_step": progress_step
+            }
+            
+        except Exception as e:
+            logging.error(f"学習状況取得エラー: {e}", exc_info=True)
+            return {
+                "has_any_data": False,
+                "latest_theme": None,
+                "latest_goal": None,
+                "latest_plan": None,
+                "progress_step": 0
+            }
+
     def load_user_profile(self):
         """ユーザーのプロフィール情報をロードする"""
         try:
@@ -1198,8 +1259,8 @@ class StreamlitApp:
         }
 
     def render_inquiry_page(self):
-        """AI相談窓口ページの表示"""
-        st.title("❓ AI相談")
+        """なんでも相談窓口ページの表示"""
+        st.title("❓ なんでも相談窓口")
         st.write("探究学習に関するあらゆる疑問や悩みをAIアシスタントに相談できます。")
         st.info("💡 困ったことがあれば、何でもお気軽にお聞きください！")
         
@@ -1554,18 +1615,81 @@ class StreamlitApp:
         st.title(f"ようこそ、{st.session_state.username}さん！")
         st.write("今日も知的好奇心の飽くなき探究を楽しもう！")
 
-        # シンプルな選択肢を提供
-        st.subheader("🚀 何をしたいですか？")
+        # 探究学習の状況を確認
+        learning_status = self.get_learning_status()
         
-        col1, col2 = st.columns(2)
+        # 探究学習の状況に応じてオプションを表示
+        if learning_status["has_any_data"]:
+            st.subheader("📚 あなたの探究学習")
+            
+            # 現在の状況を表示
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if learning_status["latest_theme"]:
+                    st.write(f"**最新のテーマ**: {learning_status['latest_theme']}")
+                if learning_status["latest_goal"]:
+                    st.write(f"**最新の目標**: {learning_status['latest_goal']}")
+                if learning_status["latest_plan"]:
+                    st.write(f"**最新の活動内容**: {learning_status['latest_plan']}")
+            
+            with col2:
+                # 進捗状況を表示
+                progress = learning_status["progress_step"]
+                st.metric("進捗", f"Step {progress}/4")
+            
+            st.markdown("---")
+            
+            # 選択肢を提供
+            st.subheader("🚀 次にしたいことを選んでください")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📝 新しい探究を始める", key="new_learning", use_container_width=True):
+                    self.set_page("step1")
+                    st.rerun()
+            
+            with col2:
+                # 続きから始めるボタン（次のステップがある場合のみ）
+                if progress < 4:
+                    next_step = f"step{progress + 1}"
+                    step_names = {
+                        "step2": "目標設定",
+                        "step3": "活動計画",
+                        "step4": "まとめ"
+                    }
+                    button_text = f"▶️ 続きから（{step_names.get(next_step, '次へ')}）"
+                    if st.button(button_text, key="continue_learning", use_container_width=True):
+                        self.set_page(next_step)
+                        st.rerun()
+                else:
+                    # 完了している場合は新しいサイクルを開始
+                    if st.button("🔄 新しいサイクルを開始", key="new_cycle", use_container_width=True):
+                        self.set_page("step1")
+                        st.rerun()
+            
+            with col3:
+                # 最新テーマで新しい目標を設定（テーマがある場合のみ）
+                if learning_status["latest_theme"]:
+                    if st.button("🎯 同じテーマで新しい目標", key="new_goal_same_theme", use_container_width=True):
+                        # 最新テーマをセッションに保存してStep2へ
+                        st.session_state.user_theme_str = learning_status["latest_theme"]
+                        self.set_page("step2")
+                        st.rerun()
+        else:
+            # 初回ユーザーの場合
+            st.info("🌟 初めての探究学習ですね！早速始めてみましょう。")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📝 探究学習を始める", key="start_first_learning", use_container_width=True, type="primary"):
+                    self.set_page("step1")
+                    st.rerun()
         
-        with col1:
-            if st.button("🔍 探究テーマを設定する", key="new_learning", use_container_width=True, type="primary"):
-                self.set_page("step1")
-                st.rerun()
-        
+        # いつでもAI相談ボタンは常に表示
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("💬 AIに相談する", key="goto_general_inquiry_button", use_container_width=True, type="primary"):
+            if st.button("💬 いつでもAI相談", key="goto_general_inquiry_button", use_container_width=True):
                 self.set_page("inquiry")
                 st.rerun()
 
