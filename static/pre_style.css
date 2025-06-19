@@ -1,0 +1,723 @@
+/* static/style.css */
+.step-container {
+    display: flex;
+    justify-content: space-between;
+    margin: 30px 0;
+    max-width: 600px;
+    font-family: 'Arial', sans-serif; /* 例: フォントファミリーを指定 */
+}
+.step {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    cursor: default; /* ステップ自体はクリックできないのでデフォルトカーソルに */
+}
+.step .circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: #e0e0e0; /* 未完了ステップの円の色を少し明るく */
+    margin: 0 auto 8px auto;   /* ラベルとの間隔を調整 */
+    z-index: 2;
+    position: relative;
+    transition: background-color 0.3s ease, transform 0.2s ease; /* アニメーションのためのトランジション */
+}
+.step .label {
+    margin-top: 8px;
+    font-size: 0.9em; /* ラベルのフォントサイズ調整 */
+    color: #757575;   /* 未完了ステップのラベルの色 */
+}
+/* アクティブまたは完了したステップのスタイル */
+.step.active .circle {
+    background-color: #1976D2; /* アクティブ/完了ステップの円の色 (少し濃い青) */
+}
+.step.active .label {
+    color: #1976D2;       /* アクティブ/完了ステップのラベルの色 */
+    font-weight: bold;     /* ラベルを太字に */
+}
+/* 線（バー）のスタイル */
+.step::before {
+    content: "";
+    position: absolute;
+    top: 15px; /* 円の縦位置に合わせる */
+    left: -50%;
+    width: 100%;
+    height: 4px;
+    background-color: #e0e0e0; /* 未完了ステップの線の色 */
+    z-index: 1;
+    transition: background-color 0.3s ease; /* アニメーションのためのトランジション */
+}
+.step:first-child::before {
+    content: none; /* 先頭ステップの左側には線を描画しない */
+}
+.step.active::before {
+    background-color: #1976D2; /* アクティブ/完了ステップの線の色 */
+}
+/* ホバーエフェクト */
+.step:hover .circle {
+    transform: scale(1.15); /* マウスオーバーで円を少し拡大 */
+}
+.step:hover .label {
+    color: #0D47A1; /* マウスオーバーでラベルの色を少し濃く (任意) */
+}
+
+/* ランディングページのスタイル */
+.landing-header {
+    text-align: center;
+    padding: 60px 0 40px 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    margin-bottom: 40px;
+    color: white;
+}
+
+.header-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.main-title {
+    font-size: 3.5rem;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.subtitle {
+    font-size: 1.3rem;
+    opacity: 0.9;
+    margin-bottom: 0;
+}
+
+.features-section {
+    margin: 60px 0;
+}
+
+.section-title {
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 40px;
+    color: #333;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+    margin-top: 40px;
+}
+
+.feature-card {
+    text-align: center;
+    padding: 30px 20px;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    background: white;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    margin-bottom: 20px;
+}
+
+.feature-card h3 {
+    font-size: 1.4rem;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.feature-card p {
+    color: #666;
+    line-height: 1.6;
+}
+
+.flow-section {
+    margin: 80px 0;
+    padding: 40px 20px;
+    background: #f8f9fa;
+    border-radius: 15px;
+}
+
+.flow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.flow-step {
+    text-align: center;
+    background: white;
+    padding: 25px 20px;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    min-width: 200px;
+    flex: 1;
+}
+
+.step-number {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 50%;
+    line-height: 40px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.step-content h3 {
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.step-content p {
+    color: #666;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.flow-arrow {
+    font-size: 1.5rem;
+    color: #667eea;
+    font-weight: bold;
+}
+
+.cta-section-bottom {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    margin: 60px 0 40px 0;
+    color: white;
+}
+
+.cta-title {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.cta-description {
+    font-size: 1.2rem;
+    opacity: 0.9;
+    margin-bottom: 0;
+}
+
+.footer {
+    text-align: center;
+    padding: 30px 0;
+    margin-top: 40px;
+    border-top: 1px solid #eee;
+    color: #666;
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+    .main-title {
+        font-size: 2.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1.1rem;
+    }
+    
+    .section-title {
+        font-size: 2rem;
+    }
+    
+    .flow-steps {
+        flex-direction: column;
+    }
+    
+    .flow-arrow {
+        transform: rotate(90deg);
+    }
+    
+    .cta-title {
+        font-size: 2rem;
+    }
+}
+
+/* "login_button" というキーを持つボタンのスタイル */
+button[data-testid="stButton"][key="login_button"], /* Streamlitのバージョンによってはこちらが有効な場合も */
+button[data-testid="login_button"] {
+    background-color: #73bbff; 
+    color: white; /* 文字色を白に */
+    border: none; /* 枠線を消す場合 */
+    padding: 10px 24px; /* パディング調整 */
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 8px; /* 角を丸くする場合 */
+}
+
+/* ホバー時のスタイル (任意) */
+button[data-testid="stButton"][key="login_button"]:hover,
+button[data-testid="login_button"]:hover {
+    background-color: #45a049; /* 少し暗い緑色 */
+}
+
+/* ============= ランディングページスタイル ============= */
+
+/* ヘッダーセクション */
+.landing-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 20px;
+    padding: 60px 40px;
+    margin: 20px 0 40px 0;
+    color: white;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.header-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+}
+
+.main-title {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    letter-spacing: -1px;
+}
+
+.subtitle {
+    font-size: 1.3rem;
+    font-weight: 300;
+    margin: 10px 0 0 0;
+    opacity: 0.9;
+    line-height: 1.6;
+}
+
+.cta-button {
+    background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+    border: none;
+    color: white;
+    padding: 18px 40px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+    text-decoration: none;
+    display: inline-block;
+}
+
+.cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 35px rgba(255, 107, 107, 0.4);
+}
+
+/* セクションタイトル */
+.section-title {
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 60px 0 40px 0;
+    position: relative;
+}
+
+.section-title::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 4px;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border-radius: 2px;
+}
+
+/* 特徴セクション */
+.features-section {
+    padding: 40px 0 60px 0;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+    margin: 40px 0;
+}
+
+.feature-card {
+    background: white;
+    padding: 40px 30px;
+    border-radius: 20px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: 1px solid #f0f0f0;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    margin-bottom: 20px;
+}
+
+.feature-card h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 20px 0 15px 0;
+}
+
+.feature-card p {
+    color: #6c757d;
+    line-height: 1.6;
+    font-size: 1rem;
+}
+
+/* 学習フローセクション */
+.flow-section {
+    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
+    padding: 60px 40px;
+    border-radius: 20px;
+    margin: 60px 0;
+}
+
+.flow-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin: 40px 0;
+}
+
+.flow-step {
+    background: white;
+    padding: 30px 20px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    min-width: 200px;
+    flex: 1;
+    max-width: 250px;
+}
+
+.flow-step:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.step-number {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 0 auto 20px auto;
+}
+
+.step-content h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 15px 0 10px 0;
+}
+
+.step-content p {
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.flow-arrow {
+    font-size: 2rem;
+    color: #667eea;
+    font-weight: bold;
+    margin: 0 10px;
+}
+
+/* 統計セクション */
+.stats-section {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 60px 40px;
+    border-radius: 20px;
+    margin: 60px 0;
+    text-align: center;
+}
+
+.stats-section .section-title {
+    color: white;
+}
+
+.stats-section .section-title::after {
+    background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 30px;
+    margin: 40px 0;
+}
+
+.stat-card {
+    text-align: center;
+    padding: 30px 20px;
+}
+
+.stat-number {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #FF6B6B;
+    margin-bottom: 10px;
+}
+
+.stat-label {
+    font-size: 1.1rem;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+/* CTAセクション */
+.cta-section-bottom {
+    text-align: center;
+    padding: 80px 40px 40px 40px;
+    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
+    border-radius: 20px;
+    margin: 60px 0 40px 0;
+}
+
+.cta-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 20px;
+}
+
+.cta-description {
+    font-size: 1.2rem;
+    color: #6c757d;
+    margin-bottom: 40px;
+    line-height: 1.6;
+}
+
+/* フッター */
+.footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    border-top: 1px solid #e9ecef;
+    margin-top: 60px;
+}
+
+.footer p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+    .main-title {
+        font-size: 2.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1.1rem;
+    }
+    
+    .section-title {
+        font-size: 2rem;
+    }
+    
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .flow-steps {
+        flex-direction: column;
+    }
+    
+    .flow-arrow {
+        transform: rotate(90deg);
+        margin: 10px 0;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .landing-header,
+    .flow-section,
+    .stats-section,
+    .cta-section-bottom {
+        margin: 20px 0;
+        padding: 40px 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .main-title {
+        font-size: 2rem;
+    }
+    
+    .cta-button {
+        padding: 15px 30px;
+        font-size: 1rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+    }
+}
+
+/* Memo Chat Interface Styles */
+.memo-chat-container {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.memo-area {
+    flex: 1;
+    border: 2px solid #e1e8ed;
+    border-radius: 10px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    min-height: 400px;
+}
+
+.chat-area {
+    flex: 1;
+    border: 2px solid #e1e8ed;
+    border-radius: 10px;
+    padding: 15px;
+    background-color: #ffffff;
+    min-height: 400px;
+}
+
+.memo-title {
+    color: #1f77b4;
+    font-weight: bold;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+}
+
+.chat-title {
+    color: #2e7d32;
+    font-weight: bold;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+}
+
+/* メモテキストエリアのスタイリング */
+.stTextArea textarea {
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 12px;
+    resize: vertical;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stTextArea textarea:focus {
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    outline: none;
+}
+
+/* チャットメッセージのスタイリング */
+.chat-message {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.chat-message.user {
+    background-color: #e3f2fd;
+    margin-left: 20px;
+}
+
+.chat-message.assistant {
+    background-color: #f1f8e9;
+    margin-right: 20px;
+}
+
+/* ボタンのホバー効果強化 */
+.stButton > button {
+    transition: all 0.3s ease;
+    border-radius: 8px;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* メモエリア専用のスタイル */
+.memo-section .stTextArea textarea {
+    background-color: #fcfcfc;
+    border: 2px solid #e0e7ff;
+    font-family: 'Courier New', monospace;
+}
+
+.memo-section .stTextArea textarea:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* チャットエリアのスクロール */
+.chat-history {
+    max-height: 350px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fafafa;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .memo-chat-container {
+        flex-direction: column;
+    }
+    
+    .memo-area, .chat-area {
+        min-height: 300px;
+    }
+}

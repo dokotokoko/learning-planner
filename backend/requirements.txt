@@ -1,0 +1,19 @@
+# FastAPI関連
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# データベース関連
+mysql-connector-python==9.2.0
+psycopg2-binary==2.9.10
+
+# AI関連
+openai==1.61.1
+
+# ユーティリティ
+python-dotenv==1.0.1
+pydantic==2.10.6
+
+# 認証関連（将来の実装用）
+PyJWT==2.10.1
+bcrypt==4.3.0 

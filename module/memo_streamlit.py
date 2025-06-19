@@ -279,16 +279,16 @@ class StreamlitApp:
         st.write("上記のメモとAIとの対話を参考に、最終的な学習目標を入力してください。")
         
         # 最終目標を保存するテキストエリア
-            if 'final_goal' not in st.session_state:
-                st.session_state.final_goal = ""
-            
-            final_goal_input = st.text_area(
+        if 'final_goal' not in st.session_state:
+            st.session_state.final_goal = ""
+        
+        final_goal_input = st.text_area(
             "学習目標を入力してください",
-                value=st.session_state.final_goal, 
-                key="final_goal_text_area",
+            value=st.session_state.final_goal, 
+            key="final_goal_text_area",
             height=120,
             help="AIとの対話とメモを踏まえて、あなたの探究学習の目標を明確に記述してください"
-            )
+        )
         
         # テキストエリアの内容が変更されたらセッションに保存
         if final_goal_input != st.session_state.final_goal:
@@ -398,16 +398,16 @@ class StreamlitApp:
         st.write("上記のメモとAIとの対話を参考に、具体的な活動計画を入力してください。")
         
         # 学習計画を保存するテキストエリア
-            if 'learning_plan' not in st.session_state:
-                st.session_state.learning_plan = ""
-            
-            learning_plan_input = st.text_area(
+        if 'learning_plan' not in st.session_state:
+            st.session_state.learning_plan = ""
+        
+        learning_plan_input = st.text_area(
             "活動計画を入力してください", 
-                value=st.session_state.learning_plan, 
-                key="learning_plan_text_area",
+            value=st.session_state.learning_plan, 
+            key="learning_plan_text_area",
             height=120,
             help="AIとの対話とメモを踏まえて、あなたの探究学習の具体的な活動内容を明確に記述してください"
-            )
+        )
         
         # テキストエリアの内容が変更されたらセッションに保存
         if learning_plan_input != st.session_state.learning_plan:
@@ -1110,56 +1110,25 @@ class StreamlitApp:
                                   chat_input_key: str,
                                   chat_placeholder: str,
                                   initial_message: str = None):
-        """メモ帳とAIチャットを統合したインターフェース（サイドバー配置版）"""
+        """メモ帳とAIチャットを統合したインターフェース"""
         
-        # カスタムCSSでレイアウト調整
-        st.markdown("""
-        <style>
-        .main-layout {
-            display: flex;
-            height: calc(100vh - 200px);
-            gap: 20px;
-        }
-        .main-content {
-            flex: 0 0 70%;
-            padding-right: 20px;
-        }
-        .chat-sidebar {
-            flex: 0 0 30%;
-            border-left: 2px solid #e0e0e0;
-            padding-left: 20px;
-            position: sticky;
-            top: 0;
-            height: 100%;
-            overflow-y: auto;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # メインコンテナを2カラムに分割
+        col_memo, col_chat = st.columns([1, 1])
         
-        # 右側のチャットサイドバー（現在のStreamlitサイドバーではなく、メインエリアの右側）
-        # AIチャットの初期化と履歴管理
-        if chat_history_key not in st.session_state:
-            st.session_state[chat_history_key] = []
-            if initial_message:
-                st.session_state[chat_history_key].append({"role": "assistant", "content": initial_message})
-
-        # メインレイアウト: 左側にメモ、右側にチャット
-        col_main, col_chat = st.columns([7, 3])
-        
-        # 左側: メインコンテンツエリア（メモ）
-        with col_main:
+        # 左側: メモ帳エリア
+        with col_memo:
             st.markdown(f"### {memo_title}")
-            st.caption("💡 右側のAIアシスタントと対話しながら、考えを整理しましょう")
+            st.caption("💡 考えを整理しながら、AIと対話しましょう")
             
             # メモの初期化（DBから読み込み）
             if memo_key not in st.session_state:
                 st.session_state[memo_key] = self.load_memo_from_db(page_number, memo_key)
             
-            # メモエリア（横幅を最大限活用）
+            # メモエリア
             memo_content = st.text_area(
                 "思考メモ",
                 value=st.session_state[memo_key],
-                height=450,
+                height=400,
                 placeholder=memo_placeholder,
                 key=f"{memo_key}_textarea",
                 label_visibility="collapsed",
@@ -1169,89 +1138,78 @@ class StreamlitApp:
             # メモの内容が変更されたらセッションに保存
             if memo_content != st.session_state[memo_key]:
                 st.session_state[memo_key] = memo_content
-                # メモをDBに自動保存
+                # メモをDBに自動保存（オプション）
                 self.save_memo_to_db(page_number, memo_key, memo_content)
             
             # メモ操作ボタン
-            memo_col1, memo_col2, memo_col3 = st.columns([1, 1, 2])
+            memo_col1, memo_col2 = st.columns(2)
             with memo_col1:
-                if st.button("📋 クリア", key=f"{memo_key}_clear"):
+                if st.button("📋 メモをクリア", key=f"{memo_key}_clear"):
                     st.session_state[memo_key] = ""
                     st.rerun()
             with memo_col2:
-                if st.button("💾 保存", key=f"{memo_key}_save"):
+                if st.button("💾 メモを保存", key=f"{memo_key}_save"):
                     self.save_memo_to_db(page_number, memo_key, memo_content)
                     st.success("メモを保存しました！")
         
-        # 右側: AIチャットサイドバー
+        # 右側: AIチャットエリア
         with col_chat:
             st.markdown("### 🤖 AIアシスタント")
-            st.caption("💬 疑問や相談をどうぞ")
+            st.caption("💬 疑問や悩みを相談してください")
             
-            # チャット履歴の表示（固定高さ、スクロール可能）
-            with st.container():
-                # チャット履歴表示エリア
-                chat_height = min(400, max(200, len(st.session_state[chat_history_key]) * 80))
+            # チャット履歴の初期化
+            if chat_history_key not in st.session_state:
+                st.session_state[chat_history_key] = []
                 
-                # カスタムCSSでチャットエリアを定義
-                st.markdown(f"""
-                <div style="
-                    height: {chat_height}px;
+                # 初期メッセージがある場合は追加
+                if initial_message:
+                    st.session_state[chat_history_key].append({"role": "assistant", "content": initial_message})
+
+            # チャット履歴の表示（高さ制限付き）
+            chat_container = st.container()
+            with chat_container:
+                # スクロール可能なチャットエリア
+                st.markdown("""
+                <style>
+                .chat-container {
+                    height: 300px;
                     overflow-y: auto;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 8px;
+                    border: 1px solid #ddd;
                     padding: 10px;
+                    border-radius: 5px;
                     background-color: #fafafa;
-                    margin-bottom: 15px;
-                ">
+                }
+                </style>
                 """, unsafe_allow_html=True)
                 
-                # メッセージ履歴の表示
-                for i, msg in enumerate(st.session_state[chat_history_key]):
-                    is_user = msg["role"] == "user"
-                    
-                    # メッセージのスタイリング
-                    msg_style = f"""
-                    background-color: {'#e3f2fd' if is_user else '#f1f8e9'};
-                    margin: {'0 0 10px 20px' if is_user else '0 20px 10px 0'};
-                    padding: 8px 12px;
-                    border-radius: 12px;
-                    font-size: 14px;
-                    line-height: 1.4;
-                    """
-                    
-                    st.markdown(f"""
-                    <div style="{msg_style}">
-                        <strong>{'あなた' if is_user else 'AI'}:</strong><br>
-                        {msg["content"]}
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+                for msg in st.session_state[chat_history_key]:
+                    with st.chat_message(msg["role"]):
+                        st.write(msg["content"])
 
-            # チャット入力フィールド（コンパクト版）
-            with st.form(key=f"{chat_input_key}_form", clear_on_submit=True):
+            # チャット入力フィールド
+            st.markdown("---")
+            
+            # フォームを使用してCtrl+Enterを処理
+            with st.form(key=f"{chat_input_key}_form"):
                 user_input = st.text_area(
-                    label="メッセージ",
+                    label="メッセージを入力",
                     placeholder=chat_placeholder,
-                    height=75,
+                    height=80,
                     key=f"{chat_input_key}_textarea",
                     label_visibility="collapsed"
                 )
                 
-                # ボタン配置
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
+                col1, col2 = st.columns([1, 1])
+                with col1:
                     submit_clicked = st.form_submit_button(
                         "📤 送信", 
                         use_container_width=True,
                         type="primary"
                     )
-                with btn_col2:
-                    clear_clicked = st.form_submit_button(
-                        "🔄 履歴クリア", 
-                        use_container_width=True
-                    )
+                with col2:
+                    if st.form_submit_button("🔄 履歴クリア", use_container_width=True):
+                        st.session_state[chat_history_key] = []
+                        st.rerun()
             
             # 送信処理
             if submit_clicked and user_input.strip():
@@ -1273,11 +1231,8 @@ class StreamlitApp:
                 
                 # 画面を再読み込み
                 st.rerun()
-            elif clear_clicked:
-                st.session_state[chat_history_key] = []
-                st.rerun()
             elif submit_clicked and not user_input.strip():
-                st.warning("メッセージを入力してください")
+                st.warning("メッセージを入力してから送信してください。")
 
     def render_chat_interface(self, 
                              page_number: str, 
@@ -1422,75 +1377,25 @@ class StreamlitApp:
         """AI相談窓口ページの表示"""
         st.title("❓ AI相談")
         st.write("探究学習に関するあらゆる疑問や悩みをAIアシスタントに相談できます。")
-        st.info("💡 左側のメモ欄に悩みや考えを整理しながら、右側のAIアシスタントに相談してみましょう！")
+        st.info("💡 困ったことがあれば、何でもお気軽にお聞きください！")
         
-        # メモ帳とAIチャットの統合UI
-        self.render_memo_chat_interface(
+        # 統一された対話インターフェースを使用
+        chat_status = self.render_chat_interface(
             page_number="inquiry",
-            memo_title="📝 相談メモ",
-            memo_placeholder="相談したい内容や悩み、疑問点などを自由にメモしてください...\n\n例：\n- 探究学習のテーマが思いつかない\n- 目標設定で困っている\n- どんな活動をすればいいかわからない\n- 研究方法について知りたい",
-            memo_key="inquiry_memo",
-            chat_history_key='general_inquiry_history',
-            chat_input_key='general_inquiry_input',
-            chat_placeholder='相談内容を入力してください...',
-            initial_message="こんにちは！探究学習に関することでしたら、どんなことでもお気軽にご相談ください。\n\n左側のメモ欄に悩みや疑問を整理していただければ、より具体的なアドバイスができますよ！😊"
+            history_key='general_inquiry_history',
+            input_key='general_inquiry_input',
+            placeholder='相談内容を入力してください...',
+            initial_message=None,  # 初期メッセージなし
+            max_exchanges=float('inf')  # 無制限対話
         )
         
-        # よくある相談例を表示
-        st.markdown("---")
-        st.subheader("💡 よくある相談例")
-        
-        # 3カラムでカテゴリ分け
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("#### 🎯 テーマ設定")
-            if st.button("興味のあることが見つからない", key="consult_theme_1", use_container_width=True):
-                self._add_sample_consultation("興味のあることや探究してみたいテーマが見つからなくて困っています。どうやって見つけたらよいでしょうか？")
-            if st.button("テーマが広すぎる", key="consult_theme_2", use_container_width=True):
-                self._add_sample_consultation("興味のあるテーマはあるのですが、範囲が広すぎて何から始めればよいかわかりません。")
-        
+        # 履歴クリアボタン
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            st.markdown("#### 🎖️ 目標・計画")
-            if st.button("目標の立て方がわからない", key="consult_goal_1", use_container_width=True):
-                self._add_sample_consultation("探究学習の目標をどのように設定すればよいでしょうか？具体的な目標の立て方を教えてください。")
-            if st.button("活動計画が思いつかない", key="consult_plan_1", use_container_width=True):
-                self._add_sample_consultation("目標は決まったのですが、具体的にどんな活動をすればよいか思いつきません。")
-        
-        with col3:
-            st.markdown("#### 📚 研究方法")
-            if st.button("調査方法を知りたい", key="consult_method_1", use_container_width=True):
-                self._add_sample_consultation("探究学習でどのような調査方法や研究手法を使えばよいでしょうか？")
-            if st.button("まとめ方がわからない", key="consult_summary_1", use_container_width=True):
-                self._add_sample_consultation("探究した内容をどのようにまとめて発表すればよいでしょうか？")
-
-    def _add_sample_consultation(self, consultation_text):
-        """サンプル相談をチャットに追加"""
-        if 'general_inquiry_history' not in st.session_state:
+            if st.button("🗑️ 履歴をクリア", key="clear_inquiry_history", use_container_width=True):
+                if 'general_inquiry_history' in st.session_state:
                     st.session_state.general_inquiry_history = []
-        
-        # ユーザーメッセージとして追加
-        st.session_state.general_inquiry_history.append({
-            "role": "user", 
-            "content": consultation_text
-        })
-        
-        # AIの応答を生成
-        memo_content = st.session_state.get('inquiry_memo', '')
-        context_with_memo = f"ユーザーのメモ内容: {memo_content}\n\nユーザーの質問: {consultation_text}"
-        response = self.planner.generate_response(prompt=system_prompt, user_input=context_with_memo)
-        
-        # AIの応答を追加
-        st.session_state.general_inquiry_history.append({
-            "role": "assistant", 
-            "content": response
-        })
-        
-        # ログ保存
-        self.save_chat_log(page="inquiry", sender="user", message_content=consultation_text)
-        self.save_chat_log(page="inquiry", sender="AI", message_content=response)
-        
-        # ページを再読み込み
+                    st.success("履歴をクリアしました。")
                     st.rerun()
 
     def navigate_to_step1(self):

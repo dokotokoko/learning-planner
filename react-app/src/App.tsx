@@ -126,7 +126,7 @@ function App() {
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/" replace /> : 
+                  user ? <Navigate to="/home" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -139,12 +139,13 @@ function App() {
               />
               
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<HomePage />} />
+                <Route index element={<Navigate to="/home" replace />} />
+                <Route path="home" element={<HomePage />} />
                 <Route path="step/:stepNumber" element={<StepPage />} />
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
               </Route>
               
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </AnimatePresence>
         </Router>
