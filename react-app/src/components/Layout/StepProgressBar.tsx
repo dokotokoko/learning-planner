@@ -3,9 +3,9 @@ import { Box, Typography, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 import { 
   TipsAndUpdates, 
-  Flag, 
-  Psychology, 
-  AutoStories 
+  Forum, 
+  QuestionAnswer, 
+  ConnectWithoutContact 
 } from '@mui/icons-material';
 
 interface StepProgressBarProps {
@@ -26,26 +26,26 @@ const steps: StepData[] = [
   {
     number: 1,
     label: 'Step 1',
-    title: 'テーマ設定',
+    title: 'テーマ入力',
     icon: <TipsAndUpdates />,
   },
   {
     number: 2,
     label: 'Step 2', 
-    title: 'ゴール設定',
-    icon: <Flag />,
+    title: '深める対話',
+    icon: <Forum />,
   },
   {
     number: 3,
     label: 'Step 3',
-    title: 'アイディエーション',
-    icon: <Psychology />,
+    title: '自分事の問い',
+    icon: <QuestionAnswer />,
   },
   {
     number: 4,
     label: 'Step 4',
-    title: 'まとめ',
-    icon: <AutoStories />,
+    title: '社会と繋がる',
+    icon: <ConnectWithoutContact />,
   },
 ];
 

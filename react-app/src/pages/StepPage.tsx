@@ -29,6 +29,7 @@ import {
   Note as NoteIcon,
   Close as CloseIcon,
   Save as SaveIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import StepProgressBar from '../components/Layout/StepProgressBar';
@@ -55,6 +56,10 @@ const StepPage: React.FC = () => {
   const [isMemoOpen, setIsMemoOpen] = useState(false);
   const [step1Theme, setStep1Theme] = useState('');
   const [hasStep2AutoMessage, setHasStep2AutoMessage] = useState(false);
+  const [isStep2MemoOpen, setIsStep2MemoOpen] = useState(false); // メモ帳状態
+  const [step2Theme, setStep2Theme] = useState(''); // Step2で考えた探究テーマ
+  const [step3Theme, setStep3Theme] = useState(''); // Step3で考えた探究テーマ
+  const [step4Theme, setStep4Theme] = useState(''); // Step4で考えた探究テーマ
 
   // データの初期ロード
   useEffect(() => {
@@ -66,9 +71,7 @@ const StepPage: React.FC = () => {
           setTheme(savedTheme);
         }
         
-        if (currentStep >= 3) {
-          setGoal("AIを活用したメタ認知支援システムの効果を検証し、学習効率向上のための具体的な手法を提案する");
-        }
+
         
         // 既存の作業内容を読み込み
         const savedContent = localStorage.getItem(`step-${currentStep}-content`);
@@ -76,22 +79,31 @@ const StepPage: React.FC = () => {
           setWorkContent(savedContent);
         }
         
-        // Step1の場合はテーマも読み込み
+        // 各ステップのテーマを読み込み
         if (currentStep === 1) {
           const savedTheme = localStorage.getItem('step-1-theme');
           if (savedTheme) {
             setStep1Theme(savedTheme);
           }
+        } else if (currentStep === 2) {
+          const savedTheme = localStorage.getItem('step-2-theme');
+          if (savedTheme) {
+            setStep2Theme(savedTheme);
+          }
+        } else if (currentStep === 3) {
+          const savedTheme = localStorage.getItem('step-3-theme');
+          if (savedTheme) {
+            setStep3Theme(savedTheme);
+          }
+        } else if (currentStep === 4) {
+          const savedTheme = localStorage.getItem('step-4-theme');
+          if (savedTheme) {
+            setStep4Theme(savedTheme);
+          }
         }
         
-        // Step2の場合は保存された目標も読み込み
+        // Step2での自動初期メッセージ送信をチェック
         if (currentStep === 2) {
-          const savedGoal = localStorage.getItem('step-2-goal');
-          if (savedGoal) {
-            setGoal(savedGoal);
-          }
-          
-          // Step2での自動初期メッセージ送信をチェック
           const autoMessageSent = localStorage.getItem('step2-auto-message-sent');
           if (autoMessageSent) {
             setHasStep2AutoMessage(true);
@@ -106,28 +118,87 @@ const StepPage: React.FC = () => {
     loadData();
   }, [currentStep, user]);
 
-  // Step2でテーマが読み込まれた時の自動初期メッセージ送信
+  // Step2以降でテーマが読み込まれた時の自動初期メッセージ送信とLLMとの対話開始
   useEffect(() => {
-    if (currentStep === 2 && theme && !hasStep2AutoMessage) {
-      // 自動メッセージ送信済みフラグを設定（初期メッセージは AIChatコンポーネント側で表示）
-      localStorage.setItem('step2-auto-message-sent', 'true');
-      setHasStep2AutoMessage(true);
+    if (currentStep >= 2 && theme && !hasStep2AutoMessage) {
+      const initStepAIChat = async () => {
+        try {
+          let initialMessage = '';
+          switch (currentStep) {
+            case 2:
+              initialMessage = generateStep2InitialMessage(theme);
+              break;
+            case 3:
+              initialMessage = generateStep3InitialMessage(theme);
+              break;
+            case 4:
+              initialMessage = generateStep4InitialMessage(theme);
+              break;
+          }
+          
+          // LLMからの初期応答を生成
+          const aiResponse = await handleAIMessage(
+            `初期設定: 探究テーマ「${theme}」について${
+              currentStep === 2 ? '深める対話' : 
+              currentStep === 3 ? '自分事として捉える対話' : 
+              '社会と繋がる対話'
+            }を開始します。`,
+            ''
+          );
+          
+          // 自動メッセージ送信済みフラグを設定
+          localStorage.setItem(`step${currentStep}-auto-message-sent`, 'true');
+          localStorage.setItem(`step${currentStep}-initial-ai-response`, aiResponse);
+          setHasStep2AutoMessage(true);
+        } catch (error) {
+          console.error(`Step${currentStep} AI初期化エラー:`, error);
+        }
+      };
+
+      initStepAIChat();
     }
   }, [currentStep, theme, hasStep2AutoMessage]);
 
-  // Step2の初期メッセージを生成
+  // 各ステップの初期メッセージを生成
   const generateStep2InitialMessage = (userTheme: string): string => {
-    // 簡易的なAI応答を生成（実際の実装ではAPI呼び出し）
-    return `こんにちは！あなたの探究テーマ「${userTheme}」について、具体的な学習目標を一緒に考えていきましょう。
+    return `こんにちは！あなたの探究テーマ「${userTheme}」について、多角的な視点から深く考察していきましょう。
 
-まず、このテーマを選んだ理由について教えてください。
+まず、このテーマについて以下の観点から一緒に考えてみませんか：
 
-例えば：
-• このテーマに興味を持ったきっかけは何ですか？
-• 将来の進路や関心との関連はありますか？
-• 解決したいと思う具体的な問題はありますか？
+• このテーマの背景や歴史はどのようなものでしょうか？
+• 現在どのような研究や取り組みが行われていますか？
+• このテーマに関連する異なる立場や考え方はありますか？
+• このテーマの未来の可能性や課題は何でしょうか？
 
-お気軽にお話しください！😊`;
+お気軽にお話しください！`;
+  };
+
+  const generateStep3InitialMessage = (userTheme: string): string => {
+    return `こんにちは！Step2で深く考察した探究テーマ「${userTheme}」を、もっと身近で自分事として捉えられる問いに発展させていきましょう。
+
+まず、以下について一緒に考えてみませんか：
+
+1. このテーマに関連して、あなた自身が実際に経験したことはありますか？
+2. 家族や友人、身近な人たちとこのテーマの関連はありますか？
+3. このテーマについて、あなたが特に「なぜ？」「どうして？」と感じる部分はありますか？
+4. 将来の自分にとって、このテーマはどのような意味を持ちそうですか？
+
+お気軽にお話しください！`;
+  };
+
+  const generateStep4InitialMessage = (userTheme: string): string => {
+    return `お疲れ様でした！これまでのステップで、あなたの探究テーマ「${userTheme}」がより深く、そして自分事として捉えられるようになりましたね。
+
+最後に、このテーマを社会全体の課題や他の人々の関心と結びつけて考えてみましょう。
+
+以下について一緒に考えてみませんか：
+
+1. あなたのテーマは、現在の社会でどのような課題と関連していますか？
+2. このテーマについて、他の同世代の人たちはどのように感じていると思いますか？
+3. あなたの探究が進んだ時、どのような人たちの役に立てるでしょうか？
+4. このテーマを通じて、社会にどのような変化や影響を与えたいですか？
+
+お気軽にお話しください！`;
   };
 
   // AI応答の処理（FastAPI バックエンド経由）
@@ -168,20 +239,40 @@ const StepPage: React.FC = () => {
               response = `「${message}」について考えてみますね。\n\n興味を探究テーマに発展させるには、以下の点を考えてみてください：\n\n1. なぜそれに興味を持ったのか？\n2. その分野で解決したい問題は何か？\n3. 他の人も関心を持ちそうな課題は何か？\n\n${workContent ? 'ワークスペースの内容' : '思いついたこと'}を具体的なテーマに絞り込んでいきましょう！`;
               break;
             case 2:
-              // Step2では対話ベースの応答
-              if (message.includes('興味') || message.includes('きっかけ')) {
-                response = `なるほど、${message.substring(0, 50)}...というきっかけがあったのですね。\n\nそれでは次に、「${theme}」について、どんなことを具体的に理解したいですか？\n\n例えば：\n• 基本的な仕組みや原理\n• 実際の応用事例や活用方法\n• 現在の研究動向や課題\n• 自分なりの新しいアプローチ\n\nどの方向に興味がありますか？`;
-              } else if (message.includes('理解') || message.includes('学び') || message.includes('知り')) {
-                response = `とても良い視点ですね！${message.substring(0, 50)}...について理解を深めたいのですね。\n\n最後に、この探究を通じてどのような成果を目指したいですか？\n\n例えば：\n• レポートや論文としてまとめる\n• 実際のプロトタイプや作品を作る\n• プレゼンテーションで発表する\n• 実験や調査の結果を分析する\n\nどのような形で成果を残したいでしょうか？`;
+              // Step2では深める対話
+              if (message.includes('背景') || message.includes('歴史')) {
+                response = `なるほど、「${theme}」の背景や歴史について興味があるのですね。\n\n歴史的な視点から見ると、このテーマはどのような変遷を辿ってきたのでしょうか？また、現在までの発展過程で、どのような転換点や重要な出来事があったと思いますか？\n\n${workContent ? 'ワークスペースに記録した内容も参考にしながら' : '思いついたことを整理しながら'}、一緒に深めていきましょう！`;
+              } else if (message.includes('研究') || message.includes('取り組み')) {
+                response = `素晴らしい着眼点ですね！現在の研究や取り組みについて考えることで、このテーマの最前線が見えてきます。\n\nでは、さらに視点を広げて考えてみませんか：\n• 異なる立場の人々（研究者、実践者、利用者など）は、このテーマをどのように捉えているでしょうか？\n• 賛成の意見と反対の意見、それぞれどのような根拠があるでしょうか？\n\n多角的な視点から考えることで、より深い理解に繋がります。`;
+              } else if (message.includes('立場') || message.includes('考え方') || message.includes('視点')) {
+                response = `とても重要な観点ですね！異なる立場や考え方を理解することで、テーマの複雑さと豊かさが見えてきます。\n\n最後に、未来の視点も加えて考えてみましょう：\n• このテーマは将来どのような方向に発展していく可能性がありますか？\n• 10年後、20年後にはどのような課題や機会が生まれるでしょうか？\n• あなた自身は、このテーマの未来にどのように関わっていけるでしょうか？\n\n未来への展望を含めて、テーマを多面的に捉えてみてください。`;
               } else {
-                response = `「${message}」について詳しく教えてくださり、ありがとうございます。\n\nこれまでのお話から、具体的な学習目標が見えてきました。これらの内容を踏まえて、SMART原則（具体的・測定可能・達成可能・関連性・期限設定）に沿った目標を一緒に作ってみましょう。\n\n下の「目標入力エリア」に、今回の対話を参考にして具体的な学習目標を書いてみてください。何か分からないことがあれば、いつでもお聞きください！`;
+                response = `「${message}」について詳しく教えてくださり、ありがとうございます。\n\nこれまでの対話を通じて、「${theme}」についてより深く、多角的に考察できましたね。\n\n次のステップでは、このテーマをあなた自身の経験や価値観と結びつけて、より身近で自分事として捉えられる問いを考えていきます。\n\nワークスペースに今回の気づきや考えを整理して、準備ができたら次のステップに進んでください！`;
               }
               break;
             case 3:
-              response = `「${message}」について、具体的な活動を考えてみましょう。\n\n${workContent ? 'ワークスペースの内容から興味深いアイデアが見えますね。' : 'まずは思いついた活動をワークスペースに整理してみてください。'}\n\n目標達成のための活動として、以下の観点で考えてみてはいかがでしょうか：\n\n📚 **情報収集・調査**\n• 文献調査、論文検索\n• 専門家への取材・インタビュー\n• アンケート調査、データ収集\n\n🔬 **実験・検証**\n• 仮説設定と検証実験\n• プロトタイプ作成・テスト\n• 効果測定・分析`;
+              // Step3では自分事の問いづくり
+              if (message.includes('経験') || message.includes('体験')) {
+                response = `素晴らしいですね！あなたの経験と「${theme}」との繋がりが見えてきました。\n\nその経験から生まれる疑問や問いを考えてみませんか：\n• その経験を通じて、「なぜ？」「どうして？」と感じたことはありますか？\n• 同じような経験をした他の人たちも、同じように感じるでしょうか？\n• その経験をもっと良いものにするには、何が必要だと思いますか？\n\n体験から生まれる問いは、探究の原動力になります。`;
+              } else if (message.includes('価値観') || message.includes('大切') || message.includes('信念')) {
+                response = `あなたの価値観とテーマとの関連がとても興味深いですね。\n\n価値観に基づいた問いを立ててみましょう：\n• あなたが大切にしていることと、このテーマはどのように繋がっていますか？\n• 理想的な状態と現実との間に、どのようなギャップがありますか？\n• あなたの価値観から見て、このテーマで最も重要な課題は何でしょうか？\n\n価値観に根ざした問いは、持続的な探究の動機となります。`;
+              } else if (message.includes('将来') || message.includes('夢') || message.includes('目標')) {
+                response = `将来への想いとテーマとの関連、とても重要な視点ですね。\n\n将来を見据えた問いを考えてみましょう：\n• あなたの将来の夢や目標に向けて、このテーマはどのような意味を持ちますか？\n• このテーマを通じて、将来のあなたはどのような価値を提供できるでしょうか？\n• 理想の未来を実現するために、このテーマで解決すべき課題は何ですか？\n\n未来への展望が、探究の方向性を明確にしてくれます。`;
+              } else {
+                response = `「${message}」について、とても深く考えてくださっていますね。\n\nこれまでの対話を通じて、「${theme}」があなた自身の経験や価値観、将来への想いと深く結びついてきました。\n\nワークスペースに「自分事の問い」をまとめて、次のステップで社会との繋がりを考えていきましょう。きっと、より意義深い探究テーマになりますよ！`;
+              }
               break;
             case 4:
-              response = `「${message}」について振り返ってみましょう。\n\n${workContent ? 'これまでの学習過程がよく整理されていますね。' : 'これまでの経験を振り返って、学んだことをまとめてみてください。'}\n\n振り返りでは以下の観点が大切です：\n\n🎯 **達成できたこと**\n• 設定した目標に対する達成度\n• 新しく学んだ知識・スキル\n• 予想外の発見や気づき\n\n🔄 **改善点・課題**\n• うまくいかなかった点\n• 次回に活かしたい学び\n• さらに深めたいテーマ`;
+              // Step4では社会と繋がるテーマにする
+              if (message.includes('社会') || message.includes('課題') || message.includes('問題')) {
+                response = `社会課題との関連について考えてくださったのですね。とても重要な視点です。\n\nさらに具体的に考えてみましょう：\n• この社会課題は、どのような人々に影響を与えていますか？\n• あなたの探究によって、その課題の解決にどのように貢献できるでしょうか？\n• 同世代の仲間たちも、この課題について関心を持ってくれるでしょうか？\n\n社会への具体的な貢献の道筋が見えてくると、探究の意義がより明確になります。`;
+              } else if (message.includes('同世代') || message.includes('仲間') || message.includes('友人')) {
+                response = `同世代の視点、とても大切ですね！あなたの探究が多くの人に響く可能性を感じます。\n\n他者への影響を考えてみましょう：\n• あなたの探究結果を、同世代の人たちにどのように伝えたいですか？\n• この探究を通じて、どのような気づきや変化を他の人にもたらしたいですか？\n• あなたの探究が、社会全体にどのような波及効果をもたらす可能性がありますか？\n\n他者との共有や影響を考えることで、探究の社会的価値が高まります。`;
+              } else if (message.includes('役に立つ') || message.includes('貢献') || message.includes('価値')) {
+                response = `素晴らしい！社会への貢献意識が明確になってきましたね。\n\n実社会での応用可能性を考えてみましょう：\n• あなたの探究は、将来どのような職業や分野で活かせるでしょうか？\n• 実際に実現可能な取り組みとして、どのようなアクションが考えられますか？\n• この探究を継続的な社会貢献活動に発展させるには、どうすればよいでしょうか？\n\n具体的な実現方法を考えることで、探究の実践的価値が見えてきます。`;
+              } else {
+                response = `「${message}」について、とても深く考えてくださっていますね。\n\n素晴らしいです！これまでの4つのステップを通じて、あなたの探究テーマ「${theme}」が：\n\n• 多角的な視点から深く考察され\n• あなた自身の経験や価値観と結びつき\n• 社会課題や他者への貢献と繋がる\n\n意義深いテーマに発展しました。\n\nワークスペースに最終的な「社会と繋がるテーマ」をまとめて、探究学習のスタート準備を完了させましょう！`;
+              }
               break;
             default:
               response = 'ご質問ありがとうございます。詳しくお答えします。';
@@ -195,7 +286,7 @@ const StepPage: React.FC = () => {
 
   const stepContent = {
     1: {
-      title: 'Step 1: 探究テーマを決める',
+      title: 'Step 1: 探究テーマを入力',
       description: '興味から探究テーマを具体化しましょう',
       workPlaceholder: `あなたの興味や関心について自由に書いてください...
 
@@ -221,7 +312,7 @@ const StepPage: React.FC = () => {
 
 右下のAIボタンから質問・相談ができます。`,
       aiButtonText: 'テーマ設定AI',
-             initialMessage: `こんにちは！探究学習のテーマ設定をお手伝いします。
+      initialMessage: `こんにちは！探究学習のテーマ設定をお手伝いします。
 
 まずは、あなたが興味を持っていることについて教えてください。どんな小さなことでも構いません。
 
@@ -231,116 +322,73 @@ const StepPage: React.FC = () => {
 • 解決したいと思う身近な問題
 • 趣味や好きなこと
 
-ワークスペースに思いついたことを書きながら、お気軽にお話しください！😊`,
+ワークスペースに思いついたことを書きながら、お気軽にお話しください！`,
     },
     2: {
-      title: 'Step 2: 学習目標を設定する',
-      description: 'AIとの対話を通じて具体的な学習目標を明確にしましょう',
-      workPlaceholder: 'AI対話で決まった目標をここに入力してください...',
-      aiButtonText: '目標設定AI',
-      initialMessage: theme ? generateStep2InitialMessage(theme) : 'Step1で探究テーマを設定してから進んでください。',
+      title: 'Step 2: 深める対話',
+      description: 'AIとの対話を通じて探究テーマを多角的な視点から深く考察しましょう',
+      workPlaceholder: 'AI対話を通じて考えたことや新たな気づきを記録してください...',
+      aiButtonText: 'AI',
+      initialMessage: '', // 動的に設定される
     },
     3: {
-      title: 'Step 3: 活動計画を立てる',
-      description: '目標達成のための具体的な活動計画を作成しましょう',
-      workPlaceholder: `目標「${goal}」を達成するための活動計画を立ててください...
+      title: 'Step 3: 自分事の問いを立てる',
+      description: '探究テーマを自分自身の経験や価値観と結びつけ、内発的動機を高めましょう',
+      workPlaceholder: `AIとの対話を通じて考えた「自分事の問い」を記録してください...
 
 【ガイダンス】
-以下の活動を組み合わせて計画を立てましょう：
+以下の観点から自分事の問いを考えてみましょう：
 
-■ 情報収集・調査
-• 文献調査、論文検索
-• 専門家への取材・インタビュー
-• アンケート調査、データ収集
-• 現地調査・フィールドワーク
+■ 個人的な経験との関連
+• 過去の体験や経験との結びつき
+• 家族や友人との関係性
+• 今までの学習や活動での気づき
 
-■ 実験・検証
-• 仮説設定と検証実験
-• プロトタイプ作成・テスト
-• 効果測定・分析
-• データの統計処理
+■ 価値観・信念との関連
+• 大切にしている価値観
+• 将来の夢や目標との関係
+• 解決したい身近な課題
 
-■ 制作・開発
-• システム・アプリ開発
-• 作品・モデル制作
-• 提案書・レポート作成
+■ 現在の生活との関連
+• 日常生活での疑問や問題
+• 学校や地域での課題
+• 将来への不安や期待
 
-■ 発表・共有
-• プレゼンテーション準備
-• ポスター・資料作成
-• 成果発表会での発表
-
-■ スケジュール例
-1. 文献調査（1ヶ月目）
-2. 専門家インタビュー（2ヶ月目）
-3. システム設計・開発（3ヶ月目）
-4. 効果検証実験（4ヶ月目）
-5. 成果発表準備（5ヶ月目）
-
-AIアシスタントが活動計画の作成をサポートします。`,
-      aiButtonText: '活動計画AI',
-             initialMessage: `こんにちは！目標達成のための具体的な活動計画を一緒に考えていきましょう。
-
-あなたの目標：「${goal}」
-
-この目標を達成するために、以下について一緒に考えてみませんか：
-
-1. どのような調査や実験が必要だと思いますか？
-2. どんな人に話を聞いてみたいですか？
-3. どのような資料や情報が必要でしょうか？
-4. 成果をどのような形でまとめたいですか？
-
-ワークスペースにアイデアを書きながら、お気軽にお話しください！💡`,
+AIアシスタントが自分事の問いづくりをサポートします。`,
+      aiButtonText: 'AI',
+      initialMessage: '', // 動的に設定される
     },
     4: {
-      title: 'Step 4: 学習の振り返り',
-      description: '探究学習の成果をまとめて振り返りましょう',
-      workPlaceholder: `探究学習の振り返りと今後の課題について記録してください...
+      title: 'Step 4: 社会と繋がるテーマにする',
+      description: '個人的な関心を社会課題や実社会の文脈と結びつけ、探究の社会的意義を明確化しましょう',
+      workPlaceholder: `AIとの対話を通じて考えた「社会と繋がるテーマ」を記録してください...
 
 【ガイダンス】
-以下の観点で振り返りを行いましょう：
+以下の観点から社会的な視点を考えてみましょう：
 
-■ 達成できたこと
-• 設定した目標に対する達成度
-• 新しく学んだ知識・スキル
-• 予想外の発見や気づき
-• 成長を実感できた点
+■ 社会課題との関連
+• 現在の社会問題や課題との関係
+• 地域コミュニティでの課題
+• 世代を超えた共通の関心事
 
-■ プロセスの振り返り
-• 効果的だった学習方法
-• 困難だった点とその対処法
-• 他者との協働・連携
-• 情報収集・分析の方法
+■ 他者への影響・貢献
+• 同世代の仲間への影響
+• 社会に与えられる価値
+• 解決できる問題や改善点
 
-■ 成果物・アウトプット
-• 作成した資料・作品
-• 発表・プレゼンテーション
-• 他者からのフィードバック
-• 社会への影響・貢献
+■ 実社会での応用可能性
+• 将来の職業や進路との関連
+• 実際に実現可能な取り組み
+• 継続的な社会貢献の可能性
 
-■ 今後の課題・展望
-• さらに深めたい領域
-• 新たに生まれた疑問・課題
-• 次の探究テーマへの発展
-• 長期的な学習計画
+■ 多様な視点からの検討
+• 異なる立場の人々の視点
+• 国際的・グローバルな視点
+• 持続可能性の観点
 
-■ 学んだこと
-• 探究学習のスキル
-• 問題解決能力
-• 批判的思考力
-• コミュニケーション能力
-
-AIアシスタントが振り返りをサポートします。`,
-      aiButtonText: '振り返りAI',
-             initialMessage: `お疲れ様でした！探究学習の計画が完成しましたね。
-
-これまでの学習過程を振り返ってみましょう。
-
-• どんな学びがありましたか？
-• 困難だった点は何でしたか？
-• 今後さらに深めたいことはありますか？
-
-ワークスペースに振り返りを書きながら、お気軽にお話しください！📝`,
+AIアシスタントが社会との繋がりを見つけることをサポートします。`,
+      aiButtonText: 'AI',
+      initialMessage: '', // 動的に設定される
     },
   };
 
@@ -363,7 +411,7 @@ AIアシスタントが振り返りをサポートします。`,
 
   // ナビゲーション
   const handleNext = () => {
-    // Step1の場合はテーマの入力をチェック
+    // 各ステップでテーマの入力をチェック
     if (currentStep === 1) {
       if (!step1Theme.trim()) {
         setError('探究テーマを入力してから次へ進んでください');
@@ -375,18 +423,35 @@ AIアシスタントが振り返りをサポートします。`,
       // Step2の自動メッセージフラグをリセット
       localStorage.removeItem('step2-auto-message-sent');
     } else if (currentStep === 2) {
-      // Step2の場合は目標の入力をチェック
-      if (!goal.trim()) {
-        setError('学習目標を入力してから次へ進んでください');
+      if (!step2Theme.trim()) {
+        setError('このステップで考えた探究テーマを入力してから次へ進んでください');
         return;
       }
-      // 目標を保存
-      localStorage.setItem('step-2-goal', goal);
-    } else {
-      if (!workContent.trim() && currentStep < 4) {
-        setError(`内容を入力してから次へ進んでください`);
+      // Step2のテーマを保存
+      localStorage.setItem('step-2-theme', step2Theme);
+      setTheme(step2Theme);
+      // Step3の自動メッセージフラグをリセット
+      localStorage.removeItem('step3-auto-message-sent');
+    } else if (currentStep === 3) {
+      if (!step3Theme.trim()) {
+        setError('このステップで考えた探究テーマを入力してから次へ進んでください');
         return;
       }
+      // Step3のテーマを保存
+      localStorage.setItem('step-3-theme', step3Theme);
+      setTheme(step3Theme);
+      // Step4の自動メッセージフラグをリセット
+      localStorage.removeItem('step4-auto-message-sent');
+    } else if (currentStep === 4) {
+      if (!step4Theme.trim()) {
+        setError('最終的な探究テーマを入力してから完了してください');
+        return;
+      }
+      // Step4のテーマを保存
+      localStorage.setItem('step-4-theme', step4Theme);
+      // Step4の場合、ホームに戻る
+      navigate('/home');
+      return;
     }
     
     // 現在の内容を保存してから次へ
@@ -405,45 +470,100 @@ AIアシスタントが振り返りをサポートします。`,
 
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
-      {/* 上部のProgressBar */}
-      <Box sx={{ 
-        borderBottom: 1, 
-        borderColor: 'divider',
-        backgroundColor: 'background.paper',
-        px: 3,
-        py: 2,
-      }}>
-        <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-          <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+      {/* ホバー表示のProgressBar */}
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'auto',
+          minWidth: '400px',
+          height: '80px', // ホバーコンテンツが表示される十分な高さ
+          backgroundColor: 'transparent',
+          zIndex: 1200,
+          cursor: 'pointer',
+          '&:hover': {
+            '& [data-progress-bar]': {
+              backgroundColor: 'background.paper',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
+            },
+            '& [data-hover-content]': {
+              opacity: 1,
+              transform: 'translateX(-50%) translateY(0)',
+            },
+          },
+        }}
+      >
+        {/* プログレスバーコンテナ */}
+        <Box
+          data-progress-bar
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '10px',
+            backgroundColor: 'rgba(0, 0, 0, 0.05)',
+            borderRadius: '0 0 16px 16px',
+            transition: 'all 0.3s ease',
+            overflow: 'hidden',
+          }}
+        >
+          {/* プログレスバー（進捗表示） */}
+          <Box
+            sx={{
+              height: '100%',
+              backgroundColor: 'primary.main',
+              width: `${(currentStep / 4) * 100}%`,
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </Box>
+        
+        {/* ホバー時に表示される詳細情報 */}
+        <Box
+          data-hover-content
+          sx={{
+            opacity: 0,
+            transform: 'translateX(-50%) translateY(-10px)',
+            transition: 'all 0.3s ease',
+            px: 2.5,
+            py: 1.5,
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            backgroundColor: 'background.paper',
+            borderRadius: '12px',
+            pointerEvents: 'none', // ホバーコンテンツがマウスイベントを妨害しないようにする
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
+            whiteSpace: 'nowrap',
+            minWidth: 'max-content',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600, textAlign: 'center', fontSize: '0.9rem' }}>
             {content?.title}
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ flex: 1 }}>
-              <StepProgressBar 
-                currentStep={currentStep} 
-                onStepClick={(step) => navigate(`/step/${step}`)}
-                clickable
-                compact
-              />
-            </Box>
-            <Button
-              variant={isMemoOpen ? "contained" : "outlined"}
-              startIcon={<NoteIcon />}
-              onClick={() => setIsMemoOpen(!isMemoOpen)}
-              size="small"
-              sx={{ 
-                minWidth: 120,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {isMemoOpen ? 'メモ帳閉じる' : 'メモ帳'}
-            </Button>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center',
+            pointerEvents: 'auto', // StepProgressBarはクリック可能にする
+            '& .MuiBox-root': {
+              transform: 'scale(0.85)',
+            }
+          }}>
+            <StepProgressBar 
+              currentStep={currentStep} 
+              onStepClick={(step) => navigate(`/step/${step}`)}
+              clickable
+              compact
+            />
           </Box>
         </Box>
       </Box>
 
       {/* メインワークスペース */}
-      <Box sx={{ flex: 1 }}>
+      <Box sx={{ flex: 1, mt: '12px' }}>
         {currentStep === 1 ? (
           /* Step1専用UI */
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -455,11 +575,11 @@ AIアシスタントが振り返りをサポートします。`,
               backgroundColor: 'background.paper',
             }}>
               <Typography variant="h5" fontWeight={600} gutterBottom>
-          {content?.title}
-        </Typography>
+                {content?.title}
+              </Typography>
               {content?.description && (
                 <Typography variant="body2" color="text.secondary">
-          {content?.description}
+                  {content?.description}
                 </Typography>
               )}
             </Box>
@@ -467,9 +587,9 @@ AIアシスタントが振り返りをサポートします。`,
             {/* Step1メインコンテンツ */}
             <Box sx={{ flex: 1, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
               {/* テーマ入力エリア */}
-              <Paper elevation={1} sx={{ p: 3 }}>
+              <Box sx={{ p: 3, backgroundColor: 'background.paper', borderRadius: 1 }}>
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  🎯 探究テーマを決めましょう
+                  探究テーマを決めましょう
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   あなたが興味を持っている分野から、探究したいテーマを1つ決めてください
@@ -484,87 +604,81 @@ AIアシスタントが振り返りをサポートします。`,
                 />
                 <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="caption" color="text.secondary">
-                    💡 興味のある分野や解決したい問題を具体的に表現してみてください
+                    興味のある分野や解決したい問題を具体的に表現してみてください
                   </Typography>
-                  <Chip
-                    label={`${step1Theme.length} 文字`}
-                    size="small"
-                    variant="outlined"
-                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {step1Theme.length} 文字
+                  </Typography>
                 </Stack>
-              </Paper>
+              </Box>
 
               {/* 思考整理エリア（メモ帳機能付き） */}
               {isMemoOpen ? (
                 /* メモ帳分割表示 */
-                <Paper elevation={1} sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'background.paper', borderRadius: 1 }}>
                   <PanelGroup direction="horizontal" style={{ height: '100%' }}>
                     {/* ガイダンスパネル */}
                     <Panel defaultSize={60} minSize={40} maxSize={80}>
                       <Box sx={{ height: '100%', p: 3, overflow: 'auto' }}>
-                        <Typography variant="h6" gutterBottom>
-                          💭 思考の整理
-                        </Typography>
+                                      <Typography variant="h6" gutterBottom>
+                思考の整理
+              </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           テーマを決めるために、以下について考えてみましょう
-        </Typography>
+                        </Typography>
 
                         <Stack spacing={2}>
-                          <Card variant="outlined">
-                            <CardContent>
-                              <Typography variant="subtitle2" gutterBottom>
-                                🔍 興味・関心の領域
-                              </Typography>
-                              <List dense>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="社会問題や身近な疑問・課題" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="将来の夢や目標に関連するテーマ" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="これまでに学んできた中で特に興味を持ったこと" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                              </List>
-                            </CardContent>
-                          </Card>
+                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 1 }}>
+                            <Typography variant="subtitle2" gutterBottom>
+                              興味・関心の領域
+                            </Typography>
+                            <List dense>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="社会問題や身近な疑問・課題" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="将来の夢や目標に関連するテーマ" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="これまでに学んできた中で特に興味を持ったこと" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                            </List>
+                          </Box>
 
-                          <Card variant="outlined">
-                            <CardContent>
-                              <Typography variant="subtitle2" gutterBottom>
-                                ⚡ テーマの絞り込み
-                              </Typography>
-                              <List dense>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="なぜそれに興味を持ったのか？" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="その分野で解決したい問題は何か？" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                                <ListItem sx={{ py: 0 }}>
-                                  <ListItemIcon sx={{ minWidth: 20 }}>
-                                    <Typography variant="body2">•</Typography>
-                                  </ListItemIcon>
-                                  <ListItemText primary="実際に調査・研究できそうな範囲か？" primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                              </List>
-                            </CardContent>
-                          </Card>
+                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 1 }}>
+                            <Typography variant="subtitle2" gutterBottom>
+                              テーマの絞り込み
+                            </Typography>
+                            <List dense>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="なぜそれに興味を持ったのか？" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="その分野で解決したい問題は何か？" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                              <ListItem sx={{ py: 0 }}>
+                                <ListItemIcon sx={{ minWidth: 20 }}>
+                                  <Typography variant="body2">•</Typography>
+                                </ListItemIcon>
+                                <ListItemText primary="実際に調査・研究できそうな範囲か？" primaryTypographyProps={{ variant: 'body2' }} />
+                              </ListItem>
+                            </List>
+                          </Box>
                         </Stack>
                       </Box>
                     </Panel>
@@ -573,14 +687,10 @@ AIアシスタントが振り返りをサポートします。`,
                     <PanelResizeHandle>
                       <Box
                         sx={{
-                          width: '4px',
+                          width: '1px',
                           height: '100%',
-                          backgroundColor: '#e0e0e0',
+                          backgroundColor: 'divider',
                           cursor: 'col-resize',
-                          transition: 'background-color 0.2s',
-                                                     '&:hover': {
-                             backgroundColor: muiTheme.palette.primary.main,
-                           },
                         }}
                       />
                     </PanelResizeHandle>
@@ -593,24 +703,6 @@ AIアシスタントが振り返りをサポートします。`,
                         flexDirection: 'column',
                         backgroundColor: 'background.default',
                       }}>
-                        {/* メモ帳ヘッダー */}
-                        <Box sx={{ 
-                          p: 2, 
-                          borderBottom: 1, 
-                          borderColor: 'divider',
-                          backgroundColor: 'background.paper',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}>
-                          <Typography variant="h6" fontWeight={600}>
-                            📝 メモ帳
-                          </Typography>
-                          <IconButton onClick={() => setIsMemoOpen(false)} size="small">
-                            <CloseIcon />
-                          </IconButton>
-                        </Box>
-
                         {/* メモ入力エリア */}
                         <Box sx={{ 
                           flex: 1, 
@@ -618,14 +710,39 @@ AIアシスタントが振り返りをサポートします。`,
                           display: 'flex',
                           flexDirection: 'column',
                           gap: 2,
+                          position: 'relative',
                         }}>
+                          {/* 閉じるボタン */}
+                          <IconButton 
+                            onClick={() => setIsMemoOpen(false)} 
+                            size="small"
+                            sx={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              zIndex: 1,
+                              backgroundColor: 'background.paper',
+                              '&:hover': {
+                                backgroundColor: 'action.hover',
+                              },
+                            }}
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                          
                           <TextField
                             multiline
                             fullWidth
                             rows={8}
                             value={workContent}
                             onChange={(e) => setWorkContent(e.target.value)}
-                            placeholder="思いついたアイデアや気になることを自由にメモしてください..."
+                            placeholder={`思考の整理や一時的なメモを自由に書いてください...
+
+例：
+• 思いついたアイデア
+• 調べたいこと
+• 重要なポイント
+• 質問したいこと`}
                             variant="outlined"
                             sx={{
                               flex: 1,
@@ -641,312 +758,129 @@ AIアシスタントが振り返りをサポートします。`,
                           />
 
                           {/* メモツールバー */}
-                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<SaveIcon />}
-                              onClick={handleSave}
-                            >
-                              保存
-                            </Button>
-                            <Chip
-                              label={`${workContent.length} 文字`}
-                              size="small"
-                              variant="outlined"
-                            />
+                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                variant="text"
+                                size="small"
+                                startIcon={<SaveIcon />}
+                                onClick={handleSave}
+                                disabled={!workContent.trim()}
+                              >
+                                保存
+                              </Button>
+                              <Button
+                                variant="text"
+                                size="small"
+                                startIcon={<ClearIcon />}
+                                onClick={() => setWorkContent('')}
+                              >
+                                クリア
+                              </Button>
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary">
+                              {workContent.length} 文字
+                            </Typography>
                           </Stack>
+
+                          {savedSuccessfully && (
+                            <Alert severity="success" sx={{ mt: 1 }}>
+                              メモが保存されました！
+                            </Alert>
+                          )}
                         </Box>
                       </Box>
                     </Panel>
                   </PanelGroup>
-                </Paper>
+                </Box>
               ) : (
                 /* ガイダンスのみ表示 */
-                <Paper elevation={1} sx={{ flex: 1, p: 3, overflow: 'auto' }}>
+                <Box sx={{ flex: 1, p: 3, overflow: 'auto', backgroundColor: 'background.paper', borderRadius: 1 }}>
                   <Typography variant="h6" gutterBottom>
-                    💭 思考の整理（右上の「メモ帳」ボタンでメモを取りながら考えることができます）
+                    思考の整理（右上の「メモ帳」ボタンでメモを取りながら考えることができます）
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                     テーマを決めるために、以下について考えてみましょう
-          </Typography>
-          
+                  </Typography>
+                  
                   <Stack spacing={3}>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                          🔍 興味・関心の領域
-                        </Typography>
-                        <List>
-                          <ListItem>
-                            <ListItemIcon><IdeaIcon color="primary" /></ListItemIcon>
-                            <ListItemText 
-                              primary="社会問題や身近な疑問・課題" 
-                              secondary="環境問題、教育格差、高齢化社会など"
-                            />
-                          </ListItem>
-                          <ListItem>
-                            <ListItemIcon><GoalIcon color="primary" /></ListItemIcon>
-                            <ListItemText 
-                              primary="将来の夢や目標に関連するテーマ" 
-                              secondary="なりたい職業や取り組みたい分野"
-                            />
-                          </ListItem>
-                          <ListItem>
-                            <ListItemIcon><ThemeIcon color="primary" /></ListItemIcon>
-                            <ListItemText 
-                              primary="これまでに学んできた中で特に興味を持ったこと" 
-                              secondary="授業や読書、体験から得た興味"
-                            />
-                          </ListItem>
-                        </List>
-                      </CardContent>
-                    </Card>
+                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+                      <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
+                        興味・関心の領域
+                      </Typography>
+                      <List>
+                        <ListItem>
+                          <ListItemIcon><IdeaIcon color="primary" /></ListItemIcon>
+                          <ListItemText 
+                            primary="社会問題や身近な疑問・課題" 
+                            secondary="環境問題、教育格差、高齢化社会など"
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemIcon><GoalIcon color="primary" /></ListItemIcon>
+                          <ListItemText 
+                            primary="将来の夢や目標に関連するテーマ" 
+                            secondary="なりたい職業や取り組みたい分野"
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemIcon><ThemeIcon color="primary" /></ListItemIcon>
+                          <ListItemText 
+                            primary="これまでに学んできた中で特に興味を持ったこと" 
+                            secondary="授業や読書、体験から得た興味"
+                          />
+                        </ListItem>
+                      </List>
+                    </Box>
 
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                          ⚡ テーマの絞り込み
-                        </Typography>
-                        <List>
-                          <ListItem>
-                            <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
-                            <ListItemText 
-                              primary="なぜそれに興味を持ったのか？" 
-                              secondary="きっかけや理由を明確にしましょう"
-                            />
-                          </ListItem>
-                          <ListItem>
-                            <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
-                            <ListItemText 
-                              primary="その分野で解決したい問題は何か？" 
-                              secondary="具体的な課題を見つけましょう"
-                            />
-                          </ListItem>
-                          <ListItem>
-                            <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
-                            <ListItemText 
-                              primary="実際に調査・研究できそうな範囲か？" 
-                              secondary="現実的に取り組める規模を考えましょう"
-                            />
-                          </ListItem>
-                        </List>
-                      </CardContent>
-                    </Card>
+                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+                      <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
+                        テーマの絞り込み
+                      </Typography>
+                      <List>
+                        <ListItem>
+                          <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                          <ListItemText 
+                            primary="なぜそれに興味を持ったのか？" 
+                            secondary="きっかけや理由を明確にしましょう"
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                          <ListItemText 
+                            primary="その分野で解決したい問題は何か？" 
+                            secondary="具体的な課題を見つけましょう"
+                          />
+                        </ListItem>
+                        <ListItem>
+                          <ListItemIcon><CheckIcon color="success" /></ListItemIcon>
+                          <ListItemText 
+                            primary="実際に調査・研究できそうな範囲か？" 
+                            secondary="現実的に取り組める規模を考えましょう"
+                          />
+                        </ListItem>
+                      </List>
+                    </Box>
                   </Stack>
-                                 </Paper>
-               )}
+                </Box>
+              )}
 
-               {/* 次のステップボタン */}
-               <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-                 <Button
-                   variant="contained"
-                   size="large"
-                   onClick={handleNext}
-                   disabled={!step1Theme.trim()}
-                   sx={{ minWidth: 200, py: 1.5 }}
-                 >
-                   次のステップへ進む
-                 </Button>
-               </Box>
-                          </Box>
-           </Box>
-         ) : currentStep === 2 ? (
-           /* Step2専用UI - AI対話ベースの目標設定 */
-           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-             {/* ヘッダー */}
-             <Box sx={{ 
-               borderBottom: 1, 
-               borderColor: 'divider',
-               p: 3,
-               backgroundColor: 'background.paper',
-             }}>
-               <Typography variant="h5" fontWeight={600} gutterBottom>
-                 {content?.title}
-               </Typography>
-               {content?.description && (
-                 <Typography variant="body2" color="text.secondary">
-                   {content?.description}
-                 </Typography>
-               )}
-               {theme && (
-                 <Chip 
-                   label={`探究テーマ: ${theme}`} 
-                   color="primary" 
-                   sx={{ mt: 2 }} 
-                 />
-               )}
-             </Box>
-
-             {/* Step2メインコンテンツ */}
-             <Box sx={{ flex: 1, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-               {/* AI対話エリア（メモ帳機能付き） */}
-               {isMemoOpen ? (
-                 /* AI対話とメモ帳の分割表示 */
-                 <Paper elevation={1} sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                   <PanelGroup direction="horizontal" style={{ height: '100%' }}>
-                     {/* AI対話パネル */}
-                     <Panel defaultSize={60} minSize={40} maxSize={80}>
-                       <AIChat
-                         pageId="step2-chat"
-                         title="🤖 目標設定AI"
-                         initialMessage={content?.initialMessage}
-                         memoContent={workContent}
-                         onMessageSend={handleAIMessage}
-                       />
-                     </Panel>
-
-                     {/* リサイズハンドル */}
-                     <PanelResizeHandle>
-                       <Box
-                         sx={{
-                           width: '4px',
-                           height: '100%',
-                           backgroundColor: '#e0e0e0',
-                           cursor: 'col-resize',
-                           transition: 'background-color 0.2s',
-                           '&:hover': {
-                             backgroundColor: muiTheme.palette.primary.main,
-                           },
-                         }}
-                       />
-                     </PanelResizeHandle>
-
-                     {/* メモ帳パネル */}
-                     <Panel defaultSize={40} minSize={20} maxSize={60}>
-                       <Box sx={{ 
-                         height: '100%', 
-                         display: 'flex', 
-                         flexDirection: 'column',
-                         backgroundColor: 'background.default',
-                       }}>
-                         {/* メモ帳ヘッダー */}
-                         <Box sx={{ 
-                           p: 2, 
-                           borderBottom: 1, 
-                           borderColor: 'divider',
-                           backgroundColor: 'background.paper',
-                           display: 'flex',
-                           alignItems: 'center',
-                           justifyContent: 'space-between',
-                         }}>
-                           <Typography variant="h6" fontWeight={600}>
-                             💭 思考メモ
-                           </Typography>
-                           <IconButton onClick={() => setIsMemoOpen(false)} size="small">
-                             <CloseIcon />
-                           </IconButton>
-                         </Box>
-
-                         {/* メモ入力エリア */}
-                         <Box sx={{ 
-                           flex: 1, 
-                           p: 2,
-                           display: 'flex',
-                           flexDirection: 'column',
-                           gap: 2,
-                         }}>
-                           <TextField
-                             multiline
-                             fullWidth
-                             rows={8}
-                             value={workContent}
-                             onChange={(e) => setWorkContent(e.target.value)}
-                             placeholder="AIとの対話を通じて考えたことや、目標についてのアイデアを自由にメモしてください..."
-                             variant="outlined"
-                             sx={{
-                               flex: 1,
-                               '& .MuiOutlinedInput-root': {
-                                 height: '100%',
-                                 alignItems: 'flex-start',
-                                 '& textarea': {
-                                   height: '100% !important',
-                                   overflow: 'auto !important',
-                                 },
-                               },
-                             }}
-                           />
-
-                           {/* メモツールバー */}
-                           <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
-                             <Button
-                               variant="outlined"
-                               size="small"
-                               startIcon={<SaveIcon />}
-                               onClick={handleSave}
-                             >
-                               保存
-                             </Button>
-                             <Chip
-                               label={`${workContent.length} 文字`}
-                               size="small"
-                               variant="outlined"
-                             />
-                           </Stack>
-                         </Box>
-                       </Box>
-                     </Panel>
-                   </PanelGroup>
-                 </Paper>
-               ) : (
-                 /* AI対話のみ表示 */
-                 <Paper elevation={1} sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                   <AIChat
-                     pageId="step2-chat"
-                     title="🤖 目標設定AI（右上の「メモ帳」ボタンで思考メモを取りながら対話できます）"
-                     initialMessage={content?.initialMessage}
-                     memoContent={workContent}
-                     onMessageSend={handleAIMessage}
-                   />
-                 </Paper>
-               )}
-
-               {/* 目標入力エリア */}
-               <Paper elevation={1} sx={{ p: 3 }}>
-                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                   🎯 最終的な学習目標
-                 </Typography>
-                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                   上記のAIとの対話とメモを参考に、具体的な学習目標を入力してください
-                 </Typography>
-                 <TextField
-                   fullWidth
-                   multiline
-                   rows={4}
-                   value={goal}
-                   onChange={(e) => setGoal(e.target.value)}
-                   placeholder="例：AIを活用したメタ認知支援システムの効果を検証し、学習効率向上のための具体的な手法を3ヶ月以内に提案する"
-                   variant="outlined"
-                   sx={{ mb: 2 }}
-                 />
-                 <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                   <Typography variant="caption" color="text.secondary">
-                     💡 SMART原則（具体的・測定可能・達成可能・関連性・期限設定）を意識してください
-                   </Typography>
-                   <Chip
-                     label={`${goal.length} 文字`}
-                     size="small"
-                     variant="outlined"
-                   />
-                 </Stack>
-               </Paper>
-
-               {/* 次のステップボタン */}
-               <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-                 <Button
-                   variant="contained"
-                   size="large"
-                   onClick={handleNext}
-                   disabled={!goal.trim()}
-                   sx={{ minWidth: 200, py: 1.5 }}
-                 >
-                   次のステップへ進む
-                 </Button>
-               </Box>
-             </Box>
-           </Box>
-         ) : (
-           /* Step3以降のワークスペース */
+              {/* 次のステップボタン */}
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleNext}
+                  disabled={!step1Theme.trim()}
+                  sx={{ minWidth: 200, py: 1.5 }}
+                >
+                  次のステップへ進む
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        ) : (
+          /* Step2以降のワークスペース */
           <WorkspaceWithAI
             pageId={`step-${currentStep}`}
             title={content?.title || 'ワークスペース'}
@@ -956,51 +890,47 @@ AIアシスタントが振り返りをサポートします。`,
             onChange={setWorkContent}
             onSave={handleSave}
             onMessageSend={handleAIMessage}
-            initialMessage={content?.initialMessage}
+            initialMessage={(() => {
+              if (!theme) return 'Step1で探究テーマを設定してから進んでください。';
+              switch (currentStep) {
+                case 2: return generateStep2InitialMessage(theme);
+                case 3: return generateStep3InitialMessage(theme);
+                case 4: return generateStep4InitialMessage(theme);
+                default: return '';
+              }
+            })()}
+            initialAIResponse={localStorage.getItem(`step${currentStep}-initial-ai-response`) || undefined}
             aiButtonText={content?.aiButtonText}
             isAIOpen={isMemoOpen}
             onAIOpenChange={setIsMemoOpen}
             showFabButton={false}
+            useAIChat={currentStep >= 2} // Step2以降でAIChatを使用
+            autoStartAI={currentStep >= 2 && !!theme} // Step2以降でテーマがある場合に自動開始
+            isMemoOpen={isStep2MemoOpen} // メモ帳状態
+            onMemoOpenChange={setIsStep2MemoOpen} // メモ帳状態変更
+            currentStep={currentStep} // 現在のステップ
+            stepTheme={(() => {
+              switch (currentStep) {
+                case 2: return step2Theme;
+                case 3: return step3Theme;
+                case 4: return step4Theme;
+                default: return '';
+              }
+            })()} // ステップのテーマ
+            onStepThemeChange={(theme) => {
+              switch (currentStep) {
+                case 2: setStep2Theme(theme); break;
+                case 3: setStep3Theme(theme); break;
+                case 4: setStep4Theme(theme); break;
+              }
+            }} // ステップのテーマ変更
+            // ナビゲーション関連
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            showPrevious={currentStep > 1}
+            showNext={true}
+            nextButtonText={currentStep < 4 ? '次へ' : '完了'}
           />
-        )}
-      </Box>
-
-      {/* ナビゲーションボタン（右下に固定） */}
-      <Box sx={{
-        position: 'fixed',
-        bottom: 24,
-        left: 24,
-        display: 'flex',
-        gap: 2,
-        zIndex: 1000,
-      }}>
-        {currentStep > 1 && (
-            <Button
-              variant="outlined"
-            onClick={handlePrevious}
-            sx={{ minWidth: 100 }}
-            >
-              前へ
-            </Button>
-        )}
-            
-        {currentStep < 4 ? (
-            <Button
-              variant="contained"
-            onClick={handleNext}
-            sx={{ minWidth: 100 }}
-            >
-              次へ
-            </Button>
-        ) : (
-          <Button
-            variant="contained"
-            onClick={() => navigate('/home')}
-            color="primary"
-            sx={{ minWidth: 100 }}
-          >
-            完了
-          </Button>
         )}
       </Box>
 
@@ -1037,7 +967,7 @@ AIアシスタントが振り返りをサポートします。`,
           保存されました！
         </Alert>
       )}
-          </Box>
+    </Box>
   );
 };
 

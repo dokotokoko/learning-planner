@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   TextField,
@@ -12,6 +12,7 @@ import {
   Chip,
   Stack,
   Alert,
+  Paper,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -21,6 +22,7 @@ import {
 } from '@mui/icons-material';
 
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import AIChat from './AIChat';
 
 
 
@@ -34,10 +36,24 @@ interface WorkspaceWithAIProps {
   onSave?: () => void;
   onMessageSend?: (message: string, workContent: string) => Promise<string>;
   initialMessage?: string;
+  initialAIResponse?: string;
   aiButtonText?: string;
   isAIOpen?: boolean;
   onAIOpenChange?: (isOpen: boolean) => void;
   showFabButton?: boolean;
+  useAIChat?: boolean; // AIChatコンポーネントを使用するかどうか
+  autoStartAI?: boolean; // AI対話を自動開始するかどうか
+  isMemoOpen?: boolean; // メモ帳の表示状態（Step2用）
+  onMemoOpenChange?: (isOpen: boolean) => void; // メモ帳の表示状態変更（Step2用）
+  currentStep?: number; // 現在のステップ
+  stepTheme?: string; // ステップのテーマ
+  onStepThemeChange?: (theme: string) => void; // ステップのテーマ変更
+  // ナビゲーション関連
+  onNext?: () => void;
+  onPrevious?: () => void;
+  showPrevious?: boolean;
+  showNext?: boolean;
+  nextButtonText?: string;
 }
 
 const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
@@ -50,10 +66,24 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   onSave,
   onMessageSend,
   initialMessage,
+  initialAIResponse,
   aiButtonText = "AIアシスタント",
   isAIOpen: externalIsAIOpen,
   onAIOpenChange,
   showFabButton = true,
+  useAIChat = false,
+  autoStartAI = false,
+  isMemoOpen = false,
+  onMemoOpenChange,
+  currentStep = 1,
+  stepTheme = '',
+  onStepThemeChange,
+  // ナビゲーション関連
+  onNext,
+  onPrevious,
+  showPrevious = false,
+  showNext = false,
+  nextButtonText = '次へ',
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -65,23 +95,30 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   // AIチャットを開く
-  const handleOpenAI = () => {
+  const handleOpenAI = useCallback(() => {
     if (onAIOpenChange) {
       onAIOpenChange(true);
     } else {
       setInternalIsAIOpen(true);
     }
     setHasNewMessage(false);
-  };
+  }, [onAIOpenChange]);
 
   // AIチャットを閉じる
-  const handleCloseAI = () => {
+  const handleCloseAI = useCallback(() => {
     if (onAIOpenChange) {
       onAIOpenChange(false);
     } else {
       setInternalIsAIOpen(false);
     }
-  };
+  }, [onAIOpenChange]);
+
+  // Step2での自動AI開始
+  useEffect(() => {
+    if (autoStartAI && useAIChat && !isAIOpen) {
+      handleOpenAI();
+    }
+  }, [autoStartAI, useAIChat, isAIOpen, handleOpenAI]);
 
 
 
@@ -119,31 +156,13 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
       }
     }, [pageId]);
 
-    return (
+        return (
       <Box sx={{ 
         height: '100%', 
         display: 'flex', 
         flexDirection: 'column',
         backgroundColor: 'background.default',
       }}>
-        {/* メモ帳ヘッダー */}
-        <Box sx={{ 
-          p: 2, 
-          borderBottom: 1, 
-          borderColor: 'divider',
-          backgroundColor: 'background.paper',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <Typography variant="h6" fontWeight={600}>
-            📝 メモ帳
-          </Typography>
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
         {/* メモ入力エリア */}
         <Box sx={{ 
           flex: 1, 
@@ -151,7 +170,26 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: 2,
+          position: 'relative',
         }}>
+          {/* 閉じるボタン */}
+          <IconButton 
+            onClick={onClose} 
+            size="small"
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1,
+              backgroundColor: 'background.paper',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+
           <TextField
             multiline
             fullWidth
@@ -180,10 +218,10 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
           />
 
           {/* メモツールバー */}
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
+          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <Stack direction="row" spacing={1}>
               <Button
-                variant="contained"
+                variant="text"
                 size="small"
                 startIcon={<SaveIcon />}
                 onClick={handleSaveMemo}
@@ -192,7 +230,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                 保存
               </Button>
               <Button
-                variant="outlined"
+                variant="text"
                 size="small"
                 startIcon={<ClearIcon />}
                 onClick={handleClearMemo}
@@ -200,11 +238,9 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                 クリア
               </Button>
             </Stack>
-            <Chip
-              label={`${memoContent.length} 文字`}
-              size="small"
-              variant="outlined"
-            />
+            <Typography variant="caption" color="text.secondary">
+              {memoContent.length} 文字
+            </Typography>
           </Stack>
 
           {memoSaved && (
@@ -219,92 +255,45 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ヘッダー */}
-      <Box sx={{ 
-        borderBottom: 1, 
-        borderColor: 'divider',
-        p: 3,
-        backgroundColor: 'background.paper',
-      }}>
-        <Typography variant="h5" fontWeight={600} gutterBottom>
-          {title}
-        </Typography>
-        {description && (
-          <Typography variant="body2" color="text.secondary">
-            {description}
-          </Typography>
-        )}
-      </Box>
-
       {/* メインコンテンツエリア */}
       <Box sx={{ flex: 1, position: 'relative' }}>
-        {/* AIチャットが閉じている場合 - フルスクリーンワークスペース */}
+        {/* AIチャットが閉じている場合 */}
         {!isAIOpen && (
-          <Box sx={{ height: '100%', p: 3, display: 'flex', flexDirection: 'column' }}>
-            {/* ツールバー */}
-            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<SaveIcon />}
-                onClick={onSave}
-                size="small"
-              >
-                保存
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<ClearIcon />}
-                onClick={handleClear}
-                size="small"
-              >
-                クリア
-              </Button>
-              <Box sx={{ flex: 1 }} />
-              <Chip
-                label={`${value.length} 文字`}
-                size="small"
-                variant="outlined"
-              />
-            </Stack>
-
-            {/* テキストエリア */}
-            <TextField
-              ref={workspaceRef}
-              multiline
-              fullWidth
-              rows={isMobile ? 10 : 20}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder={placeholder}
-              variant="outlined"
-              sx={{
-                flex: 1,
-                '& .MuiOutlinedInput-root': {
-                  height: '100%',
-                  alignItems: 'flex-start',
-                  '& textarea': {
-                    height: '100% !important',
-                    overflow: 'auto !important',
-                  },
-                },
-              }}
-            />
-          </Box>
-        )}
-
-        {/* AIチャットが開いている場合 - 分割パネル */}
-        {isAIOpen && (
-          <PanelGroup 
-            direction={isMobile ? "vertical" : "horizontal"} 
-            style={{ height: '100%' }}
-          >
-            {/* ワークスペースパネル */}
-            <Panel defaultSize={60} minSize={30} maxSize={80}>
+          <>
+            {useAIChat ? (
+              // Step2の場合：AI対話開始を促すメッセージ
+              <Box sx={{ 
+                height: '100%', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                p: 3
+              }}>
+                <Box sx={{ textAlign: 'center', maxWidth: 600 }}>
+                  <Typography variant="h5" gutterBottom>
+                    AIとの対話を開始しましょう
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+                    右下のボタンからAIとの対話を開始して、探究テーマを深く考察していきましょう。
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<ChatIcon />}
+                    onClick={handleOpenAI}
+                    sx={{ minWidth: 200 }}
+                  >
+                    対話を開始する
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              // Step3,4の場合：フルスクリーンワークスペース
               <Box sx={{ height: '100%', p: 3, display: 'flex', flexDirection: 'column' }}>
                 {/* ツールバー */}
                 <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
                   <Button
-                    variant="outlined"
+                    variant="text"
                     startIcon={<SaveIcon />}
                     onClick={onSave}
                     size="small"
@@ -312,7 +301,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                     保存
                   </Button>
                   <Button
-                    variant="outlined"
+                    variant="text"
                     startIcon={<ClearIcon />}
                     onClick={handleClear}
                     size="small"
@@ -320,17 +309,17 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                     クリア
                   </Button>
                   <Box sx={{ flex: 1 }} />
-                  <Chip
-                    label={`${value.length} 文字`}
-                    size="small"
-                    variant="outlined"
-                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {value.length} 文字
+                  </Typography>
                 </Stack>
 
                 {/* テキストエリア */}
                 <TextField
+                  ref={workspaceRef}
                   multiline
                   fullWidth
+                  rows={isMobile ? 10 : 20}
                   value={value}
                   onChange={(e) => onChange(e.target.value)}
                   placeholder={placeholder}
@@ -348,40 +337,215 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                   }}
                 />
               </Box>
-            </Panel>
+            )}
+          </>
+        )}
 
-            {/* リサイズハンドル */}
-            <PanelResizeHandle>
-              <Box
-                sx={{
-                  width: isMobile ? '100%' : '4px',
-                  height: isMobile ? '4px' : '100%',
-                  backgroundColor: '#e0e0e0',
-                  cursor: isMobile ? 'row-resize' : 'col-resize',
-                  transition: 'background-color 0.2s',
-                  '&:hover': {
-                    backgroundColor: theme.palette.primary.main,
-                  },
-                }}
-              />
-            </PanelResizeHandle>
+        {/* AIチャットが開いている場合 - 分割パネル */}
+        {isAIOpen && (
+          <>
+            {useAIChat ? (
+              // Step2以降の場合：AIチャット + オプションメモ帳 + テーマ入力
+              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* AIチャット + メモ帳エリア */}
+                <Box sx={{ flex: 1 }}>
+                  {isMemoOpen ? (
+                    // メモ帳が開いている場合：分割レイアウト
+                    <PanelGroup 
+                      direction={isMobile ? "vertical" : "horizontal"} 
+                      style={{ height: '100%' }}
+                    >
+                      {/* AIチャットパネル */}
+                      <Panel defaultSize={60} minSize={40} maxSize={80}>
+                        <AIChat
+                          pageId={pageId}
+                          title={aiButtonText}
+                          initialMessage={initialMessage}
+                          initialAIResponse={initialAIResponse}
+                          memoContent={value}
+                          onMessageSend={onMessageSend}
+                          onClose={handleCloseAI}
+                          autoStart={autoStartAI}
+                          showMemoButton={false}
+                        />
+                      </Panel>
 
-            {/* メモ帳パネル */}
-            <Panel defaultSize={40} minSize={20} maxSize={70}>
-              <MemoPanel onClose={handleCloseAI} />
-            </Panel>
-          </PanelGroup>
+                      {/* リサイズハンドル */}
+                      <PanelResizeHandle>
+                        <Box
+                          sx={{
+                            width: isMobile ? '100%' : '1px',
+                            height: isMobile ? '1px' : '100%',
+                            backgroundColor: 'divider',
+                            cursor: isMobile ? 'row-resize' : 'col-resize',
+                          }}
+                        />
+                      </PanelResizeHandle>
+
+                      {/* メモ帳パネル */}
+                      <Panel defaultSize={40} minSize={20} maxSize={60}>
+                        <MemoPanel onClose={() => onMemoOpenChange?.(false)} />
+                      </Panel>
+                    </PanelGroup>
+                  ) : (
+                    // メモ帳が閉じている場合：AIチャットのみフルスクリーン
+                    <AIChat
+                      pageId={pageId}
+                      title={aiButtonText}
+                      initialMessage={initialMessage}
+                      initialAIResponse={initialAIResponse}
+                      memoContent={value}
+                      onMessageSend={onMessageSend}
+                      onClose={handleCloseAI}
+                      autoStart={autoStartAI}
+                      onOpenMemo={() => onMemoOpenChange?.(true)}
+                      showMemoButton={true}
+                    />
+                  )}
+                </Box>
+
+                {/* テーマ入力エリア（Step2以降） */}
+                {currentStep >= 2 && (
+                  <Box 
+                    sx={{ 
+                      p: 3, 
+                      m: 2, 
+                      backgroundColor: 'background.default'
+                    }}
+                  >
+                    <Typography variant="subtitle1" gutterBottom>
+                      {currentStep === 2 && 'Step2で深めた探究テーマ'}
+                      {currentStep === 3 && 'Step3で考えた自分事の探究テーマ'}
+                      {currentStep === 4 && 'Step4で考えた社会と繋がる探究テーマ'}
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      value={stepTheme}
+                      onChange={(e) => onStepThemeChange?.(e.target.value)}
+                      placeholder={
+                        currentStep === 2 ? "Step2での対話を通じて深めた探究テーマを入力してください" :
+                        currentStep === 3 ? "自分事として捉えた探究テーマを入力してください" :
+                        "社会と繋がる最終的な探究テーマを入力してください"
+                      }
+                      variant="outlined"
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                      このテーマは次のステップでAIとの対話に使用されます
+                    </Typography>
+                    
+                    {/* ナビゲーションボタン */}
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                      {showPrevious && (
+                        <Button
+                          variant="outlined"
+                          onClick={onPrevious}
+                          sx={{ minWidth: 100 }}
+                        >
+                          前へ
+                        </Button>
+                      )}
+                      
+                      {showNext && (
+                        <Button
+                          variant="contained"
+                          onClick={onNext}
+                          sx={{ minWidth: 100 }}
+                        >
+                          {nextButtonText}
+                        </Button>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              // Step3,4の場合：ワークスペース + メモ帳
+              <PanelGroup 
+                direction={isMobile ? "vertical" : "horizontal"} 
+                style={{ height: '100%' }}
+              >
+                {/* ワークスペースパネル */}
+                <Panel defaultSize={60} minSize={30} maxSize={80}>
+                  <Box sx={{ height: '100%', p: 3, display: 'flex', flexDirection: 'column' }}>
+                    {/* ツールバー */}
+                    <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                      <Button
+                        variant="text"
+                        startIcon={<SaveIcon />}
+                        onClick={onSave}
+                        size="small"
+                      >
+                        保存
+                      </Button>
+                      <Button
+                        variant="text"
+                        startIcon={<ClearIcon />}
+                        onClick={handleClear}
+                        size="small"
+                      >
+                        クリア
+                      </Button>
+                      <Box sx={{ flex: 1 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {value.length} 文字
+                      </Typography>
+                    </Stack>
+
+                    {/* テキストエリア */}
+                    <TextField
+                      multiline
+                      fullWidth
+                      value={value}
+                      onChange={(e) => onChange(e.target.value)}
+                      placeholder={placeholder}
+                      variant="outlined"
+                      sx={{
+                        flex: 1,
+                        '& .MuiOutlinedInput-root': {
+                          height: '100%',
+                          alignItems: 'flex-start',
+                          '& textarea': {
+                            height: '100% !important',
+                            overflow: 'auto !important',
+                          },
+                        },
+                      }}
+                    />
+                  </Box>
+                </Panel>
+
+                {/* リサイズハンドル */}
+                <PanelResizeHandle>
+                  <Box
+                    sx={{
+                      width: isMobile ? '100%' : '1px',
+                      height: isMobile ? '1px' : '100%',
+                      backgroundColor: 'divider',
+                      cursor: isMobile ? 'row-resize' : 'col-resize',
+                    }}
+                  />
+                </PanelResizeHandle>
+
+                {/* メモ帳パネル */}
+                <Panel defaultSize={40} minSize={20} maxSize={70}>
+                  <MemoPanel onClose={handleCloseAI} />
+                </Panel>
+              </PanelGroup>
+            )}
+          </>
         )}
       </Box>
 
-      {/* AIアシスタント開閉ボタン（AIチャットが閉じているときのみ表示） */}
-      {showFabButton && !isAIOpen && (
+      {/* AIアシスタント/メモ帳開閉ボタン（Step3,4でチャットが閉じているときのみ表示） */}
+      {showFabButton && !isAIOpen && !useAIChat && (
         <Fab
           color="primary"
           onClick={handleOpenAI}
           sx={{
             position: 'fixed',
-            bottom: 24,
+            bottom: 80, // ナビゲーションボタンと重ならないよう調整
             right: 24,
             zIndex: 1000,
           }}

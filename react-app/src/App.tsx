@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import StepPage from './pages/StepPage';
 import GeneralInquiryPage from './pages/GeneralInquiryPage';
+import ProfilePage from './pages/ProfilePage';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
@@ -143,6 +144,7 @@ function App() {
                 <Route path="home" element={<HomePage />} />
                 <Route path="step/:stepNumber" element={<StepPage />} />
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
+                <Route path="profile" element={<ProfilePage />} />
               </Route>
               
               <Route path="*" element={<Navigate to="/home" replace />} />

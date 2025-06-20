@@ -18,6 +18,7 @@ import {
   SmartToy as AIIcon,
   Person as PersonIcon,
   Close as CloseIcon,
+  NoteAdd as MemoIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -32,18 +33,26 @@ interface AIChatProps {
   pageId: string;
   title: string;
   initialMessage?: string;
+  initialAIResponse?: string;
   memoContent?: string;
   onMessageSend?: (message: string, memoContent: string) => Promise<string>;
   onClose?: () => void;
+  autoStart?: boolean; // 自動開始フラグ
+  onOpenMemo?: () => void; // メモ帳を開く（Step2用）
+  showMemoButton?: boolean; // メモ帳ボタンを表示するか
 }
 
 const AIChat: React.FC<AIChatProps> = ({
   pageId,
   title,
   initialMessage,
+  initialAIResponse,
   memoContent = '',
   onMessageSend,
   onClose,
+  autoStart = false,
+  onOpenMemo,
+  showMemoButton = false,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -51,18 +60,52 @@ const AIChat: React.FC<AIChatProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 初期メッセージの設定
+  // 初期メッセージと初期応答の設定
   useEffect(() => {
-    if (initialMessage && messages.length === 0) {
-      const initialMsg: Message = {
-        id: `initial-${Date.now()}`,
-        role: 'assistant',
-        content: initialMessage,
-        timestamp: new Date(),
-      };
-      setMessages([initialMsg]);
-    }
-  }, [initialMessage, messages.length]);
+    const loadInitialMessages = async () => {
+      if (messages.length > 0) return; // 既にメッセージがある場合はスキップ
+      
+      const initialMessages: Message[] = [];
+      
+      // 初期メッセージ（AI からの挨拶）
+      if (initialMessage) {
+        initialMessages.push({
+          id: `initial-${Date.now()}`,
+          role: 'assistant',
+          content: initialMessage,
+          timestamp: new Date(),
+        });
+      }
+      
+      // Step2以降の場合、LocalStorageから初期AI応答を取得
+      if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
+        const stepNumber = pageId.replace('step-', '');
+        const savedInitialResponse = localStorage.getItem(`step${stepNumber}-initial-ai-response`);
+        if (savedInitialResponse) {
+          initialMessages.push({
+            id: `initial-response-${Date.now()}`,
+            role: 'assistant',
+            content: savedInitialResponse,
+            timestamp: new Date(),
+          });
+        } else if (initialAIResponse) {
+          // LocalStorageにない場合は、propsから設定
+          initialMessages.push({
+            id: `initial-response-${Date.now()}`,
+            role: 'assistant',
+            content: initialAIResponse,
+            timestamp: new Date(),
+          });
+        }
+      }
+      
+      if (initialMessages.length > 0) {
+        setMessages(initialMessages);
+      }
+    };
+    
+    loadInitialMessages();
+  }, [initialMessage, initialAIResponse, messages.length, pageId, autoStart]);
 
   // メッセージリストの最下部にスクロール
   useEffect(() => {
@@ -141,22 +184,24 @@ const AIChat: React.FC<AIChatProps> = ({
     }}>
       {/* ヘッダー */}
       <Box sx={{ 
-        p: 2, 
-        borderBottom: 1, 
-        borderColor: 'divider',
-        backgroundColor: 'background.paper',
+        p: 1, 
+        backgroundColor: 'background.default',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
       }}>
-        <Typography variant="h6" fontWeight={600}>
-          {title}
-        </Typography>
-        {onClose && (
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {showMemoButton && onOpenMemo && (
+            <IconButton onClick={onOpenMemo} size="small" title="メモ帳を開く">
+              <MemoIcon />
+            </IconButton>
+          )}
+          {onClose && (
+            <IconButton onClick={onClose} size="small">
+              <CloseIcon />
+            </IconButton>
+          )}
+        </Box>
       </Box>
 
       {/* メッセージリスト */}
@@ -203,8 +248,7 @@ const AIChat: React.FC<AIChatProps> = ({
                       {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {formatTime(message.timestamp)}
                     </Typography>
                     
-                    <Paper
-                      elevation={1}
+                    <Box
                       sx={{
                         p: 2,
                         backgroundColor: message.role === 'assistant' 
@@ -213,6 +257,7 @@ const AIChat: React.FC<AIChatProps> = ({
                         color: message.role === 'assistant' 
                           ? 'text.primary' 
                           : 'primary.contrastText',
+                        borderRadius: 2,
                       }}
                     >
                       <Typography 
@@ -224,12 +269,12 @@ const AIChat: React.FC<AIChatProps> = ({
                       >
                         {message.content}
                       </Typography>
-                    </Paper>
+                    </Box>
                   </Box>
                 </ListItem>
                 
                 {message !== messages[messages.length - 1] && (
-                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ height: 16 }} />
                 )}
               </motion.div>
             ))}
@@ -262,9 +307,7 @@ const AIChat: React.FC<AIChatProps> = ({
       {/* 入力エリア */}
       <Box sx={{ 
         p: 2, 
-        borderTop: 1, 
-        borderColor: 'divider',
-        backgroundColor: 'background.paper',
+        backgroundColor: 'background.default',
       }}>
         <Stack direction="row" spacing={1} alignItems="flex-end">
           <TextField
