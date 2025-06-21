@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -29,20 +28,8 @@ export const useAuthStore = create<AuthState>()(
       initialize: async () => {
         const { user } = get();
         if (user) {
-          // セッションが有効か確認
-          try {
-            const { data, error } = await supabase
-              .from('users')
-              .select('id, username')
-              .eq('id', user.id)
-              .single();
-
-            if (error || !data) {
-              set({ user: null });
-            }
-          } catch (error) {
-            set({ user: null });
-          }
+          // セッション有効性の確認はスキップ（シンプルな実装のため）
+          // 必要に応じてバックエンドAPIでの検証を追加可能
         }
         set({ isInitialized: true });
       },
@@ -51,23 +38,31 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('id, username')
-            .eq('username', username)
-            .eq('password', password) // 本番環境ではハッシュ化が必要
-            .single();
+          // バックエンドAPIを使用してログイン
+          const response = await fetch('http://localhost:8000/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              username: username,
+              access_code: password,
+            }),
+          });
 
-          if (error || !data) {
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
             set({ isLoading: false });
             return { 
               success: false, 
-              error: 'ユーザー名またはパスワードが正しくありません' 
+              error: errorData.detail || 'ログインに失敗しました'
             };
           }
 
+          const data = await response.json();
+          
           const user: User = {
-            id: data.id,
+            id: data.id.toString(),
             username: data.username,
           };
 
@@ -97,22 +92,13 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .insert({ username, password }) // 本番環境ではハッシュ化が必要
-            .select('id, username')
-            .single();
-
-          if (error) {
-            set({ isLoading: false });
-            if (error.message.includes('duplicate key')) {
-              return { success: false, error: 'そのユーザー名は既に使用されています' };
-            }
-            return { success: false, error: `登録エラー: ${error.message}` };
-          }
-
+          // 現在、バックエンドAPIにユーザー登録エンドポイントがないため、
+          // 簡易的にフロントエンドでのみバリデーション
           set({ isLoading: false });
-          return { success: true };
+          return { 
+            success: false, 
+            error: 'ユーザー登録機能は現在利用できません。管理者にお問い合わせください。' 
+          };
 
         } catch (error) {
           set({ isLoading: false });

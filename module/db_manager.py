@@ -47,6 +47,8 @@ class DBManager:
         self.create_table_interests()
         self.create_table_goals()
         self.create_table_learningPlans()
+        self.create_table_memos()
+        self.create_table_chat_logs()
 
     # 興味関心テーブルを作成する関数
     def create_table_interests(self):
@@ -261,3 +263,209 @@ class DBManager:
     #     self.cur.execute(""" DROP TABLE IF EXISTS advices""")
     def delete_table_users(self):
         self.cur.execute(""" DROP TABLE IF EXISTS users""")
+
+    # メモテーブルを作成する関数
+    def create_table_memos(self):
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_memos
+            (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                page_id VARCHAR(50) NOT NULL,
+                content TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                UNIQUE KEY unique_user_page (user_id, page_id)
+            )
+        """)
+        self.con.commit()
+
+    # メモを保存する関数
+    def save_memo(self, user_id, page_id: str, content: str):
+        self.cur.execute("""
+            INSERT INTO user_memos(user_id, page_id, content) 
+            VALUES(%s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+            content = VALUES(content),
+            updated_at = CURRENT_TIMESTAMP
+        """, (user_id, page_id, content))
+        self.con.commit()
+        
+        # 保存したメモを取得して返す
+        self.cur.execute("""
+            SELECT id, page_id, content, updated_at 
+            FROM user_memos 
+            WHERE user_id = %s AND page_id = %s
+        """, (user_id, page_id))
+        return self.cur.fetchone()
+
+    # メモを取得する関数
+    def get_memo(self, user_id, page_id: str):
+        self.cur.execute("""
+            SELECT id, page_id, content, updated_at 
+            FROM user_memos 
+            WHERE user_id = %s AND page_id = %s
+        """, (user_id, page_id))
+        return self.cur.fetchone()
+
+    # ユーザーの全メモを取得する関数
+    def get_user_memos(self, user_id):
+        self.cur.execute("""
+            SELECT id, page_id, content, updated_at 
+            FROM user_memos 
+            WHERE user_id = %s 
+            ORDER BY updated_at DESC
+        """, (user_id,))
+        return self.cur.fetchall()
+
+    # メモを削除する関数
+    def delete_memo(self, user_id, page_id: str):
+        self.cur.execute("""
+            DELETE FROM user_memos 
+            WHERE user_id = %s AND page_id = %s
+        """, (user_id, page_id))
+        self.con.commit()
+        return self.cur.rowcount > 0
+
+    # 対話履歴テーブルを作成する関数
+    def create_table_chat_logs(self):
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS chat_logs
+            (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                page VARCHAR(50) NOT NULL,
+                sender VARCHAR(10) NOT NULL,
+                message TEXT NOT NULL,
+                context_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                CHECK (sender IN ('user', 'assistant'))
+            )
+        """)
+        # インデックス作成（MySQLでは IF NOT EXISTS を使わずに例外処理で対応）
+        try:
+            self.cur.execute("""
+                CREATE INDEX idx_chat_logs_user_id ON chat_logs(user_id)
+            """)
+        except Exception:
+            pass  # インデックスが既に存在する場合は無視
+        
+        try:
+            self.cur.execute("""
+                CREATE INDEX idx_chat_logs_user_page ON chat_logs(user_id, page)
+            """)
+        except Exception:
+            pass  # インデックスが既に存在する場合は無視
+        
+        try:
+            self.cur.execute("""
+                CREATE INDEX idx_chat_logs_created_at ON chat_logs(created_at)
+            """)
+        except Exception:
+            pass  # インデックスが既に存在する場合は無視
+        self.con.commit()
+
+    # 対話履歴を保存する関数
+    def save_chat_message(self, user_id, page: str, sender: str, message: str, context_data: str = None):
+        """対話メッセージをデータベースに保存"""
+        self.cur.execute("""
+            INSERT INTO chat_logs(user_id, page, sender, message, context_data) 
+            VALUES(%s, %s, %s, %s, %s)
+        """, (user_id, page, sender, message, context_data))
+        self.con.commit()
+        return self.cur.lastrowid
+
+    # ユーザーの全対話履歴を取得する関数
+    def get_user_chat_history(self, user_id, limit: int = None):
+        """ユーザーの全対話履歴を時系列順で取得"""
+        query = """
+            SELECT id, page, sender, message, context_data, created_at 
+            FROM chat_logs 
+            WHERE user_id = %s 
+            ORDER BY created_at ASC
+        """
+        params = (user_id,)
+        
+        if limit:
+            query += " LIMIT %s"
+            params = (user_id, limit)
+            
+        self.cur.execute(query, params)
+        return self.cur.fetchall()
+
+    # 特定のページでの対話履歴を取得する関数
+    def get_page_chat_history(self, user_id, page: str):
+        """特定のページでの対話履歴を取得"""
+        self.cur.execute("""
+            SELECT id, page, sender, message, context_data, created_at 
+            FROM chat_logs 
+            WHERE user_id = %s AND page = %s 
+            ORDER BY created_at ASC
+        """, (user_id, page))
+        return self.cur.fetchall()
+
+    # LLM用の履歴コンテキストを生成する関数
+    def get_conversation_context(self, user_id, include_pages: list = None, exclude_pages: list = None, limit: int = 100):
+        """LLMに渡すための対話履歴コンテキストを生成"""
+        query = """
+            SELECT page, sender, message, created_at 
+            FROM chat_logs 
+            WHERE user_id = %s
+        """
+        params = [user_id]
+        
+        if include_pages:
+            placeholders = ','.join(['%s'] * len(include_pages))
+            query += f" AND page IN ({placeholders})"
+            params.extend(include_pages)
+        elif exclude_pages:
+            placeholders = ','.join(['%s'] * len(exclude_pages))
+            query += f" AND page NOT IN ({placeholders})"
+            params.extend(exclude_pages)
+            
+        query += " ORDER BY created_at DESC"
+        
+        if limit:
+            query += " LIMIT %s"
+            params.append(limit)
+            
+        self.cur.execute(query, params)
+        results = self.cur.fetchall()
+        
+        # LLM用のフォーマットに変換（時系列順に戻す）
+        context_messages = []
+        for row in reversed(results):  # DESCで取得したので逆順にする
+            page, sender, message, created_at = row
+            role = "user" if sender == "user" else "assistant"
+            context_messages.append({
+                "role": role,
+                "content": message,
+                "page": page,
+                "timestamp": created_at.isoformat() if created_at else None
+            })
+        
+        return context_messages
+
+    # 対話履歴をクリアする関数（開発・テスト用）
+    def clear_chat_history(self, user_id, page: str = None):
+        """対話履歴をクリア（開発・テスト用）"""
+        if page:
+            self.cur.execute("""
+                DELETE FROM chat_logs WHERE user_id = %s AND page = %s
+            """, (user_id, page))
+        else:
+            self.cur.execute("""
+                DELETE FROM chat_logs WHERE user_id = %s
+            """, (user_id,))
+        self.con.commit()
+        return self.cur.rowcount
+
+    def delete_table_memos(self):
+        """メモテーブルを削除"""
+        self.cur.execute(""" DROP TABLE IF EXISTS user_memos""")
+
+    def delete_table_chat_logs(self):
+        """対話履歴テーブルを削除"""
+        self.cur.execute(""" DROP TABLE IF EXISTS chat_logs""")

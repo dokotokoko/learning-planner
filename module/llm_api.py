@@ -168,3 +168,11 @@ class learning_plannner():
         
         return assistant_response, messages
 
+    def generate_response_with_history(self, messages: list):
+        """対話履歴を考慮してLLMから応答を生成"""
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages
+        )
+        return response.choices[0].message.content
+

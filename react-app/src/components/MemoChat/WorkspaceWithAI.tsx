@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   TextField,
@@ -48,6 +48,7 @@ interface WorkspaceWithAIProps {
   currentStep?: number; // 現在のステップ
   stepTheme?: string; // ステップのテーマ
   onStepThemeChange?: (theme: string) => void; // ステップのテーマ変更
+  forceRefreshChat?: boolean; // チャットを強制リフレッシュ
   // ナビゲーション関連
   onNext?: () => void;
   onPrevious?: () => void;
@@ -78,6 +79,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   currentStep = 1,
   stepTheme = '',
   onStepThemeChange,
+  forceRefreshChat = false,
   // ナビゲーション関連
   onNext,
   onPrevious,
@@ -93,6 +95,9 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   const [hasNewMessage, setHasNewMessage] = useState(false);
   
   const workspaceRef = useRef<HTMLDivElement>(null);
+  
+  // AIChatコンポーネントのインスタンスを保持するためのキー（固定化してメモ帳状態の影響を除去）
+  const aiChatKey = `${pageId}-stable`;
 
   // AIチャットを開く
   const handleOpenAI = useCallback(() => {
@@ -113,7 +118,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
     }
   }, [onAIOpenChange]);
 
-  // Step2での自動AI開始
+  // Step2での自動AI開始（メモ帳状態に影響されないよう最小限の依存関係）
   useEffect(() => {
     if (autoStartAI && useAIChat && !isAIOpen) {
       handleOpenAI();
@@ -349,47 +354,52 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {/* AIチャット + メモ帳エリア */}
                 <Box sx={{ flex: 1 }}>
-                  {isMemoOpen ? (
-                    // メモ帳が開いている場合：分割レイアウト
-                    <PanelGroup 
-                      direction={isMobile ? "vertical" : "horizontal"} 
-                      style={{ height: '100%' }}
-                    >
-                      {/* AIチャットパネル */}
-                      <Panel defaultSize={60} minSize={40} maxSize={80}>
-                        <AIChat
-                          pageId={pageId}
-                          title={aiButtonText}
-                          initialMessage={initialMessage}
-                          initialAIResponse={initialAIResponse}
-                          memoContent={value}
-                          onMessageSend={onMessageSend}
-                          onClose={handleCloseAI}
-                          autoStart={autoStartAI}
-                          showMemoButton={false}
-                        />
-                      </Panel>
+                                  {isMemoOpen ? (
+                  // メモ帳が開いている場合：分割レイアウト
+                  <PanelGroup 
+                    direction={isMobile ? "vertical" : "horizontal"} 
+                    style={{ height: '100%' }}
+                  >
+                    {/* AIチャットパネル */}
+                    <Panel defaultSize={60} minSize={40} maxSize={80}>
+                                          <AIChat
+                      key={aiChatKey}
+                      pageId={pageId}
+                      title={aiButtonText}
+                      initialMessage={initialMessage}
+                      initialAIResponse={initialAIResponse}
+                      memoContent={value}
+                      onMessageSend={onMessageSend}
+                      onClose={handleCloseAI}
+                      autoStart={autoStartAI}
+                      showMemoButton={true}
+                      hideMemoButton={true}
+                      forceRefresh={forceRefreshChat}
+                    />
+                    </Panel>
 
-                      {/* リサイズハンドル */}
-                      <PanelResizeHandle>
-                        <Box
-                          sx={{
-                            width: isMobile ? '100%' : '1px',
-                            height: isMobile ? '1px' : '100%',
-                            backgroundColor: 'divider',
-                            cursor: isMobile ? 'row-resize' : 'col-resize',
-                          }}
-                        />
-                      </PanelResizeHandle>
+                    {/* リサイズハンドル */}
+                    <PanelResizeHandle>
+                      <Box
+                        sx={{
+                          width: isMobile ? '100%' : '1px',
+                          height: isMobile ? '1px' : '100%',
+                          backgroundColor: 'divider',
+                          cursor: isMobile ? 'row-resize' : 'col-resize',
+                        }}
+                      />
+                    </PanelResizeHandle>
 
-                      {/* メモ帳パネル */}
-                      <Panel defaultSize={40} minSize={20} maxSize={60}>
-                        <MemoPanel onClose={() => onMemoOpenChange?.(false)} />
-                      </Panel>
-                    </PanelGroup>
-                  ) : (
-                    // メモ帳が閉じている場合：AIチャットのみフルスクリーン
+                    {/* メモ帳パネル */}
+                    <Panel defaultSize={40} minSize={20} maxSize={60}>
+                      <MemoPanel onClose={() => onMemoOpenChange?.(false)} />
+                    </Panel>
+                  </PanelGroup>
+                ) : (
+                  // メモ帳が閉じている場合：AIチャットのみフルスクリーン
+                  <Box sx={{ height: '100%', position: 'relative' }}>
                     <AIChat
+                      key={aiChatKey}
                       pageId={pageId}
                       title={aiButtonText}
                       initialMessage={initialMessage}
@@ -400,8 +410,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                       autoStart={autoStartAI}
                       onOpenMemo={() => onMemoOpenChange?.(true)}
                       showMemoButton={true}
+                      hideMemoButton={false}
+                      forceRefresh={forceRefreshChat}
                     />
-                  )}
+                  </Box>
+                )}
                 </Box>
 
                 {/* テーマ入力エリア（Step2以降） */}

@@ -34,12 +34,15 @@ interface AIChatProps {
   title: string;
   initialMessage?: string;
   initialAIResponse?: string;
-  memoContent?: string;
+  memoContent?: string; // 使用しないが、既存コンポーネントとの互換性のため残す
   onMessageSend?: (message: string, memoContent: string) => Promise<string>;
   onClose?: () => void;
   autoStart?: boolean; // 自動開始フラグ
   onOpenMemo?: () => void; // メモ帳を開く（Step2用）
   showMemoButton?: boolean; // メモ帳ボタンを表示するか
+  hideMemoButton?: boolean; // メモ帳ボタンを隠すか（メモ帳が開いているときなど）
+  forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
+  loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
 }
 
 const AIChat: React.FC<AIChatProps> = ({
@@ -53,29 +56,83 @@ const AIChat: React.FC<AIChatProps> = ({
   autoStart = false,
   onOpenMemo,
   showMemoButton = false,
+  hideMemoButton = false,
+  forceRefresh = false,
+  loadHistoryFromDB = true,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
+  const initializationKeyRef = useRef(pageId);
+
+  // forceRefreshまたはpageId変更でメッセージをクリア
+  useEffect(() => {
+    if (forceRefresh || initializationKeyRef.current !== pageId) {
+      setMessages([]);
+      setHistoryLoaded(false);
+      initializationKeyRef.current = pageId;
+    }
+  }, [forceRefresh, pageId]);
+
+  // データベースから対話履歴を読み込む
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      if (!loadHistoryFromDB || historyLoaded) return;
+
+      try {
+        // ユーザーIDを取得
+        let userId = null;
+        const authData = localStorage.getItem('auth-storage');
+        if (authData) {
+          try {
+            const parsed = JSON.parse(authData);
+            if (parsed.state?.user?.id) {
+              userId = parsed.state.user.id;
+            }
+          } catch (e) {
+            console.error('認証データの解析に失敗:', e);
+          }
+        }
+        if (!userId) return;
+
+                  const response = await fetch(`http://localhost:8000/chat/history?page=${pageId}`, {
+            headers: {
+              'Authorization': `Bearer ${userId}`,
+            },
+          });
+
+        if (response.ok) {
+          const history = await response.json();
+          const historyMessages: Message[] = history.map((item: any) => ({
+            id: item.id.toString(),
+            role: item.sender === 'user' ? 'user' : 'assistant',
+            content: item.message,
+            timestamp: new Date(item.created_at),
+          }));
+
+          setMessages(historyMessages);
+          setHistoryLoaded(true);
+        }
+      } catch (error) {
+        console.error('対話履歴の読み込みエラー:', error);
+      }
+    };
+
+    loadChatHistory();
+  }, [pageId, loadHistoryFromDB, historyLoaded]);
 
   // 初期メッセージと初期応答の設定
   useEffect(() => {
     const loadInitialMessages = async () => {
-      if (messages.length > 0) return; // 既にメッセージがある場合はスキップ
+      // メッセージが既にある場合や履歴を読み込む場合はスキップ
+      if (messages.length > 0 || (loadHistoryFromDB && !historyLoaded)) return;
       
       const initialMessages: Message[] = [];
-      
-      // 初期メッセージ（AI からの挨拶）
-      if (initialMessage) {
-        initialMessages.push({
-          id: `initial-${Date.now()}`,
-          role: 'assistant',
-          content: initialMessage,
-          timestamp: new Date(),
-        });
-      }
       
       // Step2以降の場合、LocalStorageから初期AI応答を取得
       if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
@@ -97,6 +154,14 @@ const AIChat: React.FC<AIChatProps> = ({
             timestamp: new Date(),
           });
         }
+      } else if (initialMessage) {
+        // 他のページでは初期メッセージを使用
+        initialMessages.push({
+          id: `initial-${Date.now()}`,
+          role: 'assistant',
+          content: initialMessage,
+          timestamp: new Date(),
+        });
       }
       
       if (initialMessages.length > 0) {
@@ -105,7 +170,7 @@ const AIChat: React.FC<AIChatProps> = ({
     };
     
     loadInitialMessages();
-  }, [initialMessage, initialAIResponse, messages.length, pageId, autoStart]);
+  }, [messages.length, initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded]);
 
   // メッセージリストの最下部にスクロール
   useEffect(() => {
@@ -131,10 +196,46 @@ const AIChat: React.FC<AIChatProps> = ({
       let aiResponse = '';
       
       if (onMessageSend) {
-        aiResponse = await onMessageSend(userMessage.content, memoContent);
+        aiResponse = await onMessageSend(userMessage.content, ''); // メモ内容は渡さない
       } else {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
+        // データベース対応のチャットAPIを使用
+        // ユーザーIDを取得
+        let userId = null;
+        const authData = localStorage.getItem('auth-storage');
+        if (authData) {
+          try {
+            const parsed = JSON.parse(authData);
+            if (parsed.state?.user?.id) {
+              userId = parsed.state.user.id;
+            }
+          } catch (e) {
+            console.error('認証データの解析に失敗:', e);
+          }
+        }
+        if (userId) {
+          const response = await fetch('http://localhost:8000/chat', {
+            method: 'POST',
+                          headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userId}`,
+              },
+            body: JSON.stringify({
+              message: userMessage.content,
+              page: pageId,
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            aiResponse = result.response;
+          } else {
+            throw new Error('API応答エラー');
+          }
+        } else {
+          // フォールバック処理
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
+        }
       }
 
       const assistantMessage: Message = {
@@ -191,7 +292,7 @@ const AIChat: React.FC<AIChatProps> = ({
         justifyContent: 'flex-end',
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {showMemoButton && onOpenMemo && (
+          {showMemoButton && !hideMemoButton && onOpenMemo && (
             <IconButton onClick={onOpenMemo} size="small" title="メモ帳を開く">
               <MemoIcon />
             </IconButton>

@@ -78,12 +78,21 @@ class LearningPlanResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     message: str
-    memo_content: Optional[str] = None
+    memo_content: Optional[str] = None  # 互換性のため残すが使用しない
     context: Optional[str] = None
+    page: Optional[str] = "general"  # 対話が行われるページを追加
 
 class ChatResponse(BaseModel):
     response: str
     timestamp: str
+
+class ChatHistoryResponse(BaseModel):
+    id: int
+    page: str
+    sender: str
+    message: str
+    context_data: Optional[str]
+    created_at: str
 
 class MemoSave(BaseModel):
     page_id: str
@@ -104,10 +113,10 @@ async def startup_event():
     """アプリケーション起動時の初期化"""
     global db_manager, llm_client
     try:
-        # 開発用：LLMのみ有効化、DBは無効
-        db_manager = None  # DBManager()
+        # DB・LLMの両方を有効化
+        db_manager = DBManager()  # DB有効化
         llm_client = learning_plannner()  # LLM有効化
-        logger.info("FastAPIサーバーが起動しました（LLM有効・DB無効モード）")
+        logger.info("FastAPIサーバーが起動しました（DB・LLM有効モード）")
     except Exception as e:
         logger.error(f"初期化エラー: {e}")
         raise
@@ -321,29 +330,77 @@ async def get_learning_plans(current_user: int = Depends(get_current_user)):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(
-    chat_data: ChatMessage
-    # current_user: int = Depends(get_current_user)  # テスト用に一時無効化
+    chat_data: ChatMessage,
+    current_user: int = Depends(get_current_user)
 ):
-    """AIとのチャット"""
+    """AIとのチャット（対話履歴を考慮）"""
     try:
+        logger.info(f"チャット開始 - ユーザーID: {current_user}, メッセージ: {chat_data.message[:50]}...")
+        
         if llm_client is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="LLMクライアントが初期化されていません"
             )
         
-        # メモ内容がある場合は、コンテキストに追加
-        context = ""
-        # メモ内容をコンテキストに含めないように一時的にコメントアウト
-        # if chat_data.memo_content:
-        #     context += f"ユーザーのメモ内容: {chat_data.memo_content}\n\n"
+        if db_manager is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="データベースマネージャーが初期化されていません"
+            )
+        
+        # 過去の対話履歴を取得してコンテキストに含める
+        conversation_history = db_manager.get_conversation_context(
+            user_id=current_user, 
+            limit=50  # 直近50件の対話を取得
+        )
+        logger.info(f"取得した対話履歴: {len(conversation_history)}件")
+        
+        # コンテキストデータを準備（メモ内容は除外）
+        context_data = {}
         if chat_data.context:
-            context += f"追加コンテキスト: {chat_data.context}\n\n"
+            context_data["additional_context"] = chat_data.context
         
-        user_input = context + chat_data.message
+        # LLM用のメッセージリストを構築
+        messages = [{"role": "system", "content": system_prompt}]
         
-        # LLMにリクエストを送信
-        response = llm_client.generate_response(system_prompt, user_input)
+        # 過去の対話履歴を追加
+        for history_msg in conversation_history:
+            messages.append({
+                "role": history_msg["role"],
+                "content": history_msg["content"]
+            })
+        logger.info(f"メッセージリストに追加された履歴: {len(conversation_history)}件")
+        
+        # 追加コンテキストのみを含める（メモ内容は含めない）
+        current_context = ""
+        if chat_data.context:
+            current_context += f"追加コンテキスト: {chat_data.context}\n\n"
+        
+        user_message_with_context = current_context + chat_data.message
+        messages.append({"role": "user", "content": user_message_with_context})
+        logger.info(f"最終的なメッセージ数: {len(messages)}")
+        
+        # ユーザーメッセージをDBに保存
+        db_manager.save_chat_message(
+            user_id=current_user,
+            page=chat_data.page or "general",
+            sender="user",
+            message=chat_data.message,
+            context_data=json.dumps(context_data, ensure_ascii=False) if context_data else None
+        )
+        
+        # LLMから応答を取得
+        response = llm_client.generate_response_with_history(messages)
+        
+        # AIの応答をDBに保存
+        db_manager.save_chat_message(
+            user_id=current_user,
+            page=chat_data.page or "general",
+            sender="assistant",
+            message=response,
+            context_data=None
+        )
         
         return ChatResponse(
             response=response,
@@ -354,6 +411,54 @@ async def chat_with_ai(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="AI応答の生成でエラーが発生しました"
+        )
+
+@app.get("/chat/history", response_model=List[ChatHistoryResponse])
+async def get_chat_history(
+    page: Optional[str] = None,
+    limit: Optional[int] = 100,
+    current_user: int = Depends(get_current_user)
+):
+    """対話履歴取得"""
+    try:
+        if page:
+            history = db_manager.get_page_chat_history(current_user, page)
+        else:
+            history = db_manager.get_user_chat_history(current_user, limit)
+        
+        return [
+            ChatHistoryResponse(
+                id=item[0],
+                page=item[1],
+                sender=item[2],
+                message=item[3],
+                context_data=item[4],
+                created_at=item[5].isoformat() if item[5] else datetime.now().isoformat()
+            )
+            for item in history
+        ]
+    except Exception as e:
+        logger.error(f"対話履歴取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="対話履歴の取得でエラーが発生しました"
+        )
+
+@app.delete("/chat/history")
+async def clear_chat_history(
+    page: Optional[str] = None,
+    current_user: int = Depends(get_current_user)
+):
+    """対話履歴クリア"""
+    try:
+        cleared_count = db_manager.clear_chat_history(current_user, page)
+        page_info = f" (ページ: {page})" if page else ""
+        return {"message": f"対話履歴をクリアしました{page_info}", "cleared_count": cleared_count}
+    except Exception as e:
+        logger.error(f"対話履歴クリアエラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="対話履歴のクリアでエラーが発生しました"
         )
 
 @app.post("/memos", response_model=MemoResponse)

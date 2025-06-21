@@ -54,12 +54,25 @@ const StepPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [savedSuccessfully, setSavedSuccessfully] = useState(false);
   const [isMemoOpen, setIsMemoOpen] = useState(false);
-  const [step1Theme, setStep1Theme] = useState('');
-  const [hasStep2AutoMessage, setHasStep2AutoMessage] = useState(false);
-  const [isStep2MemoOpen, setIsStep2MemoOpen] = useState(false); // メモ帳状態
+  const [hasStepAutoMessage, setHasStepAutoMessage] = useState(false);
+  const [isStep2MemoOpen, setIsStep2MemoOpen] = useState(false);
+  const [forceRefreshChat, setForceRefreshChat] = useState(false);
+  const [previousStep, setPreviousStep] = useState(currentStep);
+  
+  const [step1Theme, setStep1Theme] = useState(''); // Step1で入力した探究テーマ
   const [step2Theme, setStep2Theme] = useState(''); // Step2で考えた探究テーマ
   const [step3Theme, setStep3Theme] = useState(''); // Step3で考えた探究テーマ
   const [step4Theme, setStep4Theme] = useState(''); // Step4で考えた探究テーマ
+
+  // ステップ変更時のチャットリフレッシュ処理
+  useEffect(() => {
+    if (previousStep !== currentStep) {
+      // 実際にステップが変更された場合のみチャットをリフレッシュ
+      setForceRefreshChat(true);
+      setTimeout(() => setForceRefreshChat(false), 100);
+      setPreviousStep(currentStep);
+    }
+  }, [currentStep, previousStep]);
 
   // データの初期ロード
   useEffect(() => {
@@ -71,7 +84,18 @@ const StepPage: React.FC = () => {
           setTheme(savedTheme);
         }
         
-
+        // Step2以降では、前のステップで保存されたテーマを読み込み
+        if (currentStep === 3) {
+          const step2SavedTheme = localStorage.getItem('step-2-theme');
+          if (step2SavedTheme) {
+            setTheme(step2SavedTheme);
+          }
+        } else if (currentStep === 4) {
+          const step3SavedTheme = localStorage.getItem('step-3-theme');
+          if (step3SavedTheme) {
+            setTheme(step3SavedTheme);
+          }
+        }
         
         // 既存の作業内容を読み込み
         const savedContent = localStorage.getItem(`step-${currentStep}-content`);
@@ -102,13 +126,9 @@ const StepPage: React.FC = () => {
           }
         }
         
-        // Step2での自動初期メッセージ送信をチェック
-        if (currentStep === 2) {
-          const autoMessageSent = localStorage.getItem('step2-auto-message-sent');
-          if (autoMessageSent) {
-            setHasStep2AutoMessage(true);
-          }
-        }
+        // 各ステップでの自動初期メッセージ送信をチェック
+        const autoMessageSent = localStorage.getItem(`step${currentStep}-auto-message-sent`);
+        setHasStepAutoMessage(!!autoMessageSent);
       } catch (error) {
         console.error('データ読み込みエラー:', error);
         setError('データの読み込みに失敗しました');
@@ -120,7 +140,7 @@ const StepPage: React.FC = () => {
 
   // Step2以降でテーマが読み込まれた時の自動初期メッセージ送信とLLMとの対話開始
   useEffect(() => {
-    if (currentStep >= 2 && theme && !hasStep2AutoMessage) {
+    if (currentStep >= 2 && theme && !hasStepAutoMessage) {
       const initStepAIChat = async () => {
         try {
           let initialMessage = '';
@@ -149,7 +169,7 @@ const StepPage: React.FC = () => {
           // 自動メッセージ送信済みフラグを設定
           localStorage.setItem(`step${currentStep}-auto-message-sent`, 'true');
           localStorage.setItem(`step${currentStep}-initial-ai-response`, aiResponse);
-          setHasStep2AutoMessage(true);
+          setHasStepAutoMessage(true);
         } catch (error) {
           console.error(`Step${currentStep} AI初期化エラー:`, error);
         }
@@ -157,7 +177,7 @@ const StepPage: React.FC = () => {
 
       initStepAIChat();
     }
-  }, [currentStep, theme, hasStep2AutoMessage]);
+  }, [currentStep, theme, hasStepAutoMessage]);
 
   // 各ステップの初期メッセージを生成
   const generateStep2InitialMessage = (userTheme: string): string => {
@@ -204,19 +224,39 @@ const StepPage: React.FC = () => {
   // AI応答の処理（FastAPI バックエンド経由）
   const handleAIMessage = async (message: string, workContent: string): Promise<string> => {
     try {
+      // ユーザーIDを取得
+      let userId = null;
+      
+      // auth-storageからユーザーIDを取得
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
+      }
+
       // FastAPI バックエンドに接続
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer dummy-token',
+          'Authorization': `Bearer ${userId}`,
         },
         body: JSON.stringify({
           message: message,
+          page: `step_${currentStep}`,
           context: `現在のステップ: Step ${currentStep}
 探究テーマ: ${theme || '（未設定）'}
-学習目標: ${goal || '（未設定）'}
-ワークスペース内容: ${workContent || '（記入なし）'}`
+学習目標: ${goal || '（未設定）'}`
         }),
       });
 
@@ -432,6 +472,8 @@ AIアシスタントが社会との繋がりを見つけることをサポート
       setTheme(step2Theme);
       // Step3の自動メッセージフラグをリセット
       localStorage.removeItem('step3-auto-message-sent');
+      // 現在のフラグもリセット
+      setHasStepAutoMessage(false);
     } else if (currentStep === 3) {
       if (!step3Theme.trim()) {
         setError('このステップで考えた探究テーマを入力してから次へ進んでください');
@@ -442,6 +484,8 @@ AIアシスタントが社会との繋がりを見つけることをサポート
       setTheme(step3Theme);
       // Step4の自動メッセージフラグをリセット
       localStorage.removeItem('step4-auto-message-sent');
+      // 現在のフラグもリセット
+      setHasStepAutoMessage(false);
     } else if (currentStep === 4) {
       if (!step4Theme.trim()) {
         setError('最終的な探究テーマを入力してから完了してください');
@@ -908,6 +952,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             autoStartAI={currentStep >= 2 && !!theme} // Step2以降でテーマがある場合に自動開始
             isMemoOpen={isStep2MemoOpen} // メモ帳状態
             onMemoOpenChange={setIsStep2MemoOpen} // メモ帳状態変更
+            forceRefreshChat={forceRefreshChat} // チャット強制リフレッシュ
             currentStep={currentStep} // 現在のステップ
             stepTheme={(() => {
               switch (currentStep) {

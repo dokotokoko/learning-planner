@@ -13,29 +13,54 @@ const GeneralInquiryPage: React.FC = () => {
   // AI応答の処理（FastAPI バックエンド経由）
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
+      // ユーザーIDを取得
+      let userId = null;
+      
+      // auth-storageからユーザーIDを取得
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
+      }
+
       // FastAPI バックエンドに接続
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer dummy-token',
+          'Authorization': `Bearer ${userId}`,
         },
         body: JSON.stringify({
           message: message,
+          page: "general_inquiry",
           context: `現在のページ: AI相談
-テーマ: 探究学習の疑問解決
-ユーザーのメモ内容: ${memoContent || '（メモなし）'}`
+テーマ: 探究学習の疑問解決`
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`API Error ${response.status}:`, errorText);
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
       return data.response;
     } catch (error) {
       console.error('AI API エラー:', error);
+      
+      // デバッグ用：エラーの詳細をアラート表示
+      alert(`API Error: ${error.message || error}`);
       
       // フォールバック：ローカル応答
       return new Promise((resolve) => {
@@ -106,19 +131,22 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
           <MemoChat
             pageId="inquiry"
             memoTitle="相談メモ"
-            memoPlaceholder={`相談したい内容や疑問点を自由にメモしてください...
+            memoPlaceholder={`思考整理のための個人的なメモスペースです。
+LLMには送信されません。
 
 例：
-- テーマが思いつかない
-- 目標設定で困っている
-- 活動内容がわからない
-- 研究方法について知りたい
-- 調査の進め方が分からない
-- 成果のまとめ方が分からない`}
+- 漠然とした悩みや疑問
+- 思いついたアイデア
+- 整理したい考え
+- 頭の中の整理
+- 個人的なメモ
+- 自分だけの覚書`}
             chatPlaceholder="相談内容を入力してください..."
             initialMessage="こんにちは！探究学習に関することでしたら、どんなことでもお気軽にご相談ください。
 
-左側のメモ欄に悩みや疑問を整理していただければ、より具体的なアドバイスができますよ！
+これまでの対話履歴を記憶していますので、継続的にサポートできます。
+
+左側のメモ欄はあなただけの思考整理スペースです。自由にお使いください。
 
 例えば以下のようなことでも構いません：
 • テーマが決まらない
