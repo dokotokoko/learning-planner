@@ -58,6 +58,7 @@ const StepPage: React.FC = () => {
   const [isStep2MemoOpen, setIsStep2MemoOpen] = useState(false);
   const [forceRefreshChat, setForceRefreshChat] = useState(false);
   const [previousStep, setPreviousStep] = useState(currentStep);
+  const [isInitializingAI, setIsInitializingAI] = useState(false); // AI初期化中の状態
   
   const [step1Theme, setStep1Theme] = useState(''); // Step1で入力した探究テーマ
   const [step2Theme, setStep2Theme] = useState(''); // Step2で考えた探究テーマ
@@ -78,56 +79,75 @@ const StepPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // ユーザーIDを取得
+        let userId = null;
+        const authData = localStorage.getItem('auth-storage');
+        if (authData) {
+          try {
+            const parsed = JSON.parse(authData);
+            if (parsed.state?.user?.id) {
+              userId = parsed.state.user.id;
+            }
+          } catch (e) {
+            console.error('認証データの解析に失敗:', e);
+          }
+        }
+
+        if (!userId) {
+          console.warn('ユーザーIDが見つかりません');
+          return;
+        }
+
         // Step1で保存されたテーマを読み込み
-        const savedTheme = localStorage.getItem('step-1-theme');
+        const savedTheme = localStorage.getItem(`user-${userId}-step-1-theme`);
         if (savedTheme && currentStep >= 2) {
           setTheme(savedTheme);
         }
         
         // Step2以降では、前のステップで保存されたテーマを読み込み
         if (currentStep === 3) {
-          const step2SavedTheme = localStorage.getItem('step-2-theme');
+          const step2SavedTheme = localStorage.getItem(`user-${userId}-step-2-theme`);
           if (step2SavedTheme) {
             setTheme(step2SavedTheme);
           }
         } else if (currentStep === 4) {
-          const step3SavedTheme = localStorage.getItem('step-3-theme');
+          const step3SavedTheme = localStorage.getItem(`user-${userId}-step-3-theme`);
           if (step3SavedTheme) {
             setTheme(step3SavedTheme);
           }
         }
         
         // 既存の作業内容を読み込み
-        const savedContent = localStorage.getItem(`step-${currentStep}-content`);
+        const savedContent = localStorage.getItem(`user-${userId}-step-${currentStep}-content`);
         if (savedContent) {
           setWorkContent(savedContent);
         }
         
         // 各ステップのテーマを読み込み
         if (currentStep === 1) {
-          const savedTheme = localStorage.getItem('step-1-theme');
+          const savedTheme = localStorage.getItem(`user-${userId}-step-1-theme`);
           if (savedTheme) {
             setStep1Theme(savedTheme);
           }
         } else if (currentStep === 2) {
-          const savedTheme = localStorage.getItem('step-2-theme');
+          const savedTheme = localStorage.getItem(`user-${userId}-step-2-theme`);
           if (savedTheme) {
             setStep2Theme(savedTheme);
           }
         } else if (currentStep === 3) {
-          const savedTheme = localStorage.getItem('step-3-theme');
+          const savedTheme = localStorage.getItem(`user-${userId}-step-3-theme`);
           if (savedTheme) {
             setStep3Theme(savedTheme);
           }
         } else if (currentStep === 4) {
-          const savedTheme = localStorage.getItem('step-4-theme');
+          const savedTheme = localStorage.getItem(`user-${userId}-step-4-theme`);
           if (savedTheme) {
             setStep4Theme(savedTheme);
           }
         }
         
         // 各ステップでの自動初期メッセージ送信をチェック
-        const autoMessageSent = localStorage.getItem(`step${currentStep}-auto-message-sent`);
+        const autoMessageSent = localStorage.getItem(`user-${userId}-step${currentStep}-auto-message-sent`);
         setHasStepAutoMessage(!!autoMessageSent);
       } catch (error) {
         console.error('データ読み込みエラー:', error);
@@ -143,6 +163,28 @@ const StepPage: React.FC = () => {
     if (currentStep >= 2 && theme && !hasStepAutoMessage) {
       const initStepAIChat = async () => {
         try {
+          setIsInitializingAI(true); // ローディング開始
+          
+          // ユーザーIDを取得
+          let userId = null;
+          const authData = localStorage.getItem('auth-storage');
+          if (authData) {
+            try {
+              const parsed = JSON.parse(authData);
+              if (parsed.state?.user?.id) {
+                userId = parsed.state.user.id;
+              }
+            } catch (e) {
+              console.error('認証データの解析に失敗:', e);
+            }
+          }
+
+          if (!userId) {
+            console.warn('ユーザーIDが見つかりません');
+            setIsInitializingAI(false);
+            return;
+          }
+
           let initialMessage = '';
           switch (currentStep) {
             case 2:
@@ -153,6 +195,16 @@ const StepPage: React.FC = () => {
               break;
             case 4:
               initialMessage = generateStep4InitialMessage(theme);
+              break;
+            case 5:
+              // Step5では全てのステップのテーマを取得
+              const allThemes = {
+                step1: localStorage.getItem(`user-${userId}-step-1-theme`) || '',
+                step2: localStorage.getItem(`user-${userId}-step-2-theme`) || '',
+                step3: localStorage.getItem(`user-${userId}-step-3-theme`) || '',
+                step4: localStorage.getItem(`user-${userId}-step-4-theme`) || ''
+              };
+              initialMessage = generateStep5InitialMessage(allThemes);
               break;
           }
           
@@ -166,12 +218,14 @@ const StepPage: React.FC = () => {
             ''
           );
           
-          // 自動メッセージ送信済みフラグを設定
-          localStorage.setItem(`step${currentStep}-auto-message-sent`, 'true');
-          localStorage.setItem(`step${currentStep}-initial-ai-response`, aiResponse);
+          // 自動メッセージ送信済みフラグを設定（ユーザー固有）
+          localStorage.setItem(`user-${userId}-step${currentStep}-auto-message-sent`, 'true');
+          localStorage.setItem(`user-${userId}-step${currentStep}-initial-ai-response`, aiResponse);
           setHasStepAutoMessage(true);
         } catch (error) {
           console.error(`Step${currentStep} AI初期化エラー:`, error);
+        } finally {
+          setIsInitializingAI(false); // ローディング終了
         }
       };
 
@@ -221,6 +275,32 @@ const StepPage: React.FC = () => {
 お気軽にお話しください！`;
   };
 
+  const generateStep5InitialMessage = (allThemes: { [key: string]: string }): string => {
+    const step1 = allThemes.step1 || '';
+    const step2 = allThemes.step2 || '';
+    const step3 = allThemes.step3 || '';
+    const step4 = allThemes.step4 || '';
+
+    return `素晴らしい！4つのステップを通じて、あなたの探究テーマが大きく成長しましたね。
+
+【テーマの進化の軌跡】
+🌱 Step1（最初の興味）: ${step1}
+🌿 Step2（深めた理解）: ${step2}
+🌳 Step3（自分事の問い）: ${step3}
+🌟 Step4（社会との繋がり）: ${step4}
+
+これまでの歩みを振り返って、探究学習をどのように進めていくかを整理しましょう。
+
+以下について一緒に考えてみませんか：
+
+1. この4つのステップを通じて、どのような気づきや変化がありましたか？
+2. 最終的なテーマで探究を始めるとしたら、まず何から取り組みますか？
+3. どのような人との対話や、どんな調査が必要だと思いますか？
+4. この探究を通じて、どのような成果物を作りたいですか？
+
+一緒に具体的なアクションプランを立てていきましょう！`;
+  };
+
   // AI応答の処理（FastAPI バックエンド経由）
   const handleAIMessage = async (message: string, workContent: string): Promise<string> => {
     try {
@@ -245,6 +325,14 @@ const StepPage: React.FC = () => {
       }
 
       // FastAPI バックエンドに接続
+      console.log('API呼び出し開始:', {
+        userId,
+        message: message.substring(0, 50) + '...',
+        page: `step_${currentStep}`,
+        currentStep,
+        theme: theme || '（未設定）'
+      });
+
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
@@ -261,10 +349,16 @@ const StepPage: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('API応答受信:', {
+        responseLength: data.response?.length || 0,
+        timestamp: data.timestamp
+      });
       return data.response;
     } catch (error) {
       console.error('AI API エラー:', error);
@@ -312,6 +406,18 @@ const StepPage: React.FC = () => {
                 response = `素晴らしい！社会への貢献意識が明確になってきましたね。\n\n実社会での応用可能性を考えてみましょう：\n• あなたの探究は、将来どのような職業や分野で活かせるでしょうか？\n• 実際に実現可能な取り組みとして、どのようなアクションが考えられますか？\n• この探究を継続的な社会貢献活動に発展させるには、どうすればよいでしょうか？\n\n具体的な実現方法を考えることで、探究の実践的価値が見えてきます。`;
               } else {
                 response = `「${message}」について、とても深く考えてくださっていますね。\n\n素晴らしいです！これまでの4つのステップを通じて、あなたの探究テーマ「${theme}」が：\n\n• 多角的な視点から深く考察され\n• あなた自身の経験や価値観と結びつき\n• 社会課題や他者への貢献と繋がる\n\n意義深いテーマに発展しました。\n\nワークスペースに最終的な「社会と繋がるテーマ」をまとめて、探究学習のスタート準備を完了させましょう！`;
+              }
+              break;
+            case 5:
+              // Step5での応答パターン - 探究パスの振り返り
+              if (message.includes('気づき') || message.includes('変化') || message.includes('成長')) {
+                response = `これまでの歩みを振り返っていただき、ありがとうございます。\n\nテーマが段階的に深化していく過程で得られた気づきは、探究学習の大きな成果ですね。\n\n次のステップとして考えてみましょう：\n• これらの気づきを活かして、どんな具体的なアクションから始めますか？\n• 探究を進める上で、どのような情報収集や調査が必要でしょうか？\n• 最終的にどのような成果物（レポート、プレゼン、提案書など）を作りたいですか？\n\n具体的なアクションプランを一緒に立てていきましょう！`;
+              } else if (message.includes('アクション') || message.includes('計画') || message.includes('進め方')) {
+                response = `具体的なアクションプランについて考えてくださっているのですね。素晴らしいです！\n\n効果的な探究を進めるために、以下の観点で整理してみましょう：\n\n📅 短期アクション（1-2週間）\n• 文献調査や情報収集\n• 関連するニュースや事例の整理\n• 基礎知識の習得\n\n📈 中期目標（1-3ヶ月）\n• 専門家や関係者へのインタビュー\n• フィールドワークや観察調査\n• 仮説の検証や分析\n\n🎯 長期ビジョン（半年-1年）\n• 成果物の作成と発表\n• 社会への提案や発信\n• 継続的な取り組みの計画\n\nどの段階から詳しく話してみたいですか？`;
+              } else if (message.includes('成果物') || message.includes('アウトプット') || message.includes('発表')) {
+                response = `成果物について考えてくださっているのですね！\n\n探究学習の成果を効果的に発信する方法は様々あります：\n\n📝 文書系\n• 研究レポートや論文\n• 提案書や政策提言\n• ブログやWebサイト\n\n🎤 発表系\n• プレゼンテーション\n• ポスターセッション\n• 動画やポッドキャスト\n\n🛠️ 実践系\n• プロトタイプやアプリ\n• イベントやワークショップの企画\n• 社会実験や実証実験\n\nあなたの探究テーマと目標に最も適した成果物はどれだと思いますか？\n\nターゲットとなる人々（同世代、専門家、社会など）も考慮して選んでみましょう！`;
+              } else {
+                response = `「${message}」についてお聞かせいただき、ありがとうございます。\n\n探究学習は、テーマを決めることがゴールではなく、むしろここからが本当のスタートですね。\n\nこれまでの4つのステップで築き上げたテーマをもとに、実際の学習と研究をどう進めるかが重要です。\n\n以下について、もう少し詳しく話してみませんか：\n• 探究を進める上での不安や心配事\n• 必要なサポートやリソース\n• 一人で進めるか、チームで取り組むか\n• どのくらいの期間をかけて探究したいか\n\n一緒に実現可能で充実した探究プランを作り上げましょう！`;
               }
               break;
             default:
@@ -430,6 +536,32 @@ AIアシスタントが社会との繋がりを見つけることをサポート
       aiButtonText: 'AI',
       initialMessage: '', // 動的に設定される
     },
+    5: {
+      title: 'Step 5: 探究パスの振り返り',
+      description: '各ステップでの言語化を振り返り、探究学習の進め方をまとめましょう',
+      workPlaceholder: `探究学習のパスとアクションプランをまとめてください...
+
+【振り返りガイド】
+■ テーマの進化を確認
+• Step1から4までのテーマの変化
+• 各ステップでの気づきや発見
+• 最終テーマの意義と価値
+
+■ 探究の道筋
+• 何から始めるか（具体的な第一歩）
+• どんな調査や研究が必要か
+• どんな人との対話が有効か
+• 成果物として何を作るか
+
+■ アクションプラン
+• 短期的なアクション（1-2週間）
+• 中期的な目標（1-3ヶ月）
+• 長期的なビジョン（半年-1年）
+
+AIがパスの整理と次のアクションの提案をサポートします。`,
+      aiButtonText: 'パス整理AI',
+      initialMessage: '', // 動的に設定される
+    },
   };
 
   const content = stepContent[currentStep as keyof typeof stepContent];
@@ -437,10 +569,29 @@ AIアシスタントが社会との繋がりを見つけることをサポート
   // データ保存処理
   const handleSave = async () => {
     try {
-      // LocalStorageに保存
-      localStorage.setItem(`step-${currentStep}-content`, workContent);
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (!userId) {
+        setError('ユーザーIDが見つかりません。再ログインしてください。');
+        return;
+      }
+
+      // LocalStorageに保存（ユーザー固有）
+      localStorage.setItem(`user-${userId}-step-${currentStep}-content`, workContent);
       // TODO: Supabaseに保存
-      console.log(`Step ${currentStep} saved:`, workContent);
+      console.log(`Step ${currentStep} saved for user ${userId}:`, workContent);
       setSavedSuccessfully(true);
       setTimeout(() => setSavedSuccessfully(false), 3000);
     } catch (error) {
@@ -451,27 +602,46 @@ AIアシスタントが社会との繋がりを見つけることをサポート
 
   // ナビゲーション
   const handleNext = () => {
+    // ユーザーIDを取得
+    let userId = null;
+    const authData = localStorage.getItem('auth-storage');
+    if (authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        if (parsed.state?.user?.id) {
+          userId = parsed.state.user.id;
+        }
+      } catch (e) {
+        console.error('認証データの解析に失敗:', e);
+      }
+    }
+
+    if (!userId) {
+      setError('ユーザーIDが見つかりません。再ログインしてください。');
+      return;
+    }
+
     // 各ステップでテーマの入力をチェック
     if (currentStep === 1) {
       if (!step1Theme.trim()) {
         setError('探究テーマを入力してから次へ進んでください');
         return;
       }
-      // テーマを保存
-      localStorage.setItem('step-1-theme', step1Theme);
+      // テーマを保存（ユーザー固有）
+      localStorage.setItem(`user-${userId}-step-1-theme`, step1Theme);
       setTheme(step1Theme);
       // Step2の自動メッセージフラグをリセット
-      localStorage.removeItem('step2-auto-message-sent');
+      localStorage.removeItem(`user-${userId}-step2-auto-message-sent`);
     } else if (currentStep === 2) {
       if (!step2Theme.trim()) {
         setError('このステップで考えた探究テーマを入力してから次へ進んでください');
         return;
       }
-      // Step2のテーマを保存
-      localStorage.setItem('step-2-theme', step2Theme);
+      // Step2のテーマを保存（ユーザー固有）
+      localStorage.setItem(`user-${userId}-step-2-theme`, step2Theme);
       setTheme(step2Theme);
       // Step3の自動メッセージフラグをリセット
-      localStorage.removeItem('step3-auto-message-sent');
+      localStorage.removeItem(`user-${userId}-step3-auto-message-sent`);
       // 現在のフラグもリセット
       setHasStepAutoMessage(false);
     } else if (currentStep === 3) {
@@ -479,11 +649,11 @@ AIアシスタントが社会との繋がりを見つけることをサポート
         setError('このステップで考えた探究テーマを入力してから次へ進んでください');
         return;
       }
-      // Step3のテーマを保存
-      localStorage.setItem('step-3-theme', step3Theme);
+      // Step3のテーマを保存（ユーザー固有）
+      localStorage.setItem(`user-${userId}-step-3-theme`, step3Theme);
       setTheme(step3Theme);
       // Step4の自動メッセージフラグをリセット
-      localStorage.removeItem('step4-auto-message-sent');
+      localStorage.removeItem(`user-${userId}-step4-auto-message-sent`);
       // 現在のフラグもリセット
       setHasStepAutoMessage(false);
     } else if (currentStep === 4) {
@@ -491,9 +661,13 @@ AIアシスタントが社会との繋がりを見つけることをサポート
         setError('最終的な探究テーマを入力してから完了してください');
         return;
       }
-      // Step4のテーマを保存
-      localStorage.setItem('step-4-theme', step4Theme);
-      // Step4の場合、ホームに戻る
+      // Step4のテーマを保存（ユーザー固有）
+      localStorage.setItem(`user-${userId}-step-4-theme`, step4Theme);
+      // Step5の振り返りページに遷移
+      navigate('/step/5');
+      return;
+    } else if (currentStep === 5) {
+      // Step5の場合、探究パスの振り返りを完了してホームに戻る
       navigate('/home');
       return;
     }
@@ -501,7 +675,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
     // 現在の内容を保存してから次へ
     handleSave();
     
-    if (currentStep < 4) {
+    if (currentStep < 5) {
       navigate(`/step/${currentStep + 1}`);
     }
   };
@@ -559,7 +733,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             sx={{
               height: '100%',
               backgroundColor: 'primary.main',
-              width: `${(currentStep / 4) * 100}%`,
+              width: `${(currentStep / 5) * 100}%`,
               transition: 'width 0.3s ease',
             }}
           />
@@ -935,30 +1109,70 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             onSave={handleSave}
             onMessageSend={handleAIMessage}
             initialMessage={(() => {
-              if (!theme) return 'Step1で探究テーマを設定してから進んでください。';
+              if (!theme && currentStep !== 5) return 'Step1で探究テーマを設定してから進んでください。';
               switch (currentStep) {
                 case 2: return generateStep2InitialMessage(theme);
                 case 3: return generateStep3InitialMessage(theme);
                 case 4: return generateStep4InitialMessage(theme);
+                case 5: 
+                  // Step5では全てのステップのテーマを取得
+                  const authData = localStorage.getItem('auth-storage');
+                  let userId = null;
+                  if (authData) {
+                    try {
+                      const parsed = JSON.parse(authData);
+                      if (parsed.state?.user?.id) {
+                        userId = parsed.state.user.id;
+                      }
+                    } catch (e) {
+                      console.error('認証データの解析に失敗:', e);
+                    }
+                  }
+                  if (userId) {
+                    const allThemes = {
+                      step1: localStorage.getItem(`user-${userId}-step-1-theme`) || '',
+                      step2: localStorage.getItem(`user-${userId}-step-2-theme`) || '',
+                      step3: localStorage.getItem(`user-${userId}-step-3-theme`) || '',
+                      step4: localStorage.getItem(`user-${userId}-step-4-theme`) || ''
+                    };
+                    return generateStep5InitialMessage(allThemes);
+                  }
+                  return 'Step1-4を完了してから進んでください。';
                 default: return '';
               }
             })()}
-            initialAIResponse={localStorage.getItem(`step${currentStep}-initial-ai-response`) || undefined}
+            initialAIResponse={(() => {
+              const authData = localStorage.getItem('auth-storage');
+              let userId = null;
+              if (authData) {
+                try {
+                  const parsed = JSON.parse(authData);
+                  if (parsed.state?.user?.id) {
+                    userId = parsed.state.user.id;
+                  }
+                } catch (e) {
+                  console.error('認証データの解析に失敗:', e);
+                }
+              }
+              return userId ? localStorage.getItem(`user-${userId}-step${currentStep}-initial-ai-response`) || undefined : undefined;
+            })()}
             aiButtonText={content?.aiButtonText}
             isAIOpen={isMemoOpen}
             onAIOpenChange={setIsMemoOpen}
             showFabButton={false}
             useAIChat={currentStep >= 2} // Step2以降でAIChatを使用
-            autoStartAI={currentStep >= 2 && !!theme} // Step2以降でテーマがある場合に自動開始
+            autoStartAI={currentStep >= 2} // Step2以降で自動開始（Step5は常に開始）
             isMemoOpen={isStep2MemoOpen} // メモ帳状態
             onMemoOpenChange={setIsStep2MemoOpen} // メモ帳状態変更
             forceRefreshChat={forceRefreshChat} // チャット強制リフレッシュ
+            isInitializingAI={isInitializingAI} // AI初期化中のローディング状態
             currentStep={currentStep} // 現在のステップ
             stepTheme={(() => {
               switch (currentStep) {
                 case 2: return step2Theme;
                 case 3: return step3Theme;
                 case 4: return step4Theme;
+                case 5: return ''; // Step5ではテーマ入力は不要
                 default: return '';
               }
             })()} // ステップのテーマ
@@ -967,6 +1181,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                 case 2: setStep2Theme(theme); break;
                 case 3: setStep3Theme(theme); break;
                 case 4: setStep4Theme(theme); break;
+                case 5: break; // Step5ではテーマ変更は不要
               }
             }} // ステップのテーマ変更
             // ナビゲーション関連
@@ -974,7 +1189,11 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             onPrevious={handlePrevious}
             showPrevious={currentStep > 1}
             showNext={true}
-            nextButtonText={currentStep < 4 ? '次へ' : '完了'}
+            nextButtonText={
+              currentStep === 4 ? '次へ（振り返り）' : 
+              currentStep === 5 ? '振り返り完了' : 
+              '次へ'
+            }
           />
         )}
       </Box>

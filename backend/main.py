@@ -104,6 +104,15 @@ class MemoResponse(BaseModel):
     content: str
     updated_at: str
 
+class StepTheme(BaseModel):
+    step: int
+    theme: str
+    content: Optional[str] = None
+
+class LearningPathResponse(BaseModel):
+    themes: List[StepTheme]
+    chat_history: List[str]
+
 # グローバル変数
 db_manager = None
 llm_client = None
@@ -115,6 +124,13 @@ async def startup_event():
     try:
         # DB・LLMの両方を有効化
         db_manager = DBManager()  # DB有効化
+        logger.info("DBManager初期化完了")
+        
+        # テーブル存在確認
+        db_manager.cur.execute("SHOW TABLES LIKE 'chat_logs'")
+        chat_logs_exists = db_manager.cur.fetchone()
+        logger.info(f"chat_logsテーブル存在: {bool(chat_logs_exists)}")
+        
         llm_client = learning_plannner()  # LLM有効化
         logger.info("FastAPIサーバーが起動しました（DB・LLM有効モード）")
     except Exception as e:
@@ -382,25 +398,35 @@ async def chat_with_ai(
         logger.info(f"最終的なメッセージ数: {len(messages)}")
         
         # ユーザーメッセージをDBに保存
-        db_manager.save_chat_message(
-            user_id=current_user,
-            page=chat_data.page or "general",
-            sender="user",
-            message=chat_data.message,
-            context_data=json.dumps(context_data, ensure_ascii=False) if context_data else None
-        )
+        try:
+            # streamlit_api.pyスタイルの簡潔な保存も試行
+            user_message_id = db_manager.save_chat_log(
+                user_id=current_user,
+                page=chat_data.page or "general",
+                sender="user",
+                message_content=chat_data.message
+            )
+            logger.info(f"ユーザーメッセージ保存完了 - ID: {user_message_id}")
+        except Exception as e:
+            logger.error(f"ユーザーメッセージ保存失敗: {e}")
+            # 保存に失敗してもチャットは続行
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
+        logger.info(f"LLM応答生成完了 - 長さ: {len(response)}")
         
         # AIの応答をDBに保存
-        db_manager.save_chat_message(
-            user_id=current_user,
-            page=chat_data.page or "general",
-            sender="assistant",
-            message=response,
-            context_data=None
-        )
+        try:
+            ai_message_id = db_manager.save_chat_log(
+                user_id=current_user,
+                page=chat_data.page or "general",
+                sender="assistant",
+                message_content=response
+            )
+            logger.info(f"AI応答保存完了 - ID: {ai_message_id}")
+        except Exception as e:
+            logger.error(f"AI応答保存失敗: {e}")
+            # 保存に失敗してもレスポンスは返す
         
         return ChatResponse(
             response=response,
@@ -559,6 +585,49 @@ async def delete_memo(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="メモの削除でエラーが発生しました"
+        )
+
+@app.get("/learning-path/reflection", response_model=LearningPathResponse)
+async def get_learning_path_reflection(current_user: int = Depends(get_current_user)):
+    """探究パスの振り返りデータを取得"""
+    try:
+        if db_manager is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="データベースマネージャーが初期化されていません"
+            )
+        
+        # 各ステップのメモを取得
+        themes = []
+        for step in range(1, 5):  # Step1-4
+            memo_data = db_manager.get_memo(current_user, f"step-{step}")
+            content = memo_data[2] if memo_data else None
+            
+            # ローカルストレージからテーマを取得する部分はフロントエンド側で処理
+            themes.append(StepTheme(
+                step=step,
+                theme="",  # フロントエンド側で設定
+                content=content
+            ))
+        
+        # 各ステップのチャット履歴を取得
+        chat_history = []
+        for step in range(1, 5):
+            step_history = db_manager.get_page_chat_history(current_user, f"step-{step}")
+            for item in step_history:
+                if item[2] == "assistant":  # AIの応答のみ
+                    chat_history.append(f"Step{step}: {item[3][:100]}...")  # 最初の100文字
+        
+        return LearningPathResponse(
+            themes=themes,
+            chat_history=chat_history[:20]  # 最新20件
+        )
+        
+    except Exception as e:
+        logger.error(f"探究パス振り返りデータ取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="探究パス振り返りデータの取得でエラーが発生しました"
         )
 
 if __name__ == "__main__":

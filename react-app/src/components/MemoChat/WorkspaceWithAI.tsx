@@ -13,6 +13,8 @@ import {
   Stack,
   Alert,
   Paper,
+  CircularProgress,
+  Backdrop,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -49,6 +51,7 @@ interface WorkspaceWithAIProps {
   stepTheme?: string; // ステップのテーマ
   onStepThemeChange?: (theme: string) => void; // ステップのテーマ変更
   forceRefreshChat?: boolean; // チャットを強制リフレッシュ
+  isInitializingAI?: boolean; // AI初期化中のローディング状態
   // ナビゲーション関連
   onNext?: () => void;
   onPrevious?: () => void;
@@ -80,6 +83,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   stepTheme = '',
   onStepThemeChange,
   forceRefreshChat = false,
+  isInitializingAI = false,
   // ナビゲーション関連
   onNext,
   onPrevious,
@@ -140,24 +144,73 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
     const [memoContent, setMemoContent] = useState('');
     const [memoSaved, setMemoSaved] = useState(false);
 
-    // メモの保存
+    // メモの保存（ユーザー固有）
     const handleSaveMemo = () => {
-      localStorage.setItem(`memo-${pageId}`, memoContent);
-      setMemoSaved(true);
-      setTimeout(() => setMemoSaved(false), 2000);
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (userId) {
+        localStorage.setItem(`user-${userId}-memo-${pageId}`, memoContent);
+        setMemoSaved(true);
+        setTimeout(() => setMemoSaved(false), 2000);
+      }
     };
 
-    // メモのクリア
+    // メモのクリア（ユーザー固有）
     const handleClearMemo = () => {
       setMemoContent('');
-      localStorage.removeItem(`memo-${pageId}`);
+      
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (userId) {
+        localStorage.removeItem(`user-${userId}-memo-${pageId}`);
+      }
     };
 
-    // 初期ロード
+    // 初期ロード（ユーザー固有）
     useEffect(() => {
-      const savedMemo = localStorage.getItem(`memo-${pageId}`);
-      if (savedMemo) {
-        setMemoContent(savedMemo);
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (userId) {
+        const savedMemo = localStorage.getItem(`user-${userId}-memo-${pageId}`);
+        if (savedMemo) {
+          setMemoContent(savedMemo);
+        }
       }
     }, [pageId]);
 
@@ -266,31 +319,49 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
         {!isAIOpen && (
           <>
             {useAIChat ? (
-              // Step2の場合：AI対話開始を促すメッセージ
+              // Step2の場合：AI対話開始を促すメッセージまたはAI初期化中
               <Box sx={{ 
                 height: '100%', 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center',
-                p: 3
+                p: 3,
+                position: 'relative'
               }}>
-                <Box sx={{ textAlign: 'center', maxWidth: 600 }}>
-                  <Typography variant="h5" gutterBottom>
-                    AIとの対話を開始しましょう
-                  </Typography>
-                  <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
-                    右下のボタンからAIとの対話を開始して、探究テーマを深く考察していきましょう。
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    startIcon={<ChatIcon />}
-                    onClick={handleOpenAI}
-                    sx={{ minWidth: 200 }}
-                  >
-                    対話を開始する
-                  </Button>
-                </Box>
+                {isInitializingAI ? (
+                  // AI初期化中のローディング表示
+                  <Box sx={{ textAlign: 'center', maxWidth: 600 }}>
+                    <CircularProgress size={60} sx={{ mb: 3 }} />
+                    <Typography variant="h5" gutterBottom>
+                      AIアシスタントを準備中...
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+                      あなたの探究テーマについて考察するため、AIアシスタントが初期設定を行っています。
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      しばらくお待ちください...
+                    </Typography>
+                  </Box>
+                ) : (
+                  // 通常のAI対話開始を促すメッセージ
+                  <Box sx={{ textAlign: 'center', maxWidth: 600 }}>
+                    <Typography variant="h5" gutterBottom>
+                      AIとの対話を開始しましょう
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+                      右下のボタンからAIとの対話を開始して、探究テーマを深く考察していきましょう。
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      startIcon={<ChatIcon />}
+                      onClick={handleOpenAI}
+                      sx={{ minWidth: 200 }}
+                    >
+                      対話を開始する
+                    </Button>
+                  </Box>
+                )}
               </Box>
             ) : (
               // Step3,4の場合：フルスクリーンワークスペース
@@ -375,6 +446,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                       showMemoButton={true}
                       hideMemoButton={true}
                       forceRefresh={forceRefreshChat}
+                      isInitializing={isInitializingAI}
                     />
                     </Panel>
 
@@ -412,13 +484,70 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                       showMemoButton={true}
                       hideMemoButton={false}
                       forceRefresh={forceRefreshChat}
+                      isInitializing={isInitializingAI}
                     />
                   </Box>
                 )}
                 </Box>
 
-                {/* テーマ入力エリア（Step2以降） */}
-                {currentStep >= 2 && (
+                {/* Step5専用: テーマの進化を表示 */}
+                {currentStep === 5 && (
+                  <Box sx={{ mb: 3, p: 3, backgroundColor: 'background.default', borderRadius: 1 }}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      🌱 テーマの進化の軌跡
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      {(() => {
+                        // ユーザーIDを取得
+                        let userId = null;
+                        const authData = localStorage.getItem('auth-storage');
+                        if (authData) {
+                          try {
+                            const parsed = JSON.parse(authData);
+                            if (parsed.state?.user?.id) {
+                              userId = parsed.state.user.id;
+                            }
+                          } catch (e) {
+                            console.error('認証データの解析に失敗:', e);
+                          }
+                        }
+
+                        if (!userId) return <Typography variant="body2" color="text.secondary">テーマ情報を読み込めませんでした</Typography>;
+
+                        const step1Theme = localStorage.getItem(`user-${userId}-step-1-theme`) || '';
+                        const step2Theme = localStorage.getItem(`user-${userId}-step-2-theme`) || '';
+                        const step3Theme = localStorage.getItem(`user-${userId}-step-3-theme`) || '';
+                        const step4Theme = localStorage.getItem(`user-${userId}-step-4-theme`) || '';
+
+                        const themes = [
+                          { step: 1, emoji: '🌱', title: 'Step1（最初の興味）', theme: step1Theme },
+                          { step: 2, emoji: '🌿', title: 'Step2（深めた理解）', theme: step2Theme },
+                          { step: 3, emoji: '🌳', title: 'Step3（自分事の問い）', theme: step3Theme },
+                          { step: 4, emoji: '🌟', title: 'Step4（社会との繋がり）', theme: step4Theme }
+                        ];
+
+                        return themes.map((item, index) => (
+                          <Box key={item.step} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                            <Typography variant="h6" sx={{ minWidth: 24, textAlign: 'center' }}>
+                              {item.emoji}
+                            </Typography>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                {item.title}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                {item.theme || '未設定'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ));
+                      })()}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* テーマ入力エリア（Step2-4） */}
+                {currentStep >= 2 && currentStep <= 4 && (
                   <Box 
                     sx={{ 
                       p: 3, 

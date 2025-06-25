@@ -43,6 +43,7 @@ interface AIChatProps {
   hideMemoButton?: boolean; // メモ帳ボタンを隠すか（メモ帳が開いているときなど）
   forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
   loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
+  isInitializing?: boolean; // 初期化中かどうか（外部から制御）
 }
 
 const AIChat: React.FC<AIChatProps> = ({
@@ -59,6 +60,7 @@ const AIChat: React.FC<AIChatProps> = ({
   hideMemoButton = false,
   forceRefresh = false,
   loadHistoryFromDB = true,
+  isInitializing = false,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -134,25 +136,42 @@ const AIChat: React.FC<AIChatProps> = ({
       
       const initialMessages: Message[] = [];
       
-      // Step2以降の場合、LocalStorageから初期AI応答を取得
+      // Step2以降の場合、LocalStorageから初期AI応答を取得（ユーザー固有）
       if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
         const stepNumber = pageId.replace('step-', '');
-        const savedInitialResponse = localStorage.getItem(`step${stepNumber}-initial-ai-response`);
-        if (savedInitialResponse) {
-          initialMessages.push({
-            id: `initial-response-${Date.now()}`,
-            role: 'assistant',
-            content: savedInitialResponse,
-            timestamp: new Date(),
-          });
-        } else if (initialAIResponse) {
-          // LocalStorageにない場合は、propsから設定
-          initialMessages.push({
-            id: `initial-response-${Date.now()}`,
-            role: 'assistant',
-            content: initialAIResponse,
-            timestamp: new Date(),
-          });
+        
+        // ユーザーIDを取得
+        let userId = null;
+        const authData = localStorage.getItem('auth-storage');
+        if (authData) {
+          try {
+            const parsed = JSON.parse(authData);
+            if (parsed.state?.user?.id) {
+              userId = parsed.state.user.id;
+            }
+          } catch (e) {
+            console.error('認証データの解析に失敗:', e);
+          }
+        }
+
+        if (userId) {
+          const savedInitialResponse = localStorage.getItem(`user-${userId}-step${stepNumber}-initial-ai-response`);
+          if (savedInitialResponse) {
+            initialMessages.push({
+              id: `initial-response-${Date.now()}`,
+              role: 'assistant',
+              content: savedInitialResponse,
+              timestamp: new Date(),
+            });
+          } else if (initialAIResponse) {
+            // LocalStorageにない場合は、propsから設定
+            initialMessages.push({
+              id: `initial-response-${Date.now()}`,
+              role: 'assistant',
+              content: initialAIResponse,
+              timestamp: new Date(),
+            });
+          }
         }
       } else if (initialMessage) {
         // 他のページでは初期メッセージを使用
@@ -312,6 +331,28 @@ const AIChat: React.FC<AIChatProps> = ({
         p: 1,
       }}>
         <List sx={{ py: 0 }}>
+          {/* 初期化中の特別なローディング表示 */}
+          {isInitializing && messages.length === 0 && (
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              minHeight: '300px',
+              p: 3
+            }}>
+              <CircularProgress size={40} sx={{ mb: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                AIアシスタントが準備中です
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                あなたの探究テーマについて考察するため、<br/>
+                AIアシスタントが初期設定を行っています
+              </Typography>
+            </Box>
+          )}
+          
           <AnimatePresence>
             {messages.map((message) => (
               <motion.div

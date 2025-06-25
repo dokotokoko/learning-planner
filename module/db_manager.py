@@ -370,12 +370,34 @@ class DBManager:
     # 対話履歴を保存する関数
     def save_chat_message(self, user_id, page: str, sender: str, message: str, context_data: str = None):
         """対話メッセージをデータベースに保存"""
-        self.cur.execute("""
-            INSERT INTO chat_logs(user_id, page, sender, message, context_data) 
-            VALUES(%s, %s, %s, %s, %s)
-        """, (user_id, page, sender, message, context_data))
-        self.con.commit()
-        return self.cur.lastrowid
+        try:
+            logging.info(f"対話履歴保存開始 - user_id: {user_id}, page: {page}, sender: {sender}, message: {message[:50]}...")
+            self.cur.execute("""
+                INSERT INTO chat_logs(user_id, page, sender, message, context_data) 
+                VALUES(%s, %s, %s, %s, %s)
+            """, (user_id, page, sender, message, context_data))
+            self.con.commit()
+            lastrowid = self.cur.lastrowid
+            logging.info(f"対話履歴保存完了 - ID: {lastrowid}")
+            return lastrowid
+        except Exception as e:
+            logging.error(f"対話履歴保存エラー - user_id: {user_id}, page: {page}, sender: {sender}, error: {e}")
+            raise
+
+    # streamlit_api.pyスタイルの簡潔な保存メソッド
+    def save_chat_log(self, user_id, page: str, sender: str, message_content: str):
+        """チャットログをデータベースに保存（streamlit_api.pyスタイル）"""
+        try:
+            self.cur.execute("""
+                INSERT INTO chat_logs(user_id, page, sender, message) 
+                VALUES(%s, %s, %s, %s)
+            """, (user_id, page, sender, message_content))
+            self.con.commit()
+            logging.info(f"チャットログ保存成功 - user_id: {user_id}, page: {page}, sender: {sender}")
+            return self.cur.lastrowid
+        except Exception as e:
+            logging.error(f"チャットログ保存エラー: {e}", exc_info=True)
+            raise
 
     # ユーザーの全対話履歴を取得する関数
     def get_user_chat_history(self, user_id, limit: int = None):

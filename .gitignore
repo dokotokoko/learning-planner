@@ -127,4 +127,9 @@ Thumbs.db
 
 # ローカル設定
 *.local
-    
+
+# TOML設定ファイル
+*.toml
+
+# Streamlit
+.streamlit/

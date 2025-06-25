@@ -5,7 +5,8 @@ import {
   TipsAndUpdates, 
   Forum, 
   QuestionAnswer, 
-  ConnectWithoutContact 
+  ConnectWithoutContact,
+  Summarize 
 } from '@mui/icons-material';
 
 interface StepProgressBarProps {
@@ -46,6 +47,12 @@ const steps: StepData[] = [
     label: 'Step 4',
     title: '社会と繋がる',
     icon: <ConnectWithoutContact />,
+  },
+  {
+    number: 5,
+    label: 'Step 5',
+    title: '探究パス振り返り',
+    icon: <Summarize />,
   },
 ];
 

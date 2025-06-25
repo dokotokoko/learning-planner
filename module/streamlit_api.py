@@ -279,17 +279,17 @@ class StreamlitApp:
         st.write("上記のメモとAIとの対話を参考に、最終的な学習目標を入力してください。")
         
         # 最終目標を保存するテキストエリア
-            if 'final_goal' not in st.session_state:
-                st.session_state.final_goal = ""
-            
-            final_goal_input = st.text_area(
-            "学習目標を入力してください",
-                value=st.session_state.final_goal, 
-                key="final_goal_text_area",
-            height=120,
-            help="AIとの対話とメモを踏まえて、あなたの探究学習の目標を明確に記述してください"
-            )
+        if 'final_goal' not in st.session_state:
+            st.session_state.final_goal = ""
         
+        final_goal_input = st.text_area(
+        "学習目標を入力してください",
+            value=st.session_state.final_goal, 
+            key="final_goal_text_area",
+        height=120,
+        help="AIとの対話とメモを踏まえて、あなたの探究学習の目標を明確に記述してください"
+        )
+    
         # テキストエリアの内容が変更されたらセッションに保存
         if final_goal_input != st.session_state.final_goal:
             st.session_state.final_goal = final_goal_input
@@ -398,17 +398,17 @@ class StreamlitApp:
         st.write("上記のメモとAIとの対話を参考に、具体的な活動計画を入力してください。")
         
         # 学習計画を保存するテキストエリア
-            if 'learning_plan' not in st.session_state:
-                st.session_state.learning_plan = ""
-            
-            learning_plan_input = st.text_area(
-            "活動計画を入力してください", 
-                value=st.session_state.learning_plan, 
-                key="learning_plan_text_area",
-            height=120,
-            help="AIとの対話とメモを踏まえて、あなたの探究学習の具体的な活動内容を明確に記述してください"
-            )
+        if 'learning_plan' not in st.session_state:
+            st.session_state.learning_plan = ""
         
+        learning_plan_input = st.text_area(
+        "活動計画を入力してください", 
+            value=st.session_state.learning_plan, 
+            key="learning_plan_text_area",
+        height=120,
+        help="AIとの対話とメモを踏まえて、あなたの探究学習の具体的な活動内容を明確に記述してください"
+        )
+    
         # テキストエリアの内容が変更されたらセッションに保存
         if learning_plan_input != st.session_state.learning_plan:
             st.session_state.learning_plan = learning_plan_input
@@ -1491,7 +1491,7 @@ class StreamlitApp:
         self.save_chat_log(page="inquiry", sender="AI", message_content=response)
         
         # ページを再読み込み
-                    st.rerun()
+        st.rerun()
 
     def navigate_to_step1(self):
         """Step1に移動"""
