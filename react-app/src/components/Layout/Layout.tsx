@@ -23,10 +23,7 @@ import {
 import {
   Menu as MenuIcon,
   Home,
-  LooksOne,
-  LooksTwo,
-  Looks3,
-  Looks4,
+  TipsAndUpdates,
   QuestionAnswer,
   Logout,
   DarkMode,
@@ -38,6 +35,17 @@ import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
 
 const drawerWidth = 280;
+const collapsedDrawerWidth = 64;
+
+interface LayoutContextType {
+  sidebarOpen: boolean;
+  onSidebarToggle: () => void;
+}
+
+export const LayoutContext = React.createContext<LayoutContextType>({
+  sidebarOpen: true,
+  onSidebarToggle: () => {},
+});
 
 const Layout: React.FC = () => {
   const navigate = useNavigate();
@@ -49,10 +57,15 @@ const Layout: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useThemeStore();
   
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
+  };
+
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -70,23 +83,36 @@ const Layout: React.FC = () => {
   };
 
   const menuItems = [
-    { text: 'ホーム', icon: <Home />, path: '/' },
-    { text: 'Step 1: テーマ設定', icon: <LooksOne />, path: '/step/1' },
-    { text: 'Step 2: ゴール設定', icon: <LooksTwo />, path: '/step/2' },
-    { text: 'Step 3: アイディエーション', icon: <Looks3 />, path: '/step/3' },
-    { text: 'Step 4: まとめ', icon: <Looks4 />, path: '/step/4' },
-    { text: 'なんでも相談窓口', icon: <QuestionAnswer />, path: '/inquiry' },
+    { text: 'ホーム', icon: <Home />, path: '/home' },
+    { text: 'テーマ設定', icon: <TipsAndUpdates />, path: '/step/1' },
+    { text: 'AI相談', icon: <QuestionAnswer />, path: '/inquiry' },
   ];
 
-  const drawer = (
+  // 展開状態のサイドバー
+  const fullDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
         <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
           探Qメイト
         </Typography>
         <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
           探究学習支援アプリ
         </Typography>
+          </Box>
+          <IconButton
+            onClick={handleSidebarToggle}
+            sx={{
+              color: 'white',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              },
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       <List sx={{ flex: 1, px: 1 }}>
@@ -145,14 +171,84 @@ const Layout: React.FC = () => {
     </Box>
   );
 
+  // 縮小状態のサイドバー
+  const collapsedDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ 
+        p: 1.5, 
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        justifyContent: 'center',
+      }}>
+        <IconButton
+          onClick={handleSidebarToggle}
+          sx={{
+            color: 'white',
+            '&:hover': {
+              backgroundColor: 'rgba(255,255,255,0.1)',
+            },
+          }}
+        >
+          <MenuIcon />
+        </IconButton>
+      </Box>
+
+      <List sx={{ flex: 1, px: 0.5 }}>
+        {menuItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => navigate(item.path)}
+              sx={{
+                borderRadius: 2,
+                justifyContent: 'center',
+                minHeight: 48,
+                '&.Mui-selected': {
+                  background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                  color: 'white',
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  background: 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 'auto', justifyContent: 'center' }}>
+                {item.icon}
+              </ListItemIcon>
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+      
+      <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+          {user?.username?.charAt(0).toUpperCase()}
+        </Avatar>
+      </Box>
+    </Box>
+  );
+
   return (
+    <LayoutContext.Provider value={{ sidebarOpen, onSidebarToggle: handleSidebarToggle }}>
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* AppBar */}
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+            width: { 
+              xs: '100%',
+              md: sidebarOpen ? `calc(100% - ${drawerWidth}px)` : `calc(100% - ${collapsedDrawerWidth}px)`
+            },
+            ml: { 
+              xs: 0,
+              md: sidebarOpen ? `${drawerWidth}px` : `${collapsedDrawerWidth}px`
+            },
+            transition: 'width 0.3s ease, margin-left 0.3s ease',
           background: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',
           color: 'text.primary',
@@ -186,7 +282,14 @@ const Layout: React.FC = () => {
       {/* Drawer */}
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+          sx={{ 
+            width: { 
+              xs: 0,
+              md: sidebarOpen ? drawerWidth : collapsedDrawerWidth
+            },
+            flexShrink: { md: 0 },
+            transition: 'width 0.3s ease',
+          }}
       >
         <Drawer
           variant="temporary"
@@ -201,7 +304,7 @@ const Layout: React.FC = () => {
             },
           }}
         >
-          {drawer}
+            {fullDrawer}
         </Drawer>
         
         <Drawer
@@ -210,14 +313,16 @@ const Layout: React.FC = () => {
             display: { xs: 'none', md: 'block' },
             '& .MuiDrawer-paper': { 
               boxSizing: 'border-box', 
-              width: drawerWidth,
+                width: sidebarOpen ? drawerWidth : collapsedDrawerWidth,
               border: 'none',
               boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+                transition: 'width 0.3s ease',
+                overflowX: 'hidden',
             },
           }}
           open
         >
-          {drawer}
+            {sidebarOpen ? fullDrawer : collapsedDrawer}
         </Drawer>
       </Box>
 
@@ -226,9 +331,13 @@ const Layout: React.FC = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+            width: { 
+              xs: '100%',
+              md: sidebarOpen ? `calc(100% - ${drawerWidth}px)` : `calc(100% - ${collapsedDrawerWidth}px)`
+            },
           minHeight: '100vh',
           pt: '64px', // AppBar height
+            transition: 'width 0.3s ease',
         }}
       >
         <motion.div
@@ -258,6 +367,7 @@ const Layout: React.FC = () => {
         </MenuItem>
       </Menu>
     </Box>
+    </LayoutContext.Provider>
   );
 };
 

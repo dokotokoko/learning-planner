@@ -13,47 +13,92 @@ AIを活用した探究学習支援アプリケーションです。探究テー
 
 ## 技術仕様
 
+### フロントエンド
+- **React 18 + TypeScript**: モダンなSPAフレームワーク
+- **Material-UI (MUI) v5**: 洗練されたUIコンポーネント
+- **Framer Motion**: スムーズなアニメーション
+- **React Resizable Panels**: リサイズ可能な分割パネル
+- **Zustand**: 軽量な状態管理
+
+### バックエンド
+- **FastAPI**: 高速でモダンなPython APIフレームワーク
+- **MySQL**: 堅牢なリレーショナルデータベース
+- **OpenAI API**: GPT-4モデルを使用した対話型学習支援
+- **Uvicorn**: ASGI サーバー
+
+### レガシー（Streamlit版）
 - **Streamlit**: Pythonベースのウェブアプリケーションフレームワーク
 - **Supabase**: BaaS (Backend as a Service) プラットフォームによるデータ永続化と認証
-- **OpenAI API**: GPT-4oモデルを使用した対話型学習支援
-- **Python**: バックエンド処理とAI連携
 
 ## セットアップと起動方法
 
 ### 前提条件
 - Python 3.9以上
+- Node.js 18以上
+- MySQL 8.0以上
 - OpenAI APIキー
 
-### インストール手順
+### React版（推奨）のインストール手順
 
 1. リポジトリをクローンまたはダウンロードします。
-```
+```bash
 git clone https://github.com/dokotokoko/learning-planner.git
 cd learning-planner
 ```
 
-2. 必要なパッケージをインストールします。
-```
+2. バックエンド（FastAPI）のセットアップ:
+```bash
+# 依存関係のインストール
 pip install -r requirements.txt
+
+# データベース接続とAPIキーの設定
+# .envファイルを作成してMySQLとOpenAI API情報を設定
 ```
 
-3. OpenAI APIキーとSupabase接続情報を設定します。
-   - `.streamlit`ディレクトリを作成し、その中に`secrets.toml`ファイルを作成します。
-   - 以下の内容を記述します（引用符内に自分のAPIキーとSupabaseの情報を設定）。Supabaseの情報は、Supabaseプロジェクトの「Project Settings > API」で確認できます。
+3. フロントエンド（React）のセットアップ:
+```bash
+cd react-app
+npm install
+```
+
+### 起動方法
+
+#### バックエンド（FastAPI）
+```bash
+# プロジェクトルートで実行
+cd backend
+python main.py
+```
+
+#### フロントエンド（React）
+```bash
+# 別のターミナルで実行
+cd react-app
+npm run dev
+```
+
+アクセス先：
+- React アプリ: http://localhost:5173
+- FastAPI サーバー: http://localhost:8000
+- API ドキュメント: http://localhost:8000/docs
+
+### Streamlit版（レガシー）の起動方法
+
+1. Streamlit用の設定:
 ```toml
+# .streamlit/secrets.toml
 OPENAI_API_KEY = "sk-あなたのAPIキー"
 
 SUPABASE_URL = "YOUR_SUPABASE_URL"
 SUPABASE_KEY = "YOUR_SUPABASE_KEY"
 ```
 
-### 起動方法
-
-```
+2. 起動:
+```bash
 streamlit run app.py
 ```
 
-アプリケーションはデフォルトで`http://localhost:8501`で起動します。
+Streamlit版は`http://localhost:8501`で起動します。
 
 ### データベース
 - アプリケーションのデータはSupabase上に保存・管理されます。
