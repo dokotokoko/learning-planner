@@ -8,6 +8,7 @@ import os
 import json
 import logging
 from datetime import datetime
+from supabase import create_client, Client
 
 # プロジェクトルートをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -116,15 +117,24 @@ class LearningPathResponse(BaseModel):
 # グローバル変数
 db_manager = None
 llm_client = None
+supabase: Client = None
 
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化"""
-    global db_manager, llm_client
+    global db_manager, llm_client, supabase
     try:
         # DB・LLMの両方を有効化
         db_manager = DBManager()  # DB有効化
         logger.info("DBManager初期化完了")
+        
+        # Supabaseクライアントの初期化
+        url: str = os.environ.get("SUPABASE_URL")
+        key: str = os.environ.get("SUPABASE_KEY")
+        if not url or not key:
+            raise ValueError("Supabaseの接続情報が環境変数に設定されていません (SUPABASE_URL, SUPABASE_KEY)")
+        supabase = create_client(url, key)
+        logger.info("Supabaseクライアント初期化完了")
         
         # テーブル存在確認
         db_manager.cur.execute("SHOW TABLES LIKE 'chat_logs'")
@@ -132,7 +142,7 @@ async def startup_event():
         logger.info(f"chat_logsテーブル存在: {bool(chat_logs_exists)}")
         
         llm_client = learning_plannner()  # LLM有効化
-        logger.info("FastAPIサーバーが起動しました（DB・LLM有効モード）")
+        logger.info("FastAPIサーバーが起動しました（DB・LLM・Supabase有効モード）")
     except Exception as e:
         logger.error(f"初期化エラー: {e}")
         raise
@@ -353,80 +363,59 @@ async def chat_with_ai(
     try:
         logger.info(f"チャット開始 - ユーザーID: {current_user}, メッセージ: {chat_data.message[:50]}...")
         
-        if llm_client is None:
+        if llm_client is None or supabase is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="LLMクライアントが初期化されていません"
+                detail="LLMクライアントまたはSupabaseクライアントが初期化されていません"
             )
         
-        if db_manager is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="データベースマネージャーが初期化されていません"
-            )
-        
-        # 過去の対話履歴を取得してコンテキストに含める
-        conversation_history = db_manager.get_conversation_context(
-            user_id=current_user, 
-            limit=50  # 直近50件の対話を取得
-        )
+        # 過去の対話履歴を取得してコンテキストに含める (Supabaseから)
+        history_response = supabase.table("chat_logs").select("sender, message").eq("user_id", current_user).order("created_at").limit(50).execute()
+        conversation_history = history_response.data
         logger.info(f"取得した対話履歴: {len(conversation_history)}件")
-        
-        # コンテキストデータを準備（メモ内容は除外）
-        context_data = {}
-        if chat_data.context:
-            context_data["additional_context"] = chat_data.context
         
         # LLM用のメッセージリストを構築
         messages = [{"role": "system", "content": system_prompt}]
-        
-        # 過去の対話履歴を追加
         for history_msg in conversation_history:
-            messages.append({
-                "role": history_msg["role"],
-                "content": history_msg["content"]
-            })
-        logger.info(f"メッセージリストに追加された履歴: {len(conversation_history)}件")
+            role = "user" if history_msg["sender"] == "user" else "assistant"
+            messages.append({"role": role, "content": history_msg["message"]})
         
-        # 追加コンテキストのみを含める（メモ内容は含めない）
-        current_context = ""
-        if chat_data.context:
-            current_context += f"追加コンテキスト: {chat_data.context}\n\n"
-        
-        user_message_with_context = current_context + chat_data.message
-        messages.append({"role": "user", "content": user_message_with_context})
+        messages.append({"role": "user", "content": chat_data.message})
         logger.info(f"最終的なメッセージ数: {len(messages)}")
         
-        # ユーザーメッセージをDBに保存
+        # ユーザーメッセージをDBに保存 (Supabase経由)
         try:
-            # streamlit_api.pyスタイルの簡潔な保存も試行
-            user_message_id = db_manager.save_chat_log(
-                user_id=current_user,
-                page=chat_data.page or "general",
-                sender="user",
-                message_content=chat_data.message
-            )
-            logger.info(f"ユーザーメッセージ保存完了 - ID: {user_message_id}")
+            user_message_data = {
+                "user_id": current_user,
+                "page": chat_data.page or "general",
+                "sender": "user",
+                "message": chat_data.message
+            }
+            supabase.table("chat_logs").insert(user_message_data).execute()
+            logger.info(f"ユーザーメッセージ保存完了")
         except Exception as e:
             logger.error(f"ユーザーメッセージ保存失敗: {e}")
-            # 保存に失敗してもチャットは続行
+            # 保存に失敗してもチャットは続行するが、エラーは返す
+            raise HTTPException(status_code=500, detail=f"ユーザーメッセージの保存に失敗しました: {e}")
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
         logger.info(f"LLM応答生成完了 - 長さ: {len(response)}")
         
-        # AIの応答をDBに保存
+        # AIの応答をDBに保存 (Supabase経由)
         try:
-            ai_message_id = db_manager.save_chat_log(
-                user_id=current_user,
-                page=chat_data.page or "general",
-                sender="assistant",
-                message_content=response
-            )
-            logger.info(f"AI応答保存完了 - ID: {ai_message_id}")
+            ai_message_data = {
+                "user_id": current_user,
+                "page": chat_data.page or "general",
+                "sender": "assistant",
+                "message": response
+            }
+            supabase.table("chat_logs").insert(ai_message_data).execute()
+            logger.info(f"AI応答保存完了")
         except Exception as e:
             logger.error(f"AI応答保存失敗: {e}")
-            # 保存に失敗してもレスポンスは返す
+            # 保存に失敗してもレスポンスは返すが、エラーは返す
+            raise HTTPException(status_code=500, detail=f"AI応答の保存に失敗しました: {e}")
         
         return ChatResponse(
             response=response,
@@ -632,4 +621,5 @@ async def get_learning_path_reflection(current_user: int = Depends(get_current_u
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+ 

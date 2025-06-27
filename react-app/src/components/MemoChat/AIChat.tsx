@@ -344,11 +344,11 @@ const AIChat: React.FC<AIChatProps> = ({
             }}>
               <CircularProgress size={40} sx={{ mb: 2 }} />
               <Typography variant="h6" gutterBottom>
-                AIアシスタントが準備中です
+                ・・・・・
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                あなたの探究テーマについて考察するため、<br/>
-                AIアシスタントが初期設定を行っています
+                あなたの探究テーマを前に進めるための一歩を、<br/>
+                AIが一緒に考えています。
               </Typography>
             </Box>
           )}

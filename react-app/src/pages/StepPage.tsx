@@ -40,6 +40,100 @@ import { LayoutContext } from '../components/Layout/Layout';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useTheme } from '@mui/material';
 
+const ReviewStepPage: React.FC<{ handleAIMessage: (message: string, workContent: string) => Promise<string> }> = ({ handleAIMessage }) => {
+  const [themes, setThemes] = useState<{ [key: string]: string }>({});
+  const [actionPlan, setActionPlan] = useState('');
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.id) {
+      const loadedThemes = {
+        step1: localStorage.getItem(`user-${user.id}-step-1-theme`) || '',
+        step2: localStorage.getItem(`user-${user.id}-step-2-theme`) || '',
+        step3: localStorage.getItem(`user-${user.id}-step-3-theme`) || '',
+        step4: localStorage.getItem(`user-${user.id}-step-4-theme`) || '',
+      };
+      setThemes(loadedThemes);
+
+      const savedActionPlan = localStorage.getItem(`user-${user.id}-step-5-action-plan`);
+      if (savedActionPlan) {
+        setActionPlan(savedActionPlan);
+      }
+    }
+  }, [user]);
+
+  const handleSaveActionPlan = () => {
+    if (user?.id) {
+      localStorage.setItem(`user-${user.id}-step-5-action-plan`, actionPlan);
+      alert('アクションプランを保存しました！');
+    }
+  };
+
+  const handleComplete = () => {
+    handleSaveActionPlan();
+    navigate('/home');
+  };
+
+  return (
+    <Container maxWidth="lg" sx={{ py: 4, height: 'calc(100vh - 112px)' }}>
+      <Box sx={{ display: 'flex', gap: 4, height: '100%' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Box>
+            <Typography variant="h4" gutterBottom>Step 5: 探究パスの振り返り</Typography>
+            <Typography variant="body1" color="text.secondary">
+              各ステップでの言語化を振り返り、探究学習の進め方をまとめましょう。
+            </Typography>
+          </Box>
+
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>テーマの変遷</Typography>
+              <Stack spacing={2}>
+                <Chip icon={<ThemeIcon />} label={`Step 1: ${themes.step1 || '未設定'}`} />
+                <Chip icon={<GoalIcon />} label={`Step 2: ${themes.step2 || '未設定'}`} />
+                <Chip icon={<PlanIcon />} label={`Step 3: ${themes.step3 || '未設定'}`} />
+                <Chip icon={<ReviewIcon />} label={`Step 4: ${themes.step4 || '未設定'}`} />
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="h6" gutterBottom>次のアクションプラン</Typography>
+              <TextField
+                multiline
+                fullWidth
+                rows={10}
+                value={actionPlan}
+                onChange={(e) => setActionPlan(e.target.value)}
+                placeholder="例:\n・〇〇に関する文献を3つ読む\n・△△の専門家にインタビューのアポイントを取る\n・簡単なアンケートを作成して、友人に回答してもらう"
+                sx={{ flex: 1 }}
+              />
+            </CardContent>
+          </Card>
+
+          <Stack direction="row" spacing={2} justifyContent="flex-end">
+            <Button onClick={handleSaveActionPlan} variant="outlined">アクションプランを保存</Button>
+            <Button onClick={handleComplete} variant="contained">振り返りを完了してホームへ</Button>
+          </Stack>
+        </Box>
+
+        <Box sx={{ width: '350px', display: 'flex', flexDirection: 'column' }}>
+          <AIChat 
+            pageId="step-5"
+            title="パス整理AI"
+            initialMessage="これまでの探究の歩みを振り返り、次のアクションを具体的に計画しましょう。どんな小さな一歩から始めますか？"
+            onMessageSend={async (message) => {
+              return await handleAIMessage(message, actionPlan);
+            }}
+          />
+        </Box>
+      </Box>
+    </Container>
+  );
+};
+
 const StepPage: React.FC = () => {
   const { stepNumber } = useParams<{ stepNumber: string }>();
   const navigate = useNavigate();
@@ -536,32 +630,6 @@ AIアシスタントが社会との繋がりを見つけることをサポート
       aiButtonText: 'AI',
       initialMessage: '', // 動的に設定される
     },
-    5: {
-      title: 'Step 5: 探究パスの振り返り',
-      description: '各ステップでの言語化を振り返り、探究学習の進め方をまとめましょう',
-      workPlaceholder: `探究学習のパスとアクションプランをまとめてください...
-
-【振り返りガイド】
-■ テーマの進化を確認
-• Step1から4までのテーマの変化
-• 各ステップでの気づきや発見
-• 最終テーマの意義と価値
-
-■ 探究の道筋
-• 何から始めるか（具体的な第一歩）
-• どんな調査や研究が必要か
-• どんな人との対話が有効か
-• 成果物として何を作るか
-
-■ アクションプラン
-• 短期的なアクション（1-2週間）
-• 中期的な目標（1-3ヶ月）
-• 長期的なビジョン（半年-1年）
-
-AIがパスの整理と次のアクションの提案をサポートします。`,
-      aiButtonText: 'パス整理AI',
-      initialMessage: '', // 動的に設定される
-    },
   };
 
   const content = stepContent[currentStep as keyof typeof stepContent];
@@ -665,10 +733,6 @@ AIがパスの整理と次のアクションの提案をサポートします。
       localStorage.setItem(`user-${userId}-step-4-theme`, step4Theme);
       // Step5の振り返りページに遷移
       navigate('/step/5');
-      return;
-    } else if (currentStep === 5) {
-      // Step5の場合、探究パスの振り返りを完了してホームに戻る
-      navigate('/home');
       return;
     }
     
@@ -782,7 +846,9 @@ AIがパスの整理と次のアクションの提案をサポートします。
 
       {/* メインワークスペース */}
       <Box sx={{ flex: 1, mt: '12px' }}>
-        {currentStep === 1 ? (
+            {currentStep === 5 ? (
+              <ReviewStepPage handleAIMessage={handleAIMessage} />
+            ) : currentStep === 1 ? (
           /* Step1専用UI */
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* ヘッダー */}
