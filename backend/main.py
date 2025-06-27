@@ -9,6 +9,10 @@ import json
 import logging
 from datetime import datetime
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# .envファイルを読み込み
+load_dotenv()
 
 # プロジェクトルートをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -114,6 +118,52 @@ class LearningPathResponse(BaseModel):
     themes: List[StepTheme]
     chat_history: List[str]
 
+# プロジェクト関連のモデル追加
+class ProjectCreate(BaseModel):
+    theme: str
+    question: Optional[str] = None
+    hypothesis: Optional[str] = None
+
+class ProjectUpdate(BaseModel):
+    theme: Optional[str] = None
+    question: Optional[str] = None
+    hypothesis: Optional[str] = None
+
+class ProjectResponse(BaseModel):
+    id: int
+    theme: str
+    question: Optional[str]
+    hypothesis: Optional[str]
+    created_at: str
+    updated_at: str
+    memo_count: int
+
+# マルチメモ関連のモデル追加
+class MultiMemoCreate(BaseModel):
+    title: str
+    content: str
+    tags: Optional[List[str]] = []
+    project_id: Optional[int] = None
+
+class MultiMemoUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+class MultiMemoResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+    tags: List[str]
+    project_id: Optional[int]
+    created_at: str
+    updated_at: str
+
+class MemoSearchFilter(BaseModel):
+    query: Optional[str] = None
+    tags: Optional[List[str]] = None
+    project_id: Optional[int] = None
+
 # グローバル変数
 db_manager = None
 llm_client = None
@@ -156,13 +206,25 @@ async def shutdown_event():
         logger.info("データベース接続を閉じました")
 
 # 認証ヘルパー関数
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
-    """トークンからユーザーIDを取得（簡易実装）"""
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    """トークンからユーザーIDを取得（UUID文字列として返す）"""
     # 実際の実装では、JWTトークンの検証などを行う
     try:
         # 簡易実装：トークンをuser_idとして扱う
-        user_id = int(credentials.credentials)
-        return user_id
+        # 数値IDの場合はUUID形式に変換
+        token = credentials.credentials
+        
+        # 数値IDをUUID形式に変換（0埋め形式）
+        if token.isdigit():
+            user_id_int = int(token)
+            # 32桁の16進数に変換してUUID形式にする
+            hex_id = f"{user_id_int:032x}"
+            user_uuid = f"{hex_id[:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
+            return user_uuid
+        else:
+            # 既にUUID形式の場合はそのまま返す
+            return token
+            
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -578,45 +640,1298 @@ async def delete_memo(
 
 @app.get("/learning-path/reflection", response_model=LearningPathResponse)
 async def get_learning_path_reflection(current_user: int = Depends(get_current_user)):
-    """探究パスの振り返りデータを取得"""
+    """学習の振り返り情報を取得"""
     try:
-        if db_manager is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="データベースマネージャーが初期化されていません"
-            )
-        
-        # 各ステップのメモを取得
+        # 各ステップのテーマを取得
         themes = []
-        for step in range(1, 5):  # Step1-4
-            memo_data = db_manager.get_memo(current_user, f"step-{step}")
-            content = memo_data[2] if memo_data else None
-            
-            # ローカルストレージからテーマを取得する部分はフロントエンド側で処理
+        
+        # Step 1: 興味関心
+        interests = db_manager.get_interests(current_user)
+        if interests:
             themes.append(StepTheme(
-                step=step,
-                theme="",  # フロントエンド側で設定
-                content=content
+                step=1,
+                theme="興味関心の特定",
+                content=interests[-1][2]  # 最新の興味関心
             ))
         
-        # 各ステップのチャット履歴を取得
+        # Step 2: 学習目標
+        goals = db_manager.get_goals(current_user)
+        if goals:
+            themes.append(StepTheme(
+                step=2,
+                theme="学習目標の設定",
+                content=goals[-1][2]  # 最新の学習目標
+            ))
+        
+        # Step 3: 学習計画
+        plans = db_manager.get_learning_plans(current_user)
+        if plans:
+            themes.append(StepTheme(
+                step=3,
+                theme="学習計画の立案",
+                content=plans[-1][2]  # 最新の学習計画
+            ))
+        
+        # チャット履歴も含める（簡略版）
         chat_history = []
-        for step in range(1, 5):
-            step_history = db_manager.get_page_chat_history(current_user, f"step-{step}")
-            for item in step_history:
-                if item[2] == "assistant":  # AIの応答のみ
-                    chat_history.append(f"Step{step}: {item[3][:100]}...")  # 最初の100文字
+        if db_manager.cur:
+            db_manager.cur.execute(
+                "SELECT message FROM chat_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 10",
+                (current_user,)
+            )
+            chat_results = db_manager.cur.fetchall()
+            chat_history = [row[0] for row in chat_results]
         
         return LearningPathResponse(
             themes=themes,
-            chat_history=chat_history[:20]  # 最新20件
+            chat_history=chat_history
+        )
+    except Exception as e:
+        logger.error(f"学習の振り返り情報取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="学習の振り返り情報の取得に失敗しました"
+        )
+
+# =============================================================================
+# プロジェクト管理API
+# =============================================================================
+
+@app.post("/projects", response_model=ProjectResponse)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: int = Depends(get_current_user)
+):
+    """新しいプロジェクトを作成"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # プロジェクトを作成
+        tags_json = json.dumps(project_data.tags, ensure_ascii=False)
+        
+        db_manager.cur.execute("""
+            INSERT INTO projects (user_id, title, description, tags, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, NOW(), NOW())
+        """, (current_user, project_data.title, project_data.description, tags_json))
+        
+        project_id = db_manager.cur.lastrowid
+        db_manager.conn.commit()
+        
+        # 作成されたプロジェクトを取得
+        db_manager.cur.execute("""
+            SELECT id, title, description, tags, created_at, updated_at
+            FROM projects WHERE id = %s
+        """, (project_id,))
+        
+        result = db_manager.cur.fetchone()
+        
+        return ProjectResponse(
+            id=result[0],
+            title=result[1],
+            description=result[2],
+            tags=json.loads(result[3]) if result[3] else [],
+            created_at=result[4].isoformat(),
+            updated_at=result[5].isoformat(),
+            memo_count=0
+        )
+    except Exception as e:
+        logger.error(f"プロジェクト作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクトの作成に失敗しました"
+        )
+
+@app.get("/projects", response_model=List[ProjectResponse])
+async def get_projects(current_user: int = Depends(get_current_user)):
+    """ユーザーのプロジェクト一覧を取得"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # プロジェクト一覧とメモ数を取得
+        db_manager.cur.execute("""
+            SELECT p.id, p.title, p.description, p.tags, p.created_at, p.updated_at,
+                   COUNT(m.id) as memo_count
+            FROM projects p
+            LEFT JOIN multi_memos m ON p.id = m.project_id
+            WHERE p.user_id = %s
+            GROUP BY p.id, p.title, p.description, p.tags, p.created_at, p.updated_at
+            ORDER BY p.updated_at DESC
+        """, (current_user,))
+        
+        results = db_manager.cur.fetchall()
+        
+        projects = []
+        for row in results:
+            projects.append(ProjectResponse(
+                id=row[0],
+                title=row[1],
+                description=row[2],
+                tags=json.loads(row[3]) if row[3] else [],
+                created_at=row[4].isoformat(),
+                updated_at=row[5].isoformat(),
+                memo_count=row[6]
+            ))
+        
+        return projects
+    except Exception as e:
+        logger.error(f"プロジェクト一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクト一覧の取得に失敗しました"
+        )
+
+@app.get("/projects/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    project_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """特定のプロジェクトを取得"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        db_manager.cur.execute("""
+            SELECT p.id, p.title, p.description, p.tags, p.created_at, p.updated_at,
+                   COUNT(m.id) as memo_count
+            FROM projects p
+            LEFT JOIN multi_memos m ON p.id = m.project_id
+            WHERE p.id = %s AND p.user_id = %s
+            GROUP BY p.id, p.title, p.description, p.tags, p.created_at, p.updated_at
+        """, (project_id, current_user))
+        
+        result = db_manager.cur.fetchone()
+        
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません"
+            )
+        
+        return ProjectResponse(
+            id=result[0],
+            title=result[1],
+            description=result[2],
+            tags=json.loads(result[3]) if result[3] else [],
+            created_at=result[4].isoformat(),
+            updated_at=result[5].isoformat(),
+            memo_count=result[6]
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"プロジェクト取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクトの取得に失敗しました"
+        )
+
+@app.put("/projects/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: int,
+    project_data: ProjectUpdate,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクトを更新"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # 更新フィールドを動的に構築
+        update_fields = []
+        values = []
+        
+        if project_data.title is not None:
+            update_fields.append("title = %s")
+            values.append(project_data.title)
+        
+        if project_data.description is not None:
+            update_fields.append("description = %s")
+            values.append(project_data.description)
+        
+        if project_data.tags is not None:
+            update_fields.append("tags = %s")
+            values.append(json.dumps(project_data.tags, ensure_ascii=False))
+        
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="更新するフィールドがありません"
+            )
+        
+        update_fields.append("updated_at = NOW()")
+        values.extend([project_id, current_user])
+        
+        # プロジェクトを更新
+        query = f"""
+            UPDATE projects 
+            SET {', '.join(update_fields)}
+            WHERE id = %s AND user_id = %s
+        """
+        
+        db_manager.cur.execute(query, values)
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        # 更新されたプロジェクトを取得
+        return await get_project(project_id, current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"プロジェクト更新エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクトの更新に失敗しました"
+        )
+
+@app.delete("/projects/{project_id}")
+async def delete_project(
+    project_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクトを削除"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # 先に関連するメモを削除
+        db_manager.cur.execute(
+            "DELETE FROM multi_memos WHERE project_id = %s AND user_id = %s",
+            (project_id, current_user)
+        )
+        
+        # プロジェクトを削除
+        db_manager.cur.execute(
+            "DELETE FROM projects WHERE id = %s AND user_id = %s",
+            (project_id, current_user)
+        )
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        return {"message": "プロジェクトが正常に削除されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"プロジェクト削除エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクトの削除に失敗しました"
+        )
+
+# =============================================================================
+# マルチメモ管理API
+# =============================================================================
+
+@app.post("/projects/{project_id}/memos", response_model=MultiMemoResponse)
+async def create_project_memo(
+    project_id: int,
+    memo_data: MultiMemoCreate,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクト内にメモを作成"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # プロジェクトの存在確認
+        db_manager.cur.execute(
+            "SELECT id FROM projects WHERE id = %s AND user_id = %s",
+            (project_id, current_user)
+        )
+        if not db_manager.cur.fetchone():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません"
+            )
+        
+        tags_json = json.dumps(memo_data.tags, ensure_ascii=False)
+        
+        db_manager.cur.execute("""
+            INSERT INTO multi_memos (user_id, project_id, title, content, tags, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+        """, (current_user, project_id, memo_data.title, memo_data.content, tags_json))
+        
+        memo_id = db_manager.cur.lastrowid
+        db_manager.conn.commit()
+        
+        # 作成されたメモを取得
+        return await get_memo_by_id(memo_id, current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"プロジェクトメモ作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの作成に失敗しました"
+        )
+
+@app.post("/memos", response_model=MultiMemoResponse)
+async def create_memo(
+    memo_data: MultiMemoCreate,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを作成（プロジェクトなし）"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        tags_json = json.dumps(memo_data.tags, ensure_ascii=False)
+        
+        db_manager.cur.execute("""
+            INSERT INTO multi_memos (user_id, project_id, title, content, tags, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+        """, (current_user, memo_data.project_id, memo_data.title, memo_data.content, tags_json))
+        
+        memo_id = db_manager.cur.lastrowid
+        db_manager.conn.commit()
+        
+        # 作成されたメモを取得
+        return await get_memo_by_id(memo_id, current_user)
+        
+    except Exception as e:
+        logger.error(f"メモ作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの作成に失敗しました"
+        )
+
+async def get_memo_by_id(memo_id: int, current_user: int) -> MultiMemoResponse:
+    """内部用：メモをIDで取得"""
+    db_manager.cur.execute("""
+        SELECT id, title, content, tags, project_id, created_at, updated_at
+        FROM multi_memos WHERE id = %s AND user_id = %s
+    """, (memo_id, current_user))
+    
+    result = db_manager.cur.fetchone()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="メモが見つかりません"
+        )
+    
+    return MultiMemoResponse(
+        id=result[0],
+        title=result[1],
+        content=result[2],
+        tags=json.loads(result[3]) if result[3] else [],
+        project_id=result[4],
+        created_at=result[5].isoformat(),
+        updated_at=result[6].isoformat()
+    )
+
+@app.get("/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
+async def get_project_memos(
+    project_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクト内のメモ一覧を取得"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        db_manager.cur.execute("""
+            SELECT id, title, content, tags, project_id, created_at, updated_at
+            FROM multi_memos 
+            WHERE project_id = %s AND user_id = %s
+            ORDER BY updated_at DESC
+        """, (project_id, current_user))
+        
+        results = db_manager.cur.fetchall()
+        
+        memos = []
+        for row in results:
+            memos.append(MultiMemoResponse(
+                id=row[0],
+                title=row[1],
+                content=row[2],
+                tags=json.loads(row[3]) if row[3] else [],
+                project_id=row[4],
+                created_at=row[5].isoformat(),
+                updated_at=row[6].isoformat()
+            ))
+        
+        return memos
+        
+    except Exception as e:
+        logger.error(f"プロジェクトメモ一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモ一覧の取得に失敗しました"
+        )
+
+@app.get("/memos", response_model=List[MultiMemoResponse])
+async def search_memos(
+    query: Optional[str] = None,
+    tags: Optional[str] = None,
+    project_id: Optional[int] = None,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを検索・フィルタリング"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # 基本クエリ
+        base_query = """
+            SELECT id, title, content, tags, project_id, created_at, updated_at
+            FROM multi_memos 
+            WHERE user_id = %s
+        """
+        
+        conditions = []
+        values = [current_user]
+        
+        # 検索条件を追加
+        if query:
+            conditions.append("(title LIKE %s OR content LIKE %s)")
+            values.extend([f"%{query}%", f"%{query}%"])
+        
+        if project_id is not None:
+            conditions.append("project_id = %s")
+            values.append(project_id)
+        
+        if tags:
+            tag_list = [tag.strip() for tag in tags.split(",")]
+            for tag in tag_list:
+                conditions.append("JSON_CONTAINS(tags, %s)")
+                values.append(json.dumps(tag, ensure_ascii=False))
+        
+        # 条件を結合
+        if conditions:
+            base_query += " AND " + " AND ".join(conditions)
+        
+        base_query += " ORDER BY updated_at DESC"
+        
+        db_manager.cur.execute(base_query, values)
+        results = db_manager.cur.fetchall()
+        
+        memos = []
+        for row in results:
+            memos.append(MultiMemoResponse(
+                id=row[0],
+                title=row[1],
+                content=row[2],
+                tags=json.loads(row[3]) if row[3] else [],
+                project_id=row[4],
+                created_at=row[5].isoformat(),
+                updated_at=row[6].isoformat()
+            ))
+        
+        return memos
+        
+    except Exception as e:
+        logger.error(f"メモ検索エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの検索に失敗しました"
+        )
+
+@app.get("/memos/{memo_id}", response_model=MultiMemoResponse)
+async def get_memo(
+    memo_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """特定のメモを取得"""
+    try:
+        return await get_memo_by_id(memo_id, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メモ取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの取得に失敗しました"
+        )
+
+@app.put("/memos/{memo_id}", response_model=MultiMemoResponse)
+async def update_memo(
+    memo_id: int,
+    memo_data: MultiMemoUpdate,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを更新"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # 更新フィールドを動的に構築
+        update_fields = []
+        values = []
+        
+        if memo_data.title is not None:
+            update_fields.append("title = %s")
+            values.append(memo_data.title)
+        
+        if memo_data.content is not None:
+            update_fields.append("content = %s")
+            values.append(memo_data.content)
+        
+        if memo_data.tags is not None:
+            update_fields.append("tags = %s")
+            values.append(json.dumps(memo_data.tags, ensure_ascii=False))
+        
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="更新するフィールドがありません"
+            )
+        
+        update_fields.append("updated_at = NOW()")
+        values.extend([memo_id, current_user])
+        
+        # メモを更新
+        query = f"""
+            UPDATE multi_memos 
+            SET {', '.join(update_fields)}
+            WHERE id = %s AND user_id = %s
+        """
+        
+        db_manager.cur.execute(query, values)
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="メモが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        # 更新されたメモを取得
+        return await get_memo_by_id(memo_id, current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メモ更新エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの更新に失敗しました"
+        )
+
+@app.delete("/memos/{memo_id}")
+async def delete_memo(
+    memo_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを削除"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        db_manager.cur.execute(
+            "DELETE FROM multi_memos WHERE id = %s AND user_id = %s",
+            (memo_id, current_user)
+        )
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="メモが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        return {"message": "メモが正常に削除されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メモ削除エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの削除に失敗しました"
+        )
+
+# =============================================================================
+# 自動保存エンドポイント
+# =============================================================================
+
+@app.post("/memos/{memo_id}/autosave")
+async def autosave_memo(
+    memo_id: int,
+    memo_data: MultiMemoUpdate,
+    current_user: int = Depends(get_current_user)
+):
+    """メモの自動保存（リアルタイム更新）"""
+    try:
+        # 通常の更新処理と同じだが、エラーハンドリングを軽量化
+        return await update_memo(memo_id, memo_data, current_user)
+    except Exception as e:
+        logger.warning(f"自動保存エラー (継続可能): {e}")
+        # 自動保存の失敗は致命的ではないため、警告レベルでログ出力
+        return {"message": "自動保存に失敗しましたが、手動保存は可能です"}
+
+# =============================================================================
+# プロジェクト管理API
+# =============================================================================
+
+@app.post("/projects", response_model=ProjectResponse)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: int = Depends(get_current_user)
+):
+    """新しいプロジェクトを作成"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # プロジェクトを作成
+        tags_json = json.dumps(project_data.tags, ensure_ascii=False)
+        
+        db_manager.cur.execute("""
+            INSERT INTO projects (user_id, title, description, tags, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, NOW(), NOW())
+        """, (current_user, project_data.title, project_data.description, tags_json))
+        
+        project_id = db_manager.cur.lastrowid
+        db_manager.conn.commit()
+        
+        # 作成されたプロジェクトを取得
+        db_manager.cur.execute("""
+            SELECT id, title, description, tags, created_at, updated_at
+            FROM projects WHERE id = %s
+        """, (project_id,))
+        
+        result = db_manager.cur.fetchone()
+        
+        return ProjectResponse(
+            id=result[0],
+            title=result[1],
+            description=result[2],
+            tags=json.loads(result[3]) if result[3] else [],
+            created_at=result[4].isoformat(),
+            updated_at=result[5].isoformat(),
+            memo_count=0
+        )
+    except Exception as e:
+        logger.error(f"プロジェクト作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクトの作成に失敗しました"
+        )
+
+@app.get("/projects", response_model=List[ProjectResponse])
+async def get_projects(current_user: int = Depends(get_current_user)):
+    """ユーザーのプロジェクト一覧を取得"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # プロジェクト一覧とメモ数を取得
+        db_manager.cur.execute("""
+            SELECT p.id, p.title, p.description, p.tags, p.created_at, p.updated_at,
+                   COUNT(m.id) as memo_count
+            FROM projects p
+            LEFT JOIN multi_memos m ON p.id = m.project_id
+            WHERE p.user_id = %s
+            GROUP BY p.id, p.title, p.description, p.tags, p.created_at, p.updated_at
+            ORDER BY p.updated_at DESC
+        """, (current_user,))
+        
+        results = db_manager.cur.fetchall()
+        
+        projects = []
+        for row in results:
+            projects.append(ProjectResponse(
+                id=row[0],
+                title=row[1],
+                description=row[2],
+                tags=json.loads(row[3]) if row[3] else [],
+                created_at=row[4].isoformat(),
+                updated_at=row[5].isoformat(),
+                memo_count=row[6]
+            ))
+        
+        return projects
+    except Exception as e:
+        logger.error(f"プロジェクト一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="プロジェクト一覧の取得に失敗しました"
+        )
+
+# =============================================================================
+# マルチメモ管理API
+# =============================================================================
+
+@app.post("/projects/{project_id}/memos", response_model=MultiMemoResponse)
+async def create_project_memo(
+    project_id: int,
+    memo_data: MultiMemoCreate,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクト内にメモを作成"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        tags_json = json.dumps(memo_data.tags, ensure_ascii=False)
+        
+        db_manager.cur.execute("""
+            INSERT INTO multi_memos (user_id, project_id, title, content, tags, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+        """, (current_user, project_id, memo_data.title, memo_data.content, tags_json))
+        
+        memo_id = db_manager.cur.lastrowid
+        db_manager.conn.commit()
+        
+        # 作成されたメモを取得
+        db_manager.cur.execute("""
+            SELECT id, title, content, tags, project_id, created_at, updated_at
+            FROM multi_memos WHERE id = %s
+        """, (memo_id,))
+        
+        result = db_manager.cur.fetchone()
+        
+        return MultiMemoResponse(
+            id=result[0],
+            title=result[1],
+            content=result[2],
+            tags=json.loads(result[3]) if result[3] else [],
+            project_id=result[4],
+            created_at=result[5].isoformat(),
+            updated_at=result[6].isoformat()
         )
         
     except Exception as e:
-        logger.error(f"探究パス振り返りデータ取得エラー: {e}")
+        logger.error(f"プロジェクトメモ作成エラー: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="探究パス振り返りデータの取得でエラーが発生しました"
+            detail="メモの作成に失敗しました"
+        )
+
+@app.get("/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
+async def get_project_memos(
+    project_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """プロジェクト内のメモ一覧を取得"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        db_manager.cur.execute("""
+            SELECT id, title, content, tags, project_id, created_at, updated_at
+            FROM multi_memos 
+            WHERE project_id = %s AND user_id = %s
+            ORDER BY updated_at DESC
+        """, (project_id, current_user))
+        
+        results = db_manager.cur.fetchall()
+        
+        memos = []
+        for row in results:
+            memos.append(MultiMemoResponse(
+                id=row[0],
+                title=row[1],
+                content=row[2],
+                tags=json.loads(row[3]) if row[3] else [],
+                project_id=row[4],
+                created_at=row[5].isoformat(),
+                updated_at=row[6].isoformat()
+            ))
+        
+        return memos
+        
+    except Exception as e:
+        logger.error(f"プロジェクトメモ一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモ一覧の取得に失敗しました"
+        )
+
+@app.put("/memos/{memo_id}", response_model=MultiMemoResponse)
+async def update_memo_new(
+    memo_id: int,
+    memo_data: MultiMemoUpdate,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを更新"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        # 更新フィールドを動的に構築
+        update_fields = []
+        values = []
+        
+        if memo_data.title is not None:
+            update_fields.append("title = %s")
+            values.append(memo_data.title)
+        
+        if memo_data.content is not None:
+            update_fields.append("content = %s")
+            values.append(memo_data.content)
+        
+        if memo_data.tags is not None:
+            update_fields.append("tags = %s")
+            values.append(json.dumps(memo_data.tags, ensure_ascii=False))
+        
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="更新するフィールドがありません"
+            )
+        
+        update_fields.append("updated_at = NOW()")
+        values.extend([memo_id, current_user])
+        
+        # メモを更新
+        query = f"""
+            UPDATE multi_memos 
+            SET {', '.join(update_fields)}
+            WHERE id = %s AND user_id = %s
+        """
+        
+        db_manager.cur.execute(query, values)
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="メモが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        # 更新されたメモを取得
+        db_manager.cur.execute("""
+            SELECT id, title, content, tags, project_id, created_at, updated_at
+            FROM multi_memos WHERE id = %s AND user_id = %s
+        """, (memo_id, current_user))
+        
+        result = db_manager.cur.fetchone()
+        
+        return MultiMemoResponse(
+            id=result[0],
+            title=result[1],
+            content=result[2],
+            tags=json.loads(result[3]) if result[3] else [],
+            project_id=result[4],
+            created_at=result[5].isoformat(),
+            updated_at=result[6].isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メモ更新エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの更新に失敗しました"
+        )
+
+@app.delete("/memos/{memo_id}")
+async def delete_memo_new(
+    memo_id: int,
+    current_user: int = Depends(get_current_user)
+):
+    """メモを削除"""
+    try:
+        if not db_manager.cur:
+            raise HTTPException(status_code=500, detail="データベース接続エラー")
+        
+        db_manager.cur.execute(
+            "DELETE FROM multi_memos WHERE id = %s AND user_id = %s",
+            (memo_id, current_user)
+        )
+        
+        if db_manager.cur.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="メモが見つかりません"
+            )
+        
+        db_manager.conn.commit()
+        
+        return {"message": "メモが正常に削除されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メモ削除エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="メモの削除に失敗しました"
+        )
+
+# =============================================================================
+# Ver2 Supabase対応API（探究学習アプリケーション用）
+# =============================================================================
+
+@app.post("/v2/projects", response_model=ProjectResponse)
+async def create_project_v2(
+    project_data: ProjectCreate,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseを使用してプロジェクトを作成"""
+    try:
+        # Supabaseにプロジェクトを挿入
+        result = supabase.table('projects').insert({
+            'user_id': current_user,
+            'theme': project_data.theme,
+            'question': project_data.question,
+            'hypothesis': project_data.hypothesis
+        }).execute()
+        
+        if result.data:
+            project = result.data[0]
+            # メモ数を取得
+            memo_count_result = supabase.table('memos').select('id', count='exact').eq('project_id', project['id']).execute()
+            memo_count = memo_count_result.count if memo_count_result.count else 0
+            
+            return ProjectResponse(
+                id=project['id'],
+                theme=project['theme'],
+                question=project['question'],
+                hypothesis=project['hypothesis'],
+                created_at=project['created_at'],
+                updated_at=project['updated_at'],
+                memo_count=memo_count
+            )
+        else:
+            raise HTTPException(status_code=500, detail="プロジェクトの作成に失敗しました")
+            
+    except Exception as e:
+        logger.error(f"Ver2プロジェクト作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"プロジェクトの作成に失敗しました: {str(e)}"
+        )
+
+@app.get("/v2/projects", response_model=List[ProjectResponse])
+async def get_projects_v2(current_user: str = Depends(get_current_user)):
+    """Ver2: Supabaseからプロジェクト一覧を取得"""
+    try:
+        # プロジェクト一覧を取得
+        result = supabase.table('projects').select('*').eq('user_id', current_user).order('updated_at', desc=True).execute()
+        
+        projects = []
+        for project in result.data:
+            # 各プロジェクトのメモ数を取得
+            memo_count_result = supabase.table('memos').select('id', count='exact').eq('project_id', project['id']).execute()
+            memo_count = memo_count_result.count if memo_count_result.count else 0
+            
+            projects.append(ProjectResponse(
+                id=project['id'],
+                theme=project['theme'],
+                question=project['question'],
+                hypothesis=project['hypothesis'],
+                created_at=project['created_at'],
+                updated_at=project['updated_at'],
+                memo_count=memo_count
+            ))
+        
+        return projects
+        
+    except Exception as e:
+        logger.error(f"Ver2プロジェクト一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"プロジェクト一覧の取得に失敗しました: {str(e)}"
+        )
+
+@app.get("/v2/projects/{project_id}", response_model=ProjectResponse)
+async def get_project_v2(
+    project_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseから特定のプロジェクトを取得"""
+    try:
+        result = supabase.table('projects').select('*').eq('id', project_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
+        
+        project = result.data[0]
+        # メモ数を取得
+        memo_count_result = supabase.table('memos').select('id', count='exact').eq('project_id', project['id']).execute()
+        memo_count = memo_count_result.count if memo_count_result.count else 0
+        
+        return ProjectResponse(
+            id=project['id'],
+            theme=project['theme'],
+            question=project['question'],
+            hypothesis=project['hypothesis'],
+            created_at=project['created_at'],
+            updated_at=project['updated_at'],
+            memo_count=memo_count
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2プロジェクト取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"プロジェクトの取得に失敗しました: {str(e)}"
+        )
+
+@app.put("/v2/projects/{project_id}", response_model=ProjectResponse)
+async def update_project_v2(
+    project_id: int,
+    project_data: ProjectUpdate,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseでプロジェクトを更新"""
+    try:
+        # 更新データを構築
+        update_data = {}
+        if project_data.theme is not None:
+            update_data['theme'] = project_data.theme
+        if project_data.question is not None:
+            update_data['question'] = project_data.question
+        if project_data.hypothesis is not None:
+            update_data['hypothesis'] = project_data.hypothesis
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="更新するフィールドがありません")
+        
+        # Supabaseで更新
+        result = supabase.table('projects').update(update_data).eq('id', project_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
+        
+        # 更新されたプロジェクトを取得
+        return await get_project_v2(project_id, current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2プロジェクト更新エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"プロジェクトの更新に失敗しました: {str(e)}"
+        )
+
+@app.delete("/v2/projects/{project_id}")
+async def delete_project_v2(
+    project_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseからプロジェクトを削除"""
+    try:
+        result = supabase.table('projects').delete().eq('id', project_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
+        
+        return {"message": "プロジェクトが正常に削除されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2プロジェクト削除エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"プロジェクトの削除に失敗しました: {str(e)}"
+        )
+
+@app.post("/v2/projects/{project_id}/memos", response_model=MultiMemoResponse)
+async def create_project_memo_v2(
+    project_id: int,
+    memo_data: MultiMemoCreate,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseでプロジェクト内にメモを作成"""
+    try:
+        # Supabaseにメモを挿入
+        result = supabase.table('memos').insert({
+            'user_id': current_user,
+            'project_id': project_id,
+            'title': memo_data.title,
+            'content': memo_data.content
+        }).execute()
+        
+        if result.data:
+            memo = result.data[0]
+            return MultiMemoResponse(
+                id=memo['id'],
+                title=memo['title'],
+                content=memo['content'],
+                tags=[],  # Ver2ではタグなし
+                project_id=memo['project_id'],
+                created_at=memo['created_at'],
+                updated_at=memo['updated_at']
+            )
+        else:
+            raise HTTPException(status_code=500, detail="メモの作成に失敗しました")
+            
+    except Exception as e:
+        logger.error(f"Ver2メモ作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモの作成に失敗しました: {str(e)}"
+        )
+
+@app.get("/v2/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
+async def get_project_memos_v2(
+    project_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseからプロジェクト内のメモ一覧を取得"""
+    try:
+        result = supabase.table('memos').select('*').eq('project_id', project_id).eq('user_id', current_user).order('updated_at', desc=True).execute()
+        
+        memos = []
+        for memo in result.data:
+            memos.append(MultiMemoResponse(
+                id=memo['id'],
+                title=memo['title'],
+                content=memo['content'],
+                tags=[],  # Ver2ではタグなし
+                project_id=memo['project_id'],
+                created_at=memo['created_at'],
+                updated_at=memo['updated_at']
+            ))
+        
+        return memos
+        
+    except Exception as e:
+        logger.error(f"Ver2メモ一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモ一覧の取得に失敗しました: {str(e)}"
+        )
+
+@app.get("/v2/memos/{memo_id}", response_model=MultiMemoResponse)
+async def get_memo_v2(
+    memo_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseから特定のメモを取得"""
+    try:
+        result = supabase.table('memos').select('*').eq('id', memo_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="メモが見つかりません")
+        
+        memo = result.data[0]
+        return MultiMemoResponse(
+            id=memo['id'],
+            title=memo['title'],
+            content=memo['content'],
+            tags=[],  # Ver2ではタグなし
+            project_id=memo['project_id'],
+            created_at=memo['created_at'],
+            updated_at=memo['updated_at']
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2メモ取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモの取得に失敗しました: {str(e)}"
+        )
+
+@app.put("/v2/memos/{memo_id}", response_model=MultiMemoResponse)
+async def update_memo_v2(
+    memo_id: int,
+    memo_data: MultiMemoUpdate,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseでメモを更新"""
+    try:
+        # 更新データを構築
+        update_data = {}
+        if memo_data.title is not None:
+            update_data['title'] = memo_data.title
+        if memo_data.content is not None:
+            update_data['content'] = memo_data.content
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="更新するフィールドがありません")
+        
+        # Supabaseで更新
+        result = supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="メモが見つかりません")
+        
+        # 更新されたメモを取得
+        return await get_memo_v2(memo_id, current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2メモ更新エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモの更新に失敗しました: {str(e)}"
+        )
+
+@app.delete("/v2/memos/{memo_id}")
+async def delete_memo_v2(
+    memo_id: int,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseからメモを削除"""
+    try:
+        result = supabase.table('memos').delete().eq('id', memo_id).eq('user_id', current_user).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="メモが見つかりません")
+        
+        return {"message": "メモが正常に削除されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2メモ削除エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモの削除に失敗しました: {str(e)}"
+        )
+
+@app.post("/v2/memos/{memo_id}/autosave")
+async def autosave_memo_v2(
+    memo_id: int,
+    memo_data: MultiMemoUpdate,
+    current_user: str = Depends(get_current_user)
+):
+    """Ver2: Supabaseでメモの自動保存"""
+    try:
+        # 部分更新データを構築
+        update_data = {}
+        if memo_data.title is not None:
+            update_data['title'] = memo_data.title
+        if memo_data.content is not None:
+            update_data['content'] = memo_data.content
+        
+        if update_data:
+            result = supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+            
+            if not result.data:
+                raise HTTPException(status_code=404, detail="メモが見つかりません")
+        
+        return {"message": "メモが自動保存されました"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ver2メモ自動保存エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモの自動保存に失敗しました: {str(e)}"
         )
 
 if __name__ == "__main__":

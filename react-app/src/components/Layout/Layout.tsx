@@ -29,6 +29,7 @@ import {
   DarkMode,
   LightMode,
   AccountCircle,
+  Note as MemoIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -83,8 +84,9 @@ const Layout: React.FC = () => {
   };
 
   const menuItems = [
-    { text: 'ホーム', icon: <Home />, path: '/home' },
+    { text: 'ダッシュボード', icon: <Home />, path: '/dashboard' },
     { text: 'テーマ設定', icon: <TipsAndUpdates />, path: '/step/1' },
+    { text: 'メモ管理', icon: <MemoIcon />, path: '/memos' },
     { text: 'AI相談', icon: <QuestionAnswer />, path: '/inquiry' },
   ];
 
