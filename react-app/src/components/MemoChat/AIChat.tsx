@@ -68,15 +68,58 @@ const AIChat: React.FC<AIChatProps> = ({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
   const initializationKeyRef = useRef(pageId);
+
+  // スクロール位置の監視
+  const checkScrollPosition = () => {
+    const container = messageListRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+    
+    // スクロール位置が90%以上の場合は最下部近くと判定
+    setShouldAutoScroll(scrollPercentage > 0.9);
+  };
+
+  // スクロールイベントのハンドリング
+  useEffect(() => {
+    const container = messageListRef.current;
+    if (!container) return;
+
+    let scrollTimeout: number;
+
+    const handleScroll = () => {
+      setIsUserScrolling(true);
+      checkScrollPosition();
+      
+      // スクロール停止後、少し待ってからユーザースクロールフラグをリセット
+      clearTimeout(scrollTimeout);
+      scrollTimeout = window.setTimeout(() => {
+        setIsUserScrolling(false);
+      }, 150);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
 
   // forceRefreshまたはpageId変更でメッセージをクリア
   useEffect(() => {
     if (forceRefresh || initializationKeyRef.current !== pageId) {
       setMessages([]);
       setHistoryLoaded(false);
+      setShouldAutoScroll(true);
+      setIsUserScrolling(false);
       initializationKeyRef.current = pageId;
     }
   }, [forceRefresh, pageId]);
@@ -191,10 +234,31 @@ const AIChat: React.FC<AIChatProps> = ({
     loadInitialMessages();
   }, [messages.length, initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded]);
 
-  // メッセージリストの最下部にスクロール
+  // メッセージリストの最下部にスクロール（条件付き）
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
+    if (!isUserScrolling && shouldAutoScroll) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [messages, isUserScrolling, shouldAutoScroll]);
+
+  // 新しいメッセージが追加された際の処理
+  const scrollToBottomIfNeeded = () => {
+    const container = messageListRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+    
+    // ユーザーが最下部近く（90%以上）にいる場合のみ自動スクロール
+    if (scrollPercentage > 0.9) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  };
 
   // メッセージ送信処理
   const handleSendMessage = async () => {
@@ -210,6 +274,9 @@ const AIChat: React.FC<AIChatProps> = ({
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
+    
+    // メッセージ送信時は条件付きで最下部にスクロール
+    scrollToBottomIfNeeded();
 
     try {
       let aiResponse = '';
@@ -265,6 +332,9 @@ const AIChat: React.FC<AIChatProps> = ({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // AI応答完了時も条件付きで最下部にスクロール
+      setTimeout(() => scrollToBottomIfNeeded(), 200);
     } catch (error) {
       console.error('AI応答エラー:', error);
       const errorMessage: Message = {
@@ -274,6 +344,9 @@ const AIChat: React.FC<AIChatProps> = ({
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      
+      // エラーメッセージ表示時も条件付きで最下部にスクロール
+      setTimeout(() => scrollToBottomIfNeeded(), 200);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -325,11 +398,14 @@ const AIChat: React.FC<AIChatProps> = ({
       </Box>
 
       {/* メッセージリスト */}
-      <Box sx={{ 
-        flex: 1, 
-        overflow: 'auto',
-        p: 1,
-      }}>
+      <Box 
+        ref={messageListRef}
+        sx={{ 
+          flex: 1, 
+          overflow: 'auto',
+          p: 1,
+        }}
+      >
         <List sx={{ py: 0 }}>
           {/* 初期化中の特別なローディング表示 */}
           {isInitializing && messages.length === 0 && (

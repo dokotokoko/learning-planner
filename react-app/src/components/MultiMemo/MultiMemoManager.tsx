@@ -96,6 +96,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const navigate = useNavigate();
 
   // State管理
   const [memos, setMemos] = useState<MultiMemo[]>([]);
@@ -546,6 +547,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         <DialogTitle>新しいメモを作成</DialogTitle>
         <DialogContent>
           <MemoEditor
+            key="create-memo"
+            projectId={selectedProject || undefined}
             onSave={handleCreateMemo}
             onCancel={() => setIsCreateDialogOpen(false)}
             availableTags={allTags}
@@ -565,7 +568,9 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         <DialogContent>
           {editingMemo && (
             <MemoEditor
+              key={`edit-memo-${editingMemo.id}`}
               memo={editingMemo}
+              projectId={editingMemo.project_id}
               onSave={(data) => handleUpdateMemo(editingMemo.id, data)}
               onCancel={() => setEditingMemo(null)}
               availableTags={allTags}

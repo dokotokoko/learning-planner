@@ -1,441 +1,367 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
-  TextField,
+  Stack,
   Button,
   Typography,
-  Chip,
-  Stack,
-  Autocomplete,
   Paper,
-  Tabs,
   Tab,
-  useTheme,
-  useMediaQuery,
+  Tabs,
+  Chip,
+  Autocomplete,
+  TextField,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import {
-  Save as SaveIcon,
-  Cancel as CancelIcon,
-  Preview as PreviewIcon,
-  Edit as EditIcon,
-  Tag as TagIcon,
-} from '@mui/icons-material';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import SaveIcon from '@mui/icons-material/Save';
+import CancelIcon from '@mui/icons-material/Cancel';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditIcon from '@mui/icons-material/Edit';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import ClearIcon from '@mui/icons-material/Clear';
 import ReactMarkdown from 'react-markdown';
 import { debounce } from 'lodash';
 
 import { MultiMemo } from './MultiMemoManager';
 
-interface MemoEditorProps {
-  memo?: MultiMemo;
-  onSave: (memoData: Partial<MultiMemo>) => void;
-  onCancel: () => void;
-  availableTags: string[];
+export interface MemoEditorProps {
+  memo?: MultiMemo; // memo がない場合は新規作成モード
+  projectId?: number;
+  onSave: (payload: Partial<MultiMemo>) => Promise<void>;
+  onCancel?: () => void;
+  autoSaveDelay?: number; // default 2000ms
+  enablePreview?: boolean; // default true
+  availableTags?: string[]; // 既存タグの候補
 }
 
-const MemoEditor: React.FC<MemoEditorProps> = ({
+/**
+ * シンプルなtextarea実装をベースにしたメモエディタ
+ * 外部コードのアイデアを既存プロジェクトに適応
+ */
+export const MemoEditor: React.FC<MemoEditorProps> = ({
   memo,
+  projectId,
   onSave,
   onCancel,
-  availableTags,
+  autoSaveDelay = 2000,
+  enablePreview = true,
+  availableTags = [],
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // 統合されたMarkdown形式のstate（タイトルは1行目）
+  const [markdown, setMarkdown] = useState(() => {
+    if (!memo) return '';
+    const title = memo.title || '';
+    const content = memo.content || '';
+    return title ? `# ${title}\n\n${content}` : content;
+  });
+  
+  const [tags, setTags] = useState<string[]>(memo?.tags ?? []);
+  const [dirty, setDirty] = useState(false);
+  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  const [saving, setSaving] = useState(false);
+  
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const isNew = !memo?.id;
 
-  const [title, setTitle] = useState(memo?.title || '');
-  const [content, setContent] = useState(memo?.content || '');
-  const [tags, setTags] = useState<string[]>(memo?.tags || []);
-  const [currentTab, setCurrentTab] = useState(0); // 0: エディット, 1: プレビュー
-  const [isDirty, setIsDirty] = useState(false);
-
-  // 自動保存のデバウンス
-  const debouncedSave = useCallback(
-    debounce(() => {
-      if (memo && isDirty) {
-        onSave({
-          title,
-          content,
-          tags,
-        });
-        setIsDirty(false);
-      }
-    }, 2000),
-    [title, content, tags, memo, isDirty, onSave]
-  );
-
-  // 内容変更時の処理
-  useEffect(() => {
-    if (memo) {
-      setIsDirty(true);
-      debouncedSave();
+  // Markdownからタイトルと本文を抽出
+  const extractTitleAndContent = (md: string) => {
+    const lines = md.trim().split('\n');
+    const firstLine = lines[0] || '';
+    
+    // 最初の行が # で始まる場合はタイトルとして扱う
+    if (firstLine.startsWith('# ')) {
+      const title = firstLine.substring(2).trim();
+      const content = lines.slice(1).join('\n').trim();
+      return { title, content };
+    } else {
+      // # がない場合は最初の行をタイトル、残りを本文とする
+      const title = firstLine.trim();
+      const content = lines.slice(1).join('\n').trim();
+      return { title, content };
     }
-  }, [title, content, tags, memo, debouncedSave]);
+  };
 
-  // ハッシュタグの自動抽出
+  // ハッシュタグ自動検出
   const extractHashtags = (text: string): string[] => {
     const hashtagRegex = /#([^\s#]+)/g;
     const matches = text.match(hashtagRegex);
     return matches ? matches.map(tag => tag.substring(1)) : [];
   };
 
-  // 内容からハッシュタグを抽出してタグに追加
-  useEffect(() => {
-    const extractedTags = extractHashtags(content);
-    if (extractedTags.length > 0) {
-      setTags(prev => {
-        const newTags = [...new Set([...prev, ...extractedTags])];
-        return newTags;
-      });
-    }
-  }, [content]);
+  const contentHashtags = extractHashtags(markdown);
+  const allAvailableTags = [...new Set([...availableTags, ...contentHashtags, ...tags])];
 
-  // 保存処理
-  const handleSave = () => {
+  // textareaの高さ自動調整（外部コードのアイデアを採用）
+  useEffect(() => {
+    const el = textAreaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [markdown]);
+
+  // 自動保存（既存メモのみ）
+  const debouncedAutoSave = useCallback(
+    debounce(async () => {
+      if (!isNew && dirty) {
+        const { title, content } = extractTitleAndContent(markdown);
+        if (!title.trim()) return; // タイトルがない場合は自動保存しない
+        
+        try {
+          setSaving(true);
+          await onSave({
+            id: memo?.id,
+            title: title.trim(),
+            content,
+            tags: [...new Set([...tags, ...contentHashtags])],
+            project_id: projectId,
+            created_at: memo?.created_at,
+            updated_at: new Date().toISOString(),
+          });
+          setDirty(false);
+        } catch (err) {
+          console.error('Auto-save error:', err);
+        } finally {
+          setSaving(false);
+        }
+      }
+    }, autoSaveDelay),
+    [markdown, tags, dirty, isNew, autoSaveDelay, memo, onSave, projectId, contentHashtags]
+  );
+
+  useEffect(() => {
+    if (dirty) debouncedAutoSave();
+    return debouncedAutoSave.cancel;
+  }, [debouncedAutoSave, dirty]);
+
+  // 手動保存
+  const handleSave = async () => {
+    const { title, content } = extractTitleAndContent(markdown);
+    
     if (!title.trim()) {
-      alert('タイトルを入力してください');
+      alert('タイトルを入力してください（最初の行）');
       return;
     }
 
-    onSave({
-      title: title.trim(),
-      content,
-      tags,
-    });
+    try {
+      setSaving(true);
+      await onSave({
+        id: memo?.id,
+        title: title.trim(),
+        content,
+        tags: [...new Set([...tags, ...contentHashtags])],
+        project_id: projectId,
+        created_at: memo?.created_at,
+        updated_at: new Date().toISOString(),
+      });
+      setDirty(false);
+    } catch (err) {
+      console.error('Save error:', err);
+      alert('保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Markdownツールバー
-  const insertMarkdown = (prefix: string, suffix: string = '') => {
-    const textarea = document.getElementById('memo-content') as HTMLTextAreaElement;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    const newText = prefix + selectedText + suffix;
-    
-    setContent(
-      content.substring(0, start) + newText + content.substring(end)
-    );
-
-    // カーソル位置を調整
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(
-        start + prefix.length,
-        start + prefix.length + selectedText.length
-      );
-    }, 0);
+  // クリア機能
+  const handleClear = () => {
+    if (confirm('入力内容をクリアしますか？')) {
+      setMarkdown('');
+      setTags([]);
+      setDirty(true);
+    }
   };
 
-  const MarkdownToolbar = () => (
-    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('**', '**')}
-      >
-        Bold
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('*', '*')}
-      >
-        Italic
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('# ')}
-      >
-        H1
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('## ')}
-      >
-        H2
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('- ')}
-      >
-        List
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('[', '](url)')}
-      >
-        Link
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        onClick={() => insertMarkdown('`', '`')}
-      >
-        Code
-      </Button>
-    </Stack>
-  );
+  const { title } = extractTitleAndContent(markdown);
 
-  // デスクトップレイアウト（分割ビュー）
-  if (!isMobile) {
-    return (
-      <Box sx={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
-        {/* タイトル入力 */}
-        <TextField
-          fullWidth
-          placeholder="メモのタイトル..."
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          variant="outlined"
-          sx={{ mb: 2 }}
-          autoFocus
-        />
-
-        {/* タグ入力 */}
-        <Autocomplete
-          multiple
-          freeSolo
-          options={availableTags}
-          value={tags}
-          onChange={(_, newValue) => setTags(newValue as string[])}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              placeholder="タグを追加..."
-              InputProps={{
-                ...params.InputProps,
-                startAdornment: <TagIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-          )}
-          renderTags={(value, getTagProps) =>
-            value.map((option, index) => (
-              <Chip
-                {...getTagProps({ index })}
-                key={option}
-                variant="outlined"
-                label={option}
-                size="small"
-              />
-            ))
-          }
-          sx={{ mb: 2 }}
-        />
-
-        {/* エディター・プレビュー分割ビュー */}
-        <Box sx={{ flexGrow: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-          <PanelGroup direction="horizontal">
-            {/* エディター */}
-            <Panel defaultSize={50} minSize={30}>
-              <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  エディター
-                </Typography>
-                <MarkdownToolbar />
-                <TextField
-                  id="memo-content"
-                  multiline
-                  placeholder="メモの内容をMarkdownで記述..."
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  variant="outlined"
-                  sx={{
-                    flexGrow: 1,
-                    '& .MuiInputBase-root': {
-                      height: '100%',
-                      alignItems: 'flex-start',
-                    },
-                    '& .MuiInputBase-input': {
-                      height: '100% !important',
-                      overflowY: 'auto !important',
-                    },
-                  }}
-                />
-              </Box>
-            </Panel>
-
-            <PanelResizeHandle style={{ width: '2px', backgroundColor: theme.palette.divider }} />
-
-            {/* プレビュー */}
-            <Panel defaultSize={50} minSize={30}>
-              <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  プレビュー
-                </Typography>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    height: 'calc(100% - 32px)',
-                    overflow: 'auto',
-                    backgroundColor: 'background.default',
-                  }}
-                >
-                  <ReactMarkdown>
-                    {content || '*プレビューはここに表示されます*'}
-                  </ReactMarkdown>
-                </Paper>
-              </Box>
-            </Panel>
-          </PanelGroup>
-        </Box>
-
-        {/* アクションボタン */}
-        <Stack direction="row" spacing={2} sx={{ mt: 2, justifyContent: 'flex-end' }}>
-          <Button
-            variant="outlined"
-            onClick={onCancel}
-            startIcon={<CancelIcon />}
-          >
-            キャンセル
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            startIcon={<SaveIcon />}
-            disabled={!title.trim()}
-          >
-            保存
-          </Button>
-        </Stack>
-
-        {memo && isDirty && (
-          <Typography variant="caption" color="warning.main" sx={{ mt: 1 }}>
-            未保存の変更があります（自動保存まで数秒）
-          </Typography>
-        )}
-      </Box>
-    );
-  }
-
-  // モバイルレイアウト（タブ切り替え）
-  return (
-    <Box sx={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
-      {/* タイトル入力 */}
-      <TextField
-        fullWidth
-        placeholder="メモのタイトル..."
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        variant="outlined"
-        sx={{ mb: 2 }}
-        autoFocus
-      />
+  // 編集画面（シンプルなtextarea実装）
+  const EditorFields = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* ツールバー */}
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Typography variant="h6" sx={{ flex: 1 }}>
+          {isNew ? '新しいメモ' : 'メモを編集'}
+        </Typography>
+        <Tooltip title="内容をクリア">
+          <IconButton onClick={handleClear} size="small">
+            <ClearIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="保存">
+          <IconButton onClick={handleSave} size="small" color="primary" disabled={saving}>
+            <SaveIcon />
+          </IconButton>
+        </Tooltip>
+      </Stack>
 
       {/* タグ入力 */}
       <Autocomplete
         multiple
         freeSolo
-        options={availableTags}
+        options={allAvailableTags}
         value={tags}
-        onChange={(_, newValue) => setTags(newValue as string[])}
+        onChange={(_, newValue) => {
+          setTags(newValue);
+          setDirty(true);
+        }}
         renderInput={(params) => (
           <TextField
             {...params}
-            placeholder="タグを追加..."
+            label="タグ"
+            placeholder="タグを選択または入力..."
+            size="small"
             InputProps={{
               ...params.InputProps,
-              startAdornment: <TagIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+              startAdornment: (
+                <>
+                  <LocalOfferIcon sx={{ mr: 1, color: 'action.active' }} />
+                  {params.InputProps.startAdornment}
+                </>
+              ),
             }}
           />
         )}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => (
+        renderTags={(tagValue, getTagProps) =>
+          tagValue.map((option, index) => (
             <Chip
+              label={option}
               {...getTagProps({ index })}
               key={option}
-              variant="outlined"
-              label={option}
               size="small"
+              color={contentHashtags.includes(option) ? 'secondary' : 'default'}
             />
           ))
         }
-        sx={{ mb: 2 }}
+        size="small"
       />
 
-      {/* タブ */}
-      <Tabs
-        value={currentTab}
-        onChange={(_, newValue) => setCurrentTab(newValue)}
-        sx={{ borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Tab icon={<EditIcon />} label="エディット" />
-        <Tab icon={<PreviewIcon />} label="プレビュー" />
-      </Tabs>
+      {/* メイン入力エリア（シンプルなtextarea） */}
+      <Box sx={{ flex: 1, position: 'relative' }}>
+        <textarea
+          ref={textAreaRef}
+          value={markdown}
+          onChange={(e) => {
+            setMarkdown(e.target.value);
+            setDirty(true);
+          }}
+          placeholder={`# メモのタイトル
 
-      {/* タブコンテンツ */}
-      <Box sx={{ flexGrow: 1, p: 2 }}>
-        {currentTab === 0 ? (
-          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <MarkdownToolbar />
-            <TextField
-              id="memo-content"
-              multiline
-              placeholder="メモの内容をMarkdownで記述..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              variant="outlined"
-              sx={{
-                flexGrow: 1,
-                '& .MuiInputBase-root': {
-                  height: '100%',
-                  alignItems: 'flex-start',
-                },
-                '& .MuiInputBase-input': {
-                  height: '100% !important',
-                  overflowY: 'auto !important',
-                },
-              }}
-            />
-          </Box>
-        ) : (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              height: '100%',
-              overflow: 'auto',
-              backgroundColor: 'background.default',
-            }}
-          >
-            <ReactMarkdown>
-              {content || '*プレビューはここに表示されます*'}
-            </ReactMarkdown>
-          </Paper>
-        )}
+メモの内容をMarkdown形式で入力できます...
+
+## 例
+- リスト項目
+- **太字** や *斜体* も使えます
+- #ハッシュタグ も自動認識されます`}
+          style={{
+            width: '100%',
+            height: '100%',
+            minHeight: '300px',
+            padding: '16px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+            fontSize: '14px',
+            lineHeight: '1.6',
+            resize: 'none',
+            outline: 'none',
+            backgroundColor: 'transparent',
+          }}
+          autoFocus={isNew}
+        />
+      </Box>
+
+      {/* ハッシュタグ表示 */}
+      {contentHashtags.length > 0 && (
+        <Box>
+          <Typography variant="caption" color="text.secondary">
+            ハッシュタグ検出: {contentHashtags.join(', ')}
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+
+  // プレビュー画面
+  const PreviewPane = (
+    <Paper variant="outlined" sx={{ p: 2, height: '100%', overflow: 'auto' }}>
+      <Typography variant="h5" gutterBottom>
+        {title || 'タイトル (未入力)'}
+      </Typography>
+      
+      {/* タグ表示 */}
+      {[...new Set([...tags, ...contentHashtags])].length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
+            {[...new Set([...tags, ...contentHashtags])].map((tag) => (
+              <Chip
+                key={tag}
+                label={tag}
+                size="small"
+                color={contentHashtags.includes(tag) ? 'secondary' : 'primary'}
+                variant="outlined"
+              />
+            ))}
+          </Stack>
+        </Box>
+      )}
+      
+      <ReactMarkdown>{markdown || '*ここに内容が表示されます*'}</ReactMarkdown>
+    </Paper>
+  );
+
+  return (
+    <Box sx={{ height: '70vh', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* タブ切替 */}
+      {enablePreview && (
+        <Tabs
+          value={tab}
+          onChange={(_, v) => setTab(v)}
+          indicatorColor="primary"
+          textColor="primary"
+          variant="fullWidth"
+        >
+          <Tab value="edit" icon={<EditIcon />} label="編集" iconPosition="start" />
+          <Tab value="preview" icon={<VisibilityIcon />} label="プレビュー" iconPosition="start" />
+        </Tabs>
+      )}
+
+      {/* メインビュー */}
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        {tab === 'edit' ? EditorFields : PreviewPane}
       </Box>
 
       {/* アクションボタン */}
-      <Stack direction="row" spacing={2} sx={{ p: 2, justifyContent: 'flex-end' }}>
-        <Button
-          variant="outlined"
-          onClick={onCancel}
-          startIcon={<CancelIcon />}
-        >
-          キャンセル
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          startIcon={<SaveIcon />}
-          disabled={!title.trim()}
-        >
-          保存
-        </Button>
+      <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
+        <Box>
+          {/* 保存状態表示 */}
+          {!isNew && (
+            <Typography variant="caption" color={dirty ? 'warning.main' : 'success.main'}>
+              {saving
+                ? '保存中...'
+                : dirty
+                ? '未保存の変更があります'
+                : '保存済み'}
+            </Typography>
+          )}
+        </Box>
+        
+        <Stack direction="row" spacing={1}>
+          {onCancel && (
+            <Button variant="outlined" startIcon={<CancelIcon />} onClick={onCancel}>
+              キャンセル
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<SaveIcon />}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? '保存中...' : '保存'}
+          </Button>
+        </Stack>
       </Stack>
-
-      {memo && isDirty && (
-        <Typography variant="caption" color="warning.main" sx={{ px: 2, pb: 1 }}>
-          未保存の変更があります（自動保存まで数秒）
-        </Typography>
-      )}
     </Box>
   );
 };
 
-export default MemoEditor; 
+export default MemoEditor;

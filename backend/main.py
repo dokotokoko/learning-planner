@@ -232,6 +232,31 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+def get_current_user_int(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+    """トークンからユーザーIDを取得（int型として返す）"""
+    try:
+        token = credentials.credentials
+        
+        # 数値IDの場合はint型で返す
+        if token.isdigit():
+            return int(token)
+        else:
+            # UUID形式の場合は数値IDに戻す
+            # UUID形式: 00000000-0000-0000-0000-000000000005 -> 5
+            uuid_str = token.replace("-", "")
+            if len(uuid_str) == 32 and all(c in "0123456789abcdef" for c in uuid_str.lower()):
+                # 16進数として解釈して10進数に変換
+                return int(uuid_str, 16)
+            else:
+                raise ValueError("Invalid UUID format")
+            
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なトークンです",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
 # API エンドポイント
 
 @app.get("/")
@@ -265,7 +290,7 @@ async def login(user_data: UserLogin):
 @app.post("/interests", response_model=InterestResponse)
 async def create_interest(
     interest_data: InterestCreate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """興味関心の保存"""
     try:
@@ -293,7 +318,7 @@ async def create_interest(
         )
 
 @app.get("/interests", response_model=List[InterestResponse])
-async def get_interests(current_user: int = Depends(get_current_user)):
+async def get_interests(current_user: int = Depends(get_current_user_int)):
     """ユーザーの興味関心一覧取得"""
     try:
         interests = db_manager.get_interest(current_user)
@@ -315,7 +340,7 @@ async def get_interests(current_user: int = Depends(get_current_user)):
 @app.post("/goals", response_model=GoalResponse)
 async def create_goal(
     goal_data: GoalCreate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """学習目標の保存"""
     try:
@@ -344,7 +369,7 @@ async def create_goal(
         )
 
 @app.get("/goals", response_model=List[GoalResponse])
-async def get_goals(current_user: int = Depends(get_current_user)):
+async def get_goals(current_user: int = Depends(get_current_user_int)):
     """ユーザーの学習目標一覧取得"""
     try:
         goals = db_manager.get_goal(current_user)
@@ -367,7 +392,7 @@ async def get_goals(current_user: int = Depends(get_current_user)):
 @app.post("/learning-plans", response_model=LearningPlanResponse)
 async def create_learning_plan(
     plan_data: LearningPlanCreate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """学習計画の保存"""
     try:
@@ -396,7 +421,7 @@ async def create_learning_plan(
         )
 
 @app.get("/learning-plans", response_model=List[LearningPlanResponse])
-async def get_learning_plans(current_user: int = Depends(get_current_user)):
+async def get_learning_plans(current_user: int = Depends(get_current_user_int)):
     """ユーザーの学習計画一覧取得"""
     try:
         plans = db_manager.get_learningsPlans(current_user)
@@ -419,7 +444,7 @@ async def get_learning_plans(current_user: int = Depends(get_current_user)):
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(
     chat_data: ChatMessage,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """AIとのチャット（対話履歴を考慮）"""
     try:
@@ -494,7 +519,7 @@ async def chat_with_ai(
 async def get_chat_history(
     page: Optional[str] = None,
     limit: Optional[int] = 100,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """対話履歴取得"""
     try:
@@ -524,7 +549,7 @@ async def get_chat_history(
 @app.delete("/chat/history")
 async def clear_chat_history(
     page: Optional[str] = None,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """対話履歴クリア"""
     try:
@@ -541,7 +566,7 @@ async def clear_chat_history(
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
     memo_data: MemoSave,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモの保存"""
     try:
@@ -568,7 +593,7 @@ async def save_memo(
 @app.get("/memos/{page_id}", response_model=MemoResponse)
 async def get_memo(
     page_id: str,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモの取得"""
     try:
@@ -596,7 +621,7 @@ async def get_memo(
         )
 
 @app.get("/memos", response_model=List[MemoResponse])
-async def get_all_memos(current_user: int = Depends(get_current_user)):
+async def get_all_memos(current_user: int = Depends(get_current_user_int)):
     """ユーザーの全メモ取得"""
     try:
         memos = db_manager.get_user_memos(current_user)
@@ -619,7 +644,7 @@ async def get_all_memos(current_user: int = Depends(get_current_user)):
 @app.delete("/memos/{page_id}")
 async def delete_memo(
     page_id: str,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモの削除"""
     try:
@@ -639,7 +664,7 @@ async def delete_memo(
         )
 
 @app.get("/learning-path/reflection", response_model=LearningPathResponse)
-async def get_learning_path_reflection(current_user: int = Depends(get_current_user)):
+async def get_learning_path_reflection(current_user: int = Depends(get_current_user_int)):
     """学習の振り返り情報を取得"""
     try:
         # 各ステップのテーマを取得
@@ -785,7 +810,7 @@ async def get_projects(current_user: int = Depends(get_current_user)):
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: int,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """特定のプロジェクトを取得"""
     try:
@@ -831,7 +856,7 @@ async def get_project(
 async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """プロジェクトを更新"""
     try:
@@ -895,7 +920,7 @@ async def update_project(
 @app.delete("/projects/{project_id}")
 async def delete_project(
     project_id: int,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """プロジェクトを削除"""
     try:
@@ -984,7 +1009,7 @@ async def create_project_memo(
 @app.post("/memos", response_model=MultiMemoResponse)
 async def create_memo(
     memo_data: MultiMemoCreate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモを作成（プロジェクトなし）"""
     try:
@@ -1081,7 +1106,7 @@ async def search_memos(
     query: Optional[str] = None,
     tags: Optional[str] = None,
     project_id: Optional[int] = None,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモを検索・フィルタリング"""
     try:
@@ -1146,7 +1171,7 @@ async def search_memos(
 @app.get("/memos/{memo_id}", response_model=MultiMemoResponse)
 async def get_memo(
     memo_id: int,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """特定のメモを取得"""
     try:
@@ -1164,7 +1189,7 @@ async def get_memo(
 async def update_memo(
     memo_id: int,
     memo_data: MultiMemoUpdate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモを更新"""
     try:
@@ -1228,7 +1253,7 @@ async def update_memo(
 @app.delete("/memos/{memo_id}")
 async def delete_memo(
     memo_id: int,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモを削除"""
     try:
@@ -1267,7 +1292,7 @@ async def delete_memo(
 async def autosave_memo(
     memo_id: int,
     memo_data: MultiMemoUpdate,
-    current_user: int = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """メモの自動保存（リアルタイム更新）"""
     try:
@@ -1578,7 +1603,7 @@ async def delete_memo_new(
 @app.post("/v2/projects", response_model=ProjectResponse)
 async def create_project_v2(
     project_data: ProjectCreate,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseを使用してプロジェクトを作成"""
     try:
@@ -1616,7 +1641,7 @@ async def create_project_v2(
         )
 
 @app.get("/v2/projects", response_model=List[ProjectResponse])
-async def get_projects_v2(current_user: str = Depends(get_current_user)):
+async def get_projects_v2(current_user: int = Depends(get_current_user_int)):
     """Ver2: Supabaseからプロジェクト一覧を取得"""
     try:
         # プロジェクト一覧を取得
@@ -1650,7 +1675,7 @@ async def get_projects_v2(current_user: str = Depends(get_current_user)):
 @app.get("/v2/projects/{project_id}", response_model=ProjectResponse)
 async def get_project_v2(
     project_id: int,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseから特定のプロジェクトを取得"""
     try:
@@ -1687,7 +1712,7 @@ async def get_project_v2(
 async def update_project_v2(
     project_id: int,
     project_data: ProjectUpdate,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseでプロジェクトを更新"""
     try:
@@ -1724,7 +1749,7 @@ async def update_project_v2(
 @app.delete("/v2/projects/{project_id}")
 async def delete_project_v2(
     project_id: int,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseからプロジェクトを削除"""
     try:
@@ -1748,7 +1773,7 @@ async def delete_project_v2(
 async def create_project_memo_v2(
     project_id: int,
     memo_data: MultiMemoCreate,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseでプロジェクト内にメモを作成"""
     try:
@@ -1784,7 +1809,7 @@ async def create_project_memo_v2(
 @app.get("/v2/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
 async def get_project_memos_v2(
     project_id: int,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseからプロジェクト内のメモ一覧を取得"""
     try:
@@ -1814,7 +1839,7 @@ async def get_project_memos_v2(
 @app.get("/v2/memos/{memo_id}", response_model=MultiMemoResponse)
 async def get_memo_v2(
     memo_id: int,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseから特定のメモを取得"""
     try:
@@ -1847,7 +1872,7 @@ async def get_memo_v2(
 async def update_memo_v2(
     memo_id: int,
     memo_data: MultiMemoUpdate,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseでメモを更新"""
     try:
@@ -1882,7 +1907,7 @@ async def update_memo_v2(
 @app.delete("/v2/memos/{memo_id}")
 async def delete_memo_v2(
     memo_id: int,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseからメモを削除"""
     try:
@@ -1906,7 +1931,7 @@ async def delete_memo_v2(
 async def autosave_memo_v2(
     memo_id: int,
     memo_data: MultiMemoUpdate,
-    current_user: str = Depends(get_current_user)
+    current_user: int = Depends(get_current_user_int)
 ):
     """Ver2: Supabaseでメモの自動保存"""
     try:
