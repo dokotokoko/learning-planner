@@ -19,8 +19,10 @@ import {
   Person as PersonIcon,
   Close as CloseIcon,
   NoteAdd as MemoIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatHistory from './ChatHistory';
 
 interface Message {
   id: string;
@@ -71,6 +73,7 @@ const AIChat: React.FC<AIChatProps> = ({
   const messageListRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
   const initializationKeyRef = useRef(pageId);
@@ -234,14 +237,16 @@ const AIChat: React.FC<AIChatProps> = ({
     loadInitialMessages();
   }, [messages.length, initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded]);
 
-  // メッセージリストの最下部にスクロール（条件付き）
+  // メッセージリストの最下部にスクロール（新しいメッセージが追加された場合のみ）
+  const previousMessageCountRef = useRef(0);
   useEffect(() => {
-    // ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
-    if (!isUserScrolling && shouldAutoScroll) {
+    // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
+    if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
+    previousMessageCountRef.current = messages.length;
   }, [messages, isUserScrolling, shouldAutoScroll]);
 
   // 新しいメッセージが追加された際の処理
@@ -368,6 +373,43 @@ const AIChat: React.FC<AIChatProps> = ({
     });
   };
 
+  // 履歴セッション選択時の処理
+  const handleSessionSelect = (session: any) => {
+    const historyMessages: Message[] = session.messages.map((item: any) => ({
+      id: item.id.toString(),
+      role: item.sender === 'user' ? 'user' : 'assistant',
+      content: item.message,
+      timestamp: new Date(item.created_at),
+    }));
+    
+    setMessages(historyMessages);
+    setIsHistoryOpen(false);
+    setShouldAutoScroll(true);
+    
+    // 最下部にスクロール
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  // 新しいチャット開始
+  const handleNewChat = () => {
+    setMessages([]);
+    setIsHistoryOpen(false);
+    setShouldAutoScroll(true);
+    
+    // 初期メッセージがある場合は設定
+    if (initialMessage) {
+      const initialMsg: Message = {
+        id: `initial-${Date.now()}`,
+        role: 'assistant',
+        content: initialMessage,
+        timestamp: new Date(),
+      };
+      setMessages([initialMsg]);
+    }
+  };
+
   return (
     <Box sx={{ 
       height: '100%', 
@@ -381,8 +423,18 @@ const AIChat: React.FC<AIChatProps> = ({
         backgroundColor: 'background.default',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
       }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton 
+            onClick={() => setIsHistoryOpen(true)} 
+            size="small" 
+            title="対話履歴を表示"
+            sx={{ color: 'primary.main' }}
+          >
+            <HistoryIcon />
+          </IconButton>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {showMemoButton && !hideMemoButton && onOpenMemo && (
             <IconButton onClick={onOpenMemo} size="small" title="メモ帳を開く">
@@ -560,6 +612,19 @@ const AIChat: React.FC<AIChatProps> = ({
           </Button>
         </Stack>
       </Box>
+
+      {/* チャット履歴パネル */}
+      <AnimatePresence>
+        {isHistoryOpen && (
+          <ChatHistory
+            isOpen={isHistoryOpen}
+            onClose={() => setIsHistoryOpen(false)}
+            onSessionSelect={handleSessionSelect}
+            onNewChat={handleNewChat}
+            currentPageId={pageId}
+          />
+        )}
+      </AnimatePresence>
     </Box>
   );
 };

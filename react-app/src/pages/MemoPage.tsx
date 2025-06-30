@@ -237,7 +237,7 @@ const MemoPage: React.FC = () => {
     await saveChanges(newTitle, newContent);
   };
 
-  // AI応答の処理（FastAPI バックエンド経由）
+  // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
       // ユーザーIDを取得
@@ -260,7 +260,7 @@ const MemoPage: React.FC = () => {
         throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
       }
 
-      // FastAPI バックエンドに接続
+      // バックエンドAPIに接続
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
@@ -289,7 +289,7 @@ const MemoPage: React.FC = () => {
     } catch (error) {
       console.error('AI API エラー:', error);
       
-      // フォールバック：ローカル応答
+      // エラー時の代替応答
       return new Promise((resolve) => {
         setTimeout(() => {
           const responses = [
@@ -433,6 +433,7 @@ ${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: 'background.paper',
+                overflow: 'hidden',
               }}>
                 <Box sx={{ 
                   display: 'flex', 
@@ -440,6 +441,7 @@ ${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究
                   justifyContent: 'flex-end',
                   p: 2,
                   backgroundColor: 'background.default',
+                  flexShrink: 0,
                 }}>
                   <Tooltip title="メモをクリア" arrow>
                     <IconButton onClick={handleMemoClear} size="small" sx={{ mr: 1 }}>
@@ -452,33 +454,34 @@ ${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究
                     </IconButton>
                   </Tooltip>
                 </Box>
-                <TextField
-                  multiline
-                  fullWidth
-                  value={memoContent}
-                  onChange={handleMemoChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder={memoPlaceholder}
-                  variant="standard"
-                  sx={{
-                    flex: 1,
-                    p: 3,
-                    '& .MuiInputBase-root': {
-                      height: '100%',
-                      padding: 0,
-                      '& textarea': {
-                        height: '100% !important',
+                <Box sx={{ 
+                  flex: 1,
+                  overflow: 'auto',
+                  p: 3,
+                }}>
+                  <TextField
+                    multiline
+                    fullWidth
+                    minRows={25}
+                    value={memoContent}
+                    onChange={handleMemoChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={memoPlaceholder}
+                    variant="standard"
+                    sx={{
+                      '& .MuiInputBase-root': {
+                        padding: 0,
                       },
-                    },
-                    '& .MuiInput-underline:before': {
-                      display: 'none',
-                    },
-                    '& .MuiInput-underline:after': {
-                      display: 'none',
-                    },
-                  }}
-                  ref={memoRef}
-                />
+                      '& .MuiInput-underline:before': {
+                        display: 'none',
+                      },
+                      '& .MuiInput-underline:after': {
+                        display: 'none',
+                      },
+                    }}
+                    ref={memoRef}
+                  />
+                </Box>
               </Box>
             </Panel>
 

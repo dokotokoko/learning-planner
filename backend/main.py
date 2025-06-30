@@ -99,6 +99,16 @@ class ChatHistoryResponse(BaseModel):
     context_data: Optional[str]
     created_at: str
 
+# 新しいモデル：conversation履歴用
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    page_id: str
+    message_count: int
+    last_message: str
+    last_updated: str
+    created_at: str
+
 class MemoSave(BaseModel):
     page_id: str
     content: str
@@ -256,6 +266,112 @@ def get_current_user_int(credentials: HTTPAuthorizationCredentials = Depends(sec
             detail="無効なトークンです",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+# conversation管理のヘルパー関数
+async def get_or_create_conversation(user_id: int, page_id: str) -> str:
+    """ページに対応するconversationを取得または作成"""
+    try:
+        # 既存のconversationを探す
+        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", page_id).execute()
+        
+        if existing_conv.data:
+            # 既存のconversationがある場合
+            conversation_id = existing_conv.data[0]["id"]
+            logger.info(f"既存conversation使用: {conversation_id}")
+            return conversation_id
+        else:
+            # 新しいconversationを作成
+            title = generate_initial_title(page_id)
+            new_conv_data = {
+                "user_id": user_id,
+                "title": title,
+                "page_id": page_id
+            }
+            new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
+            
+            if new_conv.data:
+                conversation_id = new_conv.data[0]["id"]
+                logger.info(f"新conversation作成: {conversation_id} - {title}")
+                return conversation_id
+            else:
+                raise Exception("conversation作成に失敗")
+                
+    except Exception as e:
+        logger.error(f"conversation取得/作成エラー: {e}")
+        raise
+
+def generate_initial_title(page_id: str) -> str:
+    """ページIDから初期タイトルを生成"""
+    if page_id.startswith('memo-'):
+        return "メモページでの相談"
+    elif page_id.startswith('step-'):
+        step_num = page_id.replace('step-', '').replace('step_', '')
+        return f"ステップ{step_num}での相談"
+    elif 'inquiry' in page_id or page_id == 'general':
+        return "一般的な相談"
+    else:
+        return f"{page_id}での相談"
+
+async def update_conversation_timestamp(conversation_id: str):
+    """conversationの最終更新時刻を更新"""
+    try:
+        supabase.table("chat_conversations").update({
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", conversation_id).execute()
+    except Exception as e:
+        logger.error(f"conversation timestamp更新エラー: {e}")
+
+async def generate_ai_title_if_needed(conversation_id: str):
+    """対話が一定数に達したらAI要約タイトルを生成"""
+    try:
+        # そのconversationのメッセージ数をチェック
+        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).execute()
+        messages = messages_response.data
+        
+        # メッセージが6件（3往復）に達した場合にタイトル生成
+        if len(messages) == 6:
+            logger.info(f"conversation {conversation_id} が3往復に達したためタイトル生成開始")
+            
+            # 最初の3往復を取得
+            first_messages = messages[:6]
+            conversation_text = []
+            for msg in first_messages:
+                role = "ユーザー" if msg["sender"] == "user" else "AI"
+                conversation_text.append(f"{role}: {msg['message']}")
+            
+            conversation_summary = "\n".join(conversation_text)
+            
+            # LLMにタイトル生成を依頼
+            title_prompt = f"""以下の対話内容を、3-5語の簡潔なタイトルで要約してください。
+例：「AIの学習効率について」「環境問題の解決策」「探究テーマの設定」
+
+対話内容:
+{conversation_summary}
+
+タイトル（3-5語）:"""
+            
+            if llm_client:
+                try:
+                    ai_title = llm_client.generate_response([{
+                        "role": "user", 
+                        "content": title_prompt
+                    }])
+                    
+                    # 生成されたタイトルをクリーンアップ
+                    clean_title = ai_title.strip().replace('「', '').replace('」', '').replace('"', '').replace("'", '')
+                    
+                    # conversationのタイトルを更新
+                    supabase.table("chat_conversations").update({
+                        "title": clean_title
+                    }).eq("id", conversation_id).execute()
+                    
+                    logger.info(f"AI生成タイトル更新完了: {clean_title}")
+                    
+                except Exception as e:
+                    logger.error(f"AIタイトル生成エラー: {e}")
+            
+    except Exception as e:
+        logger.error(f"AIタイトル生成チェックエラー: {e}")
 
 # API エンドポイント
 
@@ -446,7 +562,7 @@ async def chat_with_ai(
     chat_data: ChatMessage,
     current_user: int = Depends(get_current_user_int)
 ):
-    """AIとのチャット（対話履歴を考慮）"""
+    """AIとのチャット（conversation管理対応）"""
     try:
         logger.info(f"チャット開始 - ユーザーID: {current_user}, メッセージ: {chat_data.message[:50]}...")
         
@@ -456,10 +572,14 @@ async def chat_with_ai(
                 detail="LLMクライアントまたはSupabaseクライアントが初期化されていません"
             )
         
-        # 過去の対話履歴を取得してコンテキストに含める (Supabaseから)
-        history_response = supabase.table("chat_logs").select("sender, message").eq("user_id", current_user).order("created_at").limit(50).execute()
+        # conversationを取得または作成
+        page_id = chat_data.page or "general"
+        conversation_id = await get_or_create_conversation(current_user, page_id)
+        
+        # そのconversationの過去の対話履歴を取得
+        history_response = supabase.table("chat_logs").select("sender, message").eq("conversation_id", conversation_id).order("created_at").limit(50).execute()
         conversation_history = history_response.data
-        logger.info(f"取得した対話履歴: {len(conversation_history)}件")
+        logger.info(f"conversation {conversation_id} の履歴: {len(conversation_history)}件")
         
         # LLM用のメッセージリストを構築
         messages = [{"role": "system", "content": system_prompt}]
@@ -470,39 +590,45 @@ async def chat_with_ai(
         messages.append({"role": "user", "content": chat_data.message})
         logger.info(f"最終的なメッセージ数: {len(messages)}")
         
-        # ユーザーメッセージをDBに保存 (Supabase経由)
+        # ユーザーメッセージをDBに保存（conversation_id付き）
         try:
             user_message_data = {
                 "user_id": current_user,
-                "page": chat_data.page or "general",
+                "page": page_id,
                 "sender": "user",
-                "message": chat_data.message
+                "message": chat_data.message,
+                "conversation_id": conversation_id
             }
             supabase.table("chat_logs").insert(user_message_data).execute()
-            logger.info(f"ユーザーメッセージ保存完了")
+            logger.info(f"ユーザーメッセージ保存完了 (conversation: {conversation_id})")
         except Exception as e:
             logger.error(f"ユーザーメッセージ保存失敗: {e}")
-            # 保存に失敗してもチャットは続行するが、エラーは返す
             raise HTTPException(status_code=500, detail=f"ユーザーメッセージの保存に失敗しました: {e}")
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
         logger.info(f"LLM応答生成完了 - 長さ: {len(response)}")
         
-        # AIの応答をDBに保存 (Supabase経由)
+        # AIの応答をDBに保存（conversation_id付き）
         try:
             ai_message_data = {
                 "user_id": current_user,
-                "page": chat_data.page or "general",
+                "page": page_id,
                 "sender": "assistant",
-                "message": response
+                "message": response,
+                "conversation_id": conversation_id
             }
             supabase.table("chat_logs").insert(ai_message_data).execute()
-            logger.info(f"AI応答保存完了")
+            logger.info(f"AI応答保存完了 (conversation: {conversation_id})")
         except Exception as e:
             logger.error(f"AI応答保存失敗: {e}")
-            # 保存に失敗してもレスポンスは返すが、エラーは返す
             raise HTTPException(status_code=500, detail=f"AI応答の保存に失敗しました: {e}")
+        
+        # conversationの最終更新時刻を更新
+        await update_conversation_timestamp(conversation_id)
+        
+        # 必要に応じてAI要約タイトルを生成
+        await generate_ai_title_if_needed(conversation_id)
         
         return ChatResponse(
             response=response,
@@ -521,29 +647,143 @@ async def get_chat_history(
     limit: Optional[int] = 100,
     current_user: int = Depends(get_current_user_int)
 ):
-    """対話履歴取得"""
+    """対話履歴取得（Supabase版）"""
     try:
+        logger.info(f"chat/history呼び出し（Supabase） - user_id: {current_user}, page: {page}, limit: {limit}")
+        
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabaseクライアントが初期化されていません")
+        
+        # Supabaseから履歴を取得
+        query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
+        
         if page:
-            history = db_manager.get_page_chat_history(current_user, page)
-        else:
-            history = db_manager.get_user_chat_history(current_user, limit)
+            query = query.eq("page", page)
+        
+        # 最新順で取得
+        query = query.order("created_at", desc=True)
+        
+        if limit:
+            query = query.limit(limit)
+        
+        result = query.execute()
+        history = result.data
+        
+        logger.info(f"Supabaseから取得した履歴数: {len(history)}")
+        
+        # memo-で始まるページの数をカウント
+        memo_count = sum(1 for item in history if item.get('page', '').startswith('memo-'))
+        logger.info(f"memo-で始まるページ数: {memo_count}")
+        
+        # ページの種類をログ出力
+        unique_pages = list(set(item.get('page', '') for item in history if item.get('page')))
+        logger.info(f"取得したページ種類: {unique_pages}")
         
         return [
             ChatHistoryResponse(
-                id=item[0],
-                page=item[1],
-                sender=item[2],
-                message=item[3],
-                context_data=item[4],
-                created_at=item[5].isoformat() if item[5] else datetime.now().isoformat()
+                id=item["id"],
+                page=item["page"] or "general",
+                sender=item["sender"],
+                message=item["message"],
+                context_data=item.get("context_data"),
+                created_at=item["created_at"]
             )
             for item in history
         ]
     except Exception as e:
-        logger.error(f"対話履歴取得エラー: {e}")
+        logger.error(f"対話履歴取得エラー（Supabase）: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="対話履歴の取得でエラーが発生しました"
+        )
+
+@app.get("/chat/conversations", response_model=List[ConversationResponse])
+async def get_chat_conversations(
+    limit: Optional[int] = 50,
+    current_user: int = Depends(get_current_user_int)
+):
+    """conversation一覧取得（新しい履歴システム）"""
+    try:
+        logger.info(f"chat/conversations呼び出し - user_id: {current_user}, limit: {limit}")
+        
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabaseクライアントが初期化されていません")
+        
+        # conversationsを取得
+        conversations_response = supabase.table("chat_conversations").select("*").eq("user_id", current_user).order("updated_at", desc=True).limit(limit or 50).execute()
+        conversations = conversations_response.data
+        
+        result = []
+        for conv in conversations:
+            # 各conversationのメッセージ数と最新メッセージを取得
+            logs_response = supabase.table("chat_logs").select("*").eq("conversation_id", conv["id"]).order("created_at", desc=True).execute()
+            logs = logs_response.data
+            
+            if logs:
+                last_message = logs[0]["message"]
+                message_count = len(logs)
+            else:
+                last_message = "メッセージなし"
+                message_count = 0
+            
+            result.append(ConversationResponse(
+                id=conv["id"],
+                title=conv["title"],
+                page_id=conv.get("page_id", "unknown"),
+                message_count=message_count,
+                last_message=last_message[:100],  # 最初の100文字
+                last_updated=conv["updated_at"],
+                created_at=conv["created_at"]
+            ))
+        
+        logger.info(f"conversation一覧取得完了: {len(result)}件")
+        return result
+        
+    except Exception as e:
+        logger.error(f"conversation一覧取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="conversation一覧の取得でエラーが発生しました"
+        )
+
+@app.get("/chat/conversations/{conversation_id}/messages", response_model=List[ChatHistoryResponse])
+async def get_conversation_messages(
+    conversation_id: str,
+    current_user: int = Depends(get_current_user_int)
+):
+    """特定のconversationのメッセージ一覧取得"""
+    try:
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabaseクライアントが初期化されていません")
+        
+        # conversationの所有者確認
+        conv_response = supabase.table("chat_conversations").select("*").eq("id", conversation_id).eq("user_id", current_user).execute()
+        if not conv_response.data:
+            raise HTTPException(status_code=404, detail="conversationが見つかりません")
+        
+        # メッセージを取得
+        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at").execute()
+        messages = messages_response.data
+        
+        return [
+            ChatHistoryResponse(
+                id=msg["id"],
+                page=msg["page"],
+                sender=msg["sender"],
+                message=msg["message"],
+                context_data=msg.get("context_data"),
+                created_at=msg["created_at"]
+            )
+            for msg in messages
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"conversationメッセージ取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="conversationメッセージの取得でエラーが発生しました"
         )
 
 @app.delete("/chat/history")
@@ -551,13 +791,24 @@ async def clear_chat_history(
     page: Optional[str] = None,
     current_user: int = Depends(get_current_user_int)
 ):
-    """対話履歴クリア"""
+    """対話履歴クリア（Supabase版）"""
     try:
-        cleared_count = db_manager.clear_chat_history(current_user, page)
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabaseクライアントが初期化されていません")
+        
+        # 削除クエリを構築
+        query = supabase.table("chat_logs").delete().eq("user_id", current_user)
+        
+        if page:
+            query = query.eq("page", page)
+        
+        result = query.execute()
+        cleared_count = len(result.data) if result.data else 0
+        
         page_info = f" (ページ: {page})" if page else ""
         return {"message": f"対話履歴をクリアしました{page_info}", "cleared_count": cleared_count}
     except Exception as e:
-        logger.error(f"対話履歴クリアエラー: {e}")
+        logger.error(f"対話履歴クリアエラー（Supabase）: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="対話履歴のクリアでエラーが発生しました"
@@ -1958,6 +2209,16 @@ async def autosave_memo_v2(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"メモの自動保存に失敗しました: {str(e)}"
         )
+
+# 新しいモデル：conversation履歴用
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    page_id: str
+    message_count: int
+    last_message: str
+    last_updated: str
+    created_at: str
 
 if __name__ == "__main__":
     import uvicorn
