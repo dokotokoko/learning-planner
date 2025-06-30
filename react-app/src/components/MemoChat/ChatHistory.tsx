@@ -366,7 +366,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   };
 
   // conversation詳細メッセージを取得
-  const loadConversationMessages = async (session: ChatSession) => {
+  const loadConversationMessages = async (session: ChatSession): Promise<ChatSession | null> => {
     try {
       // ユーザーIDを取得
       let userId: string | null = null;
@@ -390,7 +390,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
       if (!userId) {
         console.error('ユーザーIDが見つかりません');
-        return;
+        return null;
       }
 
       console.log(`📡 conversation ${session.id} の詳細メッセージ取得...`);
@@ -404,16 +404,24 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         const messages = await response.json();
         console.log(`conversation ${session.id} のメッセージ取得成功: ${messages.length}件`);
         
+        // 更新されたセッションを作成
+        const updatedSession = { ...session, messages };
+        
         // セッションのメッセージを更新
         const updatedSessions = sessions.map(s => 
-          s.id === session.id ? { ...s, messages } : s
+          s.id === session.id ? updatedSession : s
         );
         setSessions(updatedSessions);
+        
+        // 更新されたセッションを返す
+        return updatedSession;
       } else {
         console.warn(`conversation ${session.id} のメッセージ取得失敗: ${response.status}`);
+        return null;
       }
     } catch (error) {
       console.error(`conversation ${session.id} のメッセージ取得エラー:`, error);
+      return null;
     }
   };
 
@@ -566,7 +574,11 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                             
                             // conversation詳細を取得（UUIDフォーマットの場合）
                             if (session.messages.length === 0 && session.id.match(/^[0-9a-f-]{36}$/i)) {
-                              await loadConversationMessages(session);
+                              const updatedSession = await loadConversationMessages(session);
+                              if (updatedSession) {
+                                onSessionSelect(updatedSession);
+                                return;
+                              }
                             }
                             
                             onSessionSelect(session);
