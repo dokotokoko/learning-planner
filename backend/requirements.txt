@@ -17,4 +17,4 @@ pydantic==2.10.6
 # 認証関連（将来の実装用）
 PyJWT==2.10.1
 bcrypt==4.3.0 
-supabase==2.5.2 
+supabase==2.15.0 

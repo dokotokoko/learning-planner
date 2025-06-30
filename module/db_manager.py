@@ -406,16 +406,37 @@ class DBManager:
             SELECT id, page, sender, message, context_data, created_at 
             FROM chat_logs 
             WHERE user_id = %s 
-            ORDER BY created_at ASC
+            ORDER BY created_at DESC
         """
         params = (user_id,)
         
         if limit:
             query += " LIMIT %s"
             params = (user_id, limit)
+        
+        logging.info(f"chat_history実行クエリ - user_id: {user_id}, limit: {limit}, query: {query}")
             
         self.cur.execute(query, params)
-        return self.cur.fetchall()
+        results = self.cur.fetchall()
+        
+        # 詳細デバッグ情報をログ出力
+        logging.info(f"chat_history取得結果 - 件数: {len(results)}")
+        if results:
+            # 全ページを確認
+            all_pages = [r[1] for r in results if r[1]]
+            unique_pages = list(set(all_pages))
+            logging.info(f"取得した全ページ: {unique_pages}")
+            
+            # memo-で始まるページを詳細確認
+            memo_pages = [r[1] for r in results if r[1] and r[1].startswith('memo-')]
+            logging.info(f"memo-ページ数: {len(memo_pages)}, 例: {memo_pages[:10]}")
+            
+            # 最初の10件の詳細表示
+            logging.info("最初の10件の詳細:")
+            for i, result in enumerate(results[:10]):
+                logging.info(f"  {i}: id={result[0]}, page='{result[1]}', sender='{result[2]}'")
+            
+        return results
 
     # 特定のページでの対話履歴を取得する関数
     def get_page_chat_history(self, user_id, page: str):

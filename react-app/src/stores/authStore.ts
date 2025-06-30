@@ -61,6 +61,9 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
           
+          // トークンとしてuser_idを保存（バックエンドの簡易認証システムに対応）
+          localStorage.setItem('auth-token', data.id.toString());
+          
           const user: User = {
             id: data.id.toString(),
             username: data.username,
@@ -110,6 +113,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        localStorage.removeItem('auth-token');
         set({ user: null });
       },
     }),

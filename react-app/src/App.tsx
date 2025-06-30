@@ -10,6 +10,11 @@ import HomePage from './pages/HomePage';
 import StepPage from './pages/StepPage';
 import GeneralInquiryPage from './pages/GeneralInquiryPage';
 import ProfilePage from './pages/ProfilePage';
+import DashboardPage from './pages/DashboardPage';
+import ProjectPage from './pages/ProjectPage';
+import MemoPage from './pages/MemoPage';
+import MultiMemoPage from './pages/MultiMemoPage';
+
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
@@ -140,9 +145,13 @@ function App() {
               />
               
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/home" replace />} />
+                <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="home" element={<HomePage />} />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="projects/:projectId" element={<ProjectPage />} />
+                <Route path="projects/:projectId/memos/:memoId" element={<MemoPage />} />
                 <Route path="step/:stepNumber" element={<StepPage />} />
+                <Route path="memos" element={<MultiMemoPage />} />
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
                 <Route path="profile" element={<ProfilePage />} />
               </Route>

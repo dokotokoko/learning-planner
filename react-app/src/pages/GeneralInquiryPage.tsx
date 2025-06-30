@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import MemoChat from '../components/MemoChat/MemoChat';
 
 const GeneralInquiryPage: React.FC = () => {
-  // AI応答の処理（FastAPI バックエンド経由）
+  // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
       // ユーザーIDを取得
@@ -33,7 +33,7 @@ const GeneralInquiryPage: React.FC = () => {
         throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
       }
 
-      // FastAPI バックエンドに接続
+      // バックエンドAPIに接続
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
@@ -62,7 +62,7 @@ const GeneralInquiryPage: React.FC = () => {
       // デバッグ用：エラーの詳細をアラート表示
       alert(`API Error: ${error.message || error}`);
       
-      // フォールバック：ローカル応答
+      // エラー時の代替応答
       return new Promise((resolve) => {
         setTimeout(() => {
           const responses = [

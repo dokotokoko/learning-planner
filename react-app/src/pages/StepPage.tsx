@@ -395,7 +395,7 @@ const StepPage: React.FC = () => {
 一緒に具体的なアクションプランを立てていきましょう！`;
   };
 
-  // AI応答の処理（FastAPI バックエンド経由）
+  // AI応答の処理
   const handleAIMessage = async (message: string, workContent: string): Promise<string> => {
     try {
       // ユーザーIDを取得
@@ -418,7 +418,7 @@ const StepPage: React.FC = () => {
         throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
       }
 
-      // FastAPI バックエンドに接続
+      // バックエンドAPIに接続
       console.log('API呼び出し開始:', {
         userId,
         message: message.substring(0, 50) + '...',
@@ -457,7 +457,7 @@ const StepPage: React.FC = () => {
     } catch (error) {
       console.error('AI API エラー:', error);
       
-      // フォールバック：ローカル応答
+      // エラー時の代替応答
       return new Promise((resolve) => {
         setTimeout(() => {
           let response = '';
