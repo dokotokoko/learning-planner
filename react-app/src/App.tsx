@@ -14,6 +14,15 @@ import DashboardPage from './pages/DashboardPage';
 import ProjectPage from './pages/ProjectPage';
 import MemoPage from './pages/MemoPage';
 import MultiMemoPage from './pages/MultiMemoPage';
+import FrameworkGamesPage from './pages/FrameworkGamesPage';
+import FiveWhysGame from './components/FrameworkGames/FiveWhysGame';
+import LogicTreeGame from './components/FrameworkGames/LogicTreeGame';
+import HMWGame from './components/FrameworkGames/HMWGame';
+import ImpactFeasibilityGame from './components/FrameworkGames/ImpactFeasibilityGame';
+import SpeedStormingGame from './components/FrameworkGames/SpeedStormingGame';
+import GalleryWalkGame from './components/FrameworkGames/GalleryWalkGame';
+import MindMapGame from './components/FrameworkGames/MindMapGame';
+import IkigaiGame from './components/FrameworkGames/IkigaiGame';
 
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -154,6 +163,15 @@ function App() {
                 <Route path="memos" element={<MultiMemoPage />} />
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
                 <Route path="profile" element={<ProfilePage />} />
+                <Route path="framework-games" element={<FrameworkGamesPage />} />
+                <Route path="framework-games/5-whys" element={<FiveWhysGame />} />
+                <Route path="framework-games/logic-tree" element={<LogicTreeGame />} />
+                <Route path="framework-games/hmw" element={<HMWGame />} />
+                <Route path="framework-games/impact-feasibility" element={<ImpactFeasibilityGame />} />
+                <Route path="framework-games/speed-storming" element={<SpeedStormingGame />} />
+                <Route path="framework-games/gallery-walk" element={<GalleryWalkGame />} />
+                <Route path="framework-games/mind-map" element={<MindMapGame />} />
+                <Route path="framework-games/ikigai" element={<IkigaiGame />} />
               </Route>
               
               <Route path="*" element={<Navigate to="/home" replace />} />
