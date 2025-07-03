@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Container, Typography, Grid, Card, CardContent } from '@mui/material';
 
 const games = [
+  { id: 'theme-deep-dive', title: '探究テーマ深掘りツリー', description: 'AIの提案から選択して、興味のあるテーマを段階的に深掘りする手法です。', path: '/framework-games/theme-deep-dive' },
   { id: '5-whys', title: '5-Whys（５回の「なぜ？」）', description: '問題の根本原因を探るための手法です。', path: '/framework-games/5-whys' },
   { id: 'logic-tree', title: 'ロジックツリー／Issue Tree', description: '問題を構造的に分解し、原因や解決策を整理するためのツールです。', path: '/framework-games/logic-tree' },
   { id: 'hmw', title: 'How Might We（HMW）フレーム', description: '課題を解決可能な問いに変換するフレームワークです。', path: '/framework-games/hmw' },

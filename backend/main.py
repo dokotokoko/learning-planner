@@ -2220,6 +2220,167 @@ class ConversationResponse(BaseModel):
     last_updated: str
     created_at: str
 
+# =============================================================================
+# 探究テーマ深掘りツリー用API
+# =============================================================================
+
+class ThemeDeepDiveRequest(BaseModel):
+    theme: str
+    parent_theme: str
+    depth: int
+    path: List[str]  # これまでの選択パス
+    user_interests: List[str] = []  # ユーザーの興味関心
+
+class ThemeDeepDiveResponse(BaseModel):
+    suggestions: List[str]
+    context_info: Dict[str, Any]  # デバッグ用のコンテキスト情報
+
+@app.post("/framework-games/theme-deep-dive/suggestions", response_model=ThemeDeepDiveResponse)
+async def generate_theme_suggestions(
+    request: ThemeDeepDiveRequest,
+    current_user: int = Depends(get_current_user_int)
+):
+    """探究テーマの深掘り提案を生成"""
+    try:
+        logger.info(f"テーマ深掘り提案生成開始 - ユーザーID: {current_user}, テーマ: {request.theme}")
+        
+        if llm_client is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="LLMクライアントが初期化されていません"
+            )
+        
+        # プロンプトの構築
+        system_prompt = """あなたは探究学習の専門家です。
+生徒が持っているテーマに対して、より具体的で興味深い方向性を提案する役割があります。
+提案は以下の観点を考慮してください：
+1. 生徒の興味関心に関連性がある
+2. 探究可能な具体性がある
+3. 多様な視点からアプローチできる
+4. 高校生にとって理解可能で実行可能
+5. 社会的意義や実用性がある"""
+
+        # 深さに応じたプロンプトの調整
+        depth_guidance = ""
+        if request.depth == 0:
+            depth_guidance = "最初の分岐なので、大きな方向性の違いを示してください。"
+        elif request.depth == 1:
+            depth_guidance = "より具体的な領域や側面に分けてください。"
+        elif request.depth >= 2:
+            depth_guidance = "実践的で具体的な探究の切り口を示してください。"
+        
+        # ユーザーの興味を考慮
+        interest_context = ""
+        if request.user_interests:
+            interest_context = f"\n生徒の興味関心: {', '.join(request.user_interests)}"
+            interest_context += "\nこれらの興味と関連付けた提案も含めてください。"
+        
+        # パスのコンテキスト
+        path_context = ""
+        if len(request.path) > 1:
+            path_context = f"\nこれまでの探究パス: {' → '.join(request.path)}"
+        
+        user_prompt = f"""探究テーマ「{request.theme}」について、次のレベルの具体的な探究の方向性を5〜7個提案してください。
+
+{depth_guidance}
+{interest_context}
+{path_context}
+
+以下の形式で提案してください：
+1. [提案内容]
+2. [提案内容]
+...
+
+各提案は30文字以内で、生徒が興味を持ちやすい表現にしてください。
+「自分で入力」という選択肢は含めないでください。"""
+
+        # LLMへのリクエスト
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response = llm_client.generate_response_with_history(messages)
+        logger.info(f"LLM応答生成完了 - 長さ: {len(response)}")
+        
+        # 応答のパース
+        suggestions = []
+        for line in response.strip().split('\n'):
+            # 番号付きリストをパース
+            import re
+            match = re.match(r'^\d+\.\s*(.+)$', line.strip())
+            if match:
+                suggestion = match.group(1).strip()
+                if suggestion and len(suggestion) <= 50:  # 長すぎる提案は除外
+                    suggestions.append(suggestion)
+        
+        # 最低5個、最大7個に調整
+        if len(suggestions) < 5:
+            # デフォルトの提案を追加
+            default_suggestions = [
+                f"{request.theme}の社会的影響",
+                f"{request.theme}の技術的側面",
+                f"{request.theme}と環境の関係",
+                f"{request.theme}の歴史的背景",
+                f"{request.theme}の未来予測",
+                f"{request.theme}の具体的事例",
+                f"{request.theme}に関する課題"
+            ]
+            for ds in default_suggestions:
+                if len(suggestions) >= 7:
+                    break
+                if ds not in suggestions:
+                    suggestions.append(ds)
+        elif len(suggestions) > 7:
+            suggestions = suggestions[:7]
+        
+        # コンテキスト情報（デバッグ用）
+        context_info = {
+            "depth": request.depth,
+            "path_length": len(request.path),
+            "user_interests_count": len(request.user_interests),
+            "suggestions_count": len(suggestions)
+        }
+        
+        return ThemeDeepDiveResponse(
+            suggestions=suggestions,
+            context_info=context_info
+        )
+        
+    except Exception as e:
+        logger.error(f"テーマ深掘り提案生成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="提案の生成でエラーが発生しました"
+        )
+
+@app.post("/framework-games/theme-deep-dive/save-selection")
+async def save_theme_selection(
+    theme: str,
+    path: List[str],
+    current_user: int = Depends(get_current_user_int)
+):
+    """選択したテーマパスを保存（将来の分析用）"""
+    try:
+        # Supabaseにテーマ選択履歴を保存
+        if supabase:
+            result = supabase.table('theme_selections').insert({
+                'user_id': current_user,
+                'final_theme': theme,
+                'path': json.dumps(path, ensure_ascii=False),
+                'depth': len(path),
+                'created_at': datetime.now().isoformat()
+            }).execute()
+            
+            logger.info(f"テーマ選択履歴保存: user={current_user}, theme={theme}, depth={len(path)}")
+        
+        return {"message": "テーマ選択を保存しました", "theme": theme, "depth": len(path)}
+        
+    except Exception as e:
+        logger.error(f"テーマ選択保存エラー: {e}")
+        # エラーがあっても処理は続行（非クリティカル）
+        return {"message": "保存はスキップされました", "theme": theme}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

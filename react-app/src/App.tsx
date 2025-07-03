@@ -23,6 +23,7 @@ import SpeedStormingGame from './components/FrameworkGames/SpeedStormingGame';
 import GalleryWalkGame from './components/FrameworkGames/GalleryWalkGame';
 import MindMapGame from './components/FrameworkGames/MindMapGame';
 import IkigaiGame from './components/FrameworkGames/IkigaiGame';
+import ThemeDeepDiveGame from './components/FrameworkGames/ThemeDeepDiveGame';
 
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -164,6 +165,7 @@ function App() {
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="framework-games" element={<FrameworkGamesPage />} />
+                <Route path="framework-games/theme-deep-dive" element={<ThemeDeepDiveGame />} />
                 <Route path="framework-games/5-whys" element={<FiveWhysGame />} />
                 <Route path="framework-games/logic-tree" element={<LogicTreeGame />} />
                 <Route path="framework-games/hmw" element={<HMWGame />} />

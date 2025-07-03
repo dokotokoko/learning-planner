@@ -107,6 +107,9 @@ const LogicTreeGame: React.FC = () => {
     const nodeWidth = getNodeWidth(node);
     const childrenTotalWidth = node.children.reduce((sum, child) => sum + getNodeWidth(child), 0);
     
+    // 子ノードの最大数に基づいて幅を調整（コンパクトにするため）
+    const widthFactor = level === 0 ? 100 : Math.min(100, 70 / Math.max(1, node.children.length));
+    
     return (
       <Box
         key={node.id}
@@ -115,7 +118,8 @@ const LogicTreeGame: React.FC = () => {
           flexDirection: 'column',
           alignItems: 'center',
           position: 'relative',
-          width: `${nodeWidth * 100}%`,
+          width: level === 0 ? '100%' : `${widthFactor}%`,
+          maxWidth: level === 0 ? '100%' : '300px',
         }}
       >
         {/* 親ノードとの接続線 */}
@@ -140,7 +144,7 @@ const LogicTreeGame: React.FC = () => {
             p: 2,
             borderRadius: 2,
             bgcolor: level === 0 ? 'primary.light' : 'background.paper',
-            width: '90%',
+            width: level === 0 ? '50%' : '90%',
             maxWidth: 250,
             zIndex: 1,
             position: 'relative',
@@ -205,6 +209,8 @@ const LogicTreeGame: React.FC = () => {
               width: '100%',
               mt: 4,
               justifyContent: 'space-around',
+              flexWrap: node.children.length > 3 ? 'wrap' : 'nowrap', // 子ノードが多い場合は折り返す
+              gap: 2,
             }}
           >
             {node.children.map((child, childIndex) => (
@@ -214,8 +220,10 @@ const LogicTreeGame: React.FC = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  width: `${(getNodeWidth(child) / childrenTotalWidth) * 100}%`,
+                  width: node.children.length > 3 ? 'calc(33% - 16px)' : 'auto', // 3つ以上の場合は3列に
+                  minWidth: '150px',
                   position: 'relative',
+                  mb: node.children.length > 3 ? 4 : 0, // 折り返した場合は下にマージンを追加
                 }}
               >
                 {renderNode(child, node.id, level + 1, childIndex, node.children.length)}
@@ -228,7 +236,7 @@ const LogicTreeGame: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, md: 4 } }}>
       <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           ロジックツリー／Issue Tree
@@ -266,13 +274,16 @@ const LogicTreeGame: React.FC = () => {
             <Box sx={{ 
               overflowX: 'auto', 
               width: '100%', 
-              minHeight: 500,
+              height: 'calc(100vh - 300px)', // 画面高さに合わせて調整
+              minHeight: 600,
               p: 2,
               border: '1px dashed #ccc',
               borderRadius: 2,
             }}>
               <Box sx={{ 
                 minWidth: 800,
+                width: '100%',
+                height: '100%',
                 display: 'flex',
                 justifyContent: 'center',
                 pt: 4,

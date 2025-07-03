@@ -82,7 +82,7 @@ const ProfilePage: React.FC = () => {
   const loadProfileData = async () => {
     try {
       // LocalStorageから読み込み
-      const savedTags = localStorage.getItem('user-my-tags');
+      const savedTags = localStorage.getItem(`user-${user?.id}-interests`);
       setMyTags(savedTags ? JSON.parse(savedTags) : []);
 
       // TODO: Supabaseからの読み込み
@@ -152,8 +152,8 @@ const ProfilePage: React.FC = () => {
   const handleSaveProfile = async () => {
     setLoading(true);
     try {
-      // LocalStorageに保存
-      localStorage.setItem('user-my-tags', JSON.stringify(myTags));
+      // LocalStorageに保存（ユーザーIDを使用）
+      localStorage.setItem(`user-${user?.id}-interests`, JSON.stringify(myTags));
 
       // TODO: Supabaseに保存
       // const response = await fetch('/api/profile', {
