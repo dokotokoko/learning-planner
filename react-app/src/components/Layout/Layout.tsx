@@ -32,6 +32,7 @@ import {
   Note as MemoIcon,
   Psychology,
   AccountTree,
+  EmojiEvents,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -92,6 +93,7 @@ const Layout: React.FC = () => {
     { text: 'プロジェクト', icon: <AccountTree />, path: '/projects/1' },
     { text: 'マルチメモ', icon: <MemoIcon />, path: '/memos' },
     { text: '思考フレームワーク', icon: <Psychology />, path: '/framework-games' },
+    { text: 'クエスト掲示板', icon: <EmojiEvents />, path: '/quests' },
     { text: '問い合わせ', icon: <QuestionAnswer />, path: '/inquiry' },
   ];
 
