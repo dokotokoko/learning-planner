@@ -141,7 +141,7 @@ function App() {
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/home" replace /> : 
+                  user ? <Navigate to="/dashboard" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -174,7 +174,7 @@ function App() {
                 <Route path="framework-games/ikigai" element={<IkigaiGame />} />
               </Route>
               
-              <Route path="*" element={<Navigate to="/home" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </AnimatePresence>
         </Router>

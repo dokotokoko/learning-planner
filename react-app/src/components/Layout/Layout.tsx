@@ -32,6 +32,7 @@ import {
   Note as MemoIcon,
   Psychology,
   AccountTree,
+  EmojiEvents,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -89,10 +90,8 @@ const Layout: React.FC = () => {
   const mainListItems = [
     { text: 'ホーム', icon: <Home />, path: '/home' },
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
-    { text: 'プロジェクト', icon: <AccountTree />, path: '/projects/1' },
     { text: 'マルチメモ', icon: <MemoIcon />, path: '/memos' },
-    { text: '思考フレームワーク', icon: <Psychology />, path: '/framework-games' },
-    { text: '問い合わせ', icon: <QuestionAnswer />, path: '/inquiry' },
+    { text: 'クエスト掲示板', icon: <EmojiEvents />, path: '/quests' },
   ];
 
   // 展開状態のサイドバー
