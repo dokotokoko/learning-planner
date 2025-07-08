@@ -25,6 +25,7 @@ import GalleryWalkGame from './components/FrameworkGames/GalleryWalkGame';
 import MindMapGame from './components/FrameworkGames/MindMapGame';
 import IkigaiGame from './components/FrameworkGames/IkigaiGame';
 import ThemeDeepDiveGame from './components/FrameworkGames/ThemeDeepDiveGame';
+import NotificationDemoPage from './pages/NotificationDemoPage';
 
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -176,6 +177,7 @@ function App() {
                 <Route path="framework-games/gallery-walk" element={<GalleryWalkGame />} />
                 <Route path="framework-games/mind-map" element={<MindMapGame />} />
                 <Route path="framework-games/ikigai" element={<IkigaiGame />} />
+                <Route path="notification-demo" element={<NotificationDemoPage />} />
               </Route>
               
               <Route path="*" element={<Navigate to="/home" replace />} />

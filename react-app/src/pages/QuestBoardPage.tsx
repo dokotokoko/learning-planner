@@ -51,6 +51,7 @@ import {
   CloudUpload,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import ReflectionForm, { ReflectionData } from '../components/Reflection/ReflectionForm';
 
 // クエストの型定義
 interface Quest {
@@ -73,11 +74,10 @@ const QuestBoardPage: React.FC = () => {
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false);
   const [submissionData, setSubmissionData] = useState({
     description: '',
-    reflection: '',
-    difficulty: 3,
-    enjoyment: 3,
     fileUrl: '',
   });
+  const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
+  const [submissionStep, setSubmissionStep] = useState<'submission' | 'reflection'>('submission');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [quests, setQuests] = useState<Quest[]>([
     {
@@ -266,7 +266,7 @@ const QuestBoardPage: React.FC = () => {
   };
 
   const handleSubmissionComplete = () => {
-    if (selectedQuest) {
+    if (selectedQuest && reflectionData) {
       setQuests(quests.map(q => 
         q.id === selectedQuest.id 
           ? { ...q, status: 'completed', progress: 100 }
@@ -276,12 +276,24 @@ const QuestBoardPage: React.FC = () => {
       setShowSubmissionDialog(false);
       setSubmissionData({
         description: '',
-        reflection: '',
-        difficulty: 3,
-        enjoyment: 3,
         fileUrl: '',
       });
+      setReflectionData(null);
+      setSubmissionStep('submission');
       setShowSuccessMessage(true);
+    }
+  };
+
+  const handleReflectionSubmit = (data: ReflectionData) => {
+    setReflectionData(data);
+    setSubmissionStep('submission');
+    // ここで実際の提出処理を実行
+    handleSubmissionComplete();
+  };
+
+  const handleNextToReflection = () => {
+    if (submissionData.description.trim()) {
+      setSubmissionStep('reflection');
     }
   };
 
@@ -661,118 +673,86 @@ const QuestBoardPage: React.FC = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <CloudUpload color="success" />
               <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                クエスト提出
+                {submissionStep === 'submission' ? 'クエスト提出' : 'クエスト振り返り'}
               </Typography>
             </Box>
           </DialogTitle>
           <DialogContent>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                {selectedQuest?.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                必要な提出物: {selectedQuest?.requiredEvidence}
-              </Typography>
+            {submissionStep === 'submission' ? (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  {selectedQuest?.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  必要な提出物: {selectedQuest?.requiredEvidence}
+                </Typography>
 
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="成果物の説明"
-                    multiline
-                    rows={4}
-                    value={submissionData.description}
-                    onChange={(e) => setSubmissionData({...submissionData, description: e.target.value})}
-                    placeholder="作成した成果物について詳しく説明してください..."
-                    variant="outlined"
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="振り返り・学んだこと"
-                    multiline
-                    rows={3}
-                    value={submissionData.reflection}
-                    onChange={(e) => setSubmissionData({...submissionData, reflection: e.target.value})}
-                    placeholder="このクエストを通じて学んだことや感じたことを書いてください..."
-                    variant="outlined"
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <FormControl component="fieldset">
-                    <FormLabel component="legend">難易度はどうでしたか？</FormLabel>
-                    <Rating
-                      value={submissionData.difficulty}
-                      onChange={(_, newValue) => {
-                        setSubmissionData({...submissionData, difficulty: newValue || 3});
-                      }}
-                      max={5}
-                      sx={{ mt: 1 }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      1: とても簡単 〜 5: とても難しい
-                    </Typography>
-                  </FormControl>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <FormControl component="fieldset">
-                    <FormLabel component="legend">楽しさはどうでしたか？</FormLabel>
-                    <Rating
-                      value={submissionData.enjoyment}
-                      onChange={(_, newValue) => {
-                        setSubmissionData({...submissionData, enjoyment: newValue || 3});
-                      }}
-                      max={5}
-                      sx={{ mt: 1 }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      1: 全然楽しくない 〜 5: とても楽しい
-                    </Typography>
-                  </FormControl>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      📁 ファイルアップロード（実装予定）
-                    </Typography>
+                <Grid container spacing={3}>
+                  <Grid item xs={12}>
                     <TextField
                       fullWidth
-                      label="ファイルURL（写真、動画、ドキュメントなど）"
-                      value={submissionData.fileUrl}
-                      onChange={(e) => setSubmissionData({...submissionData, fileUrl: e.target.value})}
-                      placeholder="https://..."
+                      label="成果物の説明"
+                      multiline
+                      rows={4}
+                      value={submissionData.description}
+                      onChange={(e) => setSubmissionData({...submissionData, description: e.target.value})}
+                      placeholder="作成した成果物について詳しく説明してください..."
                       variant="outlined"
                     />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      ※ 現在は一時的にURLでの提出となります。将来的にはファイル直接アップロード機能を追加予定です。
-                    </Typography>
-                  </Paper>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Paper sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        📁 ファイルアップロード（実装予定）
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        label="ファイルURL（写真、動画、ドキュメントなど）"
+                        value={submissionData.fileUrl}
+                        onChange={(e) => setSubmissionData({...submissionData, fileUrl: e.target.value})}
+                        placeholder="https://..."
+                        variant="outlined"
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        ※ 現在は一時的にURLでの提出となります。将来的にはファイル直接アップロード機能を追加予定です。
+                      </Typography>
+                    </Paper>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </Box>
+              </Box>
+            ) : (
+              <ReflectionForm
+                title="クエストの振り返り"
+                subtitle="このクエストを通じて感じたことや学んだことを教えてください"
+                context="quest"
+                onSubmit={handleReflectionSubmit}
+                onCancel={() => setSubmissionStep('submission')}
+                showAdvanced={true}
+              />
+            )}
           </DialogContent>
           <DialogActions sx={{ p: 3 }}>
-            <Button onClick={() => setShowSubmissionDialog(false)}>
-              キャンセル
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmissionComplete}
-              disabled={!submissionData.description.trim()}
-              sx={{
-                background: 'linear-gradient(45deg, #48bb78, #38a169)',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #38a169, #2d7d55)',
-                },
-              }}
-            >
-              提出完了
-            </Button>
+            {submissionStep === 'submission' && (
+              <>
+                <Button onClick={() => setShowSubmissionDialog(false)}>
+                  キャンセル
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleNextToReflection}
+                  disabled={!submissionData.description.trim()}
+                  sx={{
+                    background: 'linear-gradient(45deg, #48bb78, #38a169)',
+                    '&:hover': {
+                      background: 'linear-gradient(45deg, #38a169, #2d7d55)',
+                    },
+                  }}
+                >
+                  次へ：振り返り
+                </Button>
+              </>
+            )}
           </DialogActions>
         </Dialog>
 
