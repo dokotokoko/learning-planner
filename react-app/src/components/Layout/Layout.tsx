@@ -33,7 +33,6 @@ import {
   Psychology,
   AccountTree,
   EmojiEvents,
-  EmojiEvents,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
