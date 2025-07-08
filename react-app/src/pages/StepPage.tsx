@@ -18,6 +18,10 @@ import {
   ListItemText,
   Stack,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
@@ -30,11 +34,13 @@ import {
   Close as CloseIcon,
   Save as SaveIcon,
   Clear as ClearIcon,
+  Feedback as ReflectionIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import StepProgressBar from '../components/Layout/StepProgressBar';
 import WorkspaceWithAI from '../components/MemoChat/WorkspaceWithAI';
 import AIChat from '../components/MemoChat/AIChat';
+import ReflectionForm, { ReflectionData } from '../components/Reflection/ReflectionForm';
 import { useAuthStore } from '../stores/authStore';
 import { LayoutContext } from '../components/Layout/Layout';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -158,6 +164,10 @@ const StepPage: React.FC = () => {
   const [step2Theme, setStep2Theme] = useState(''); // Step2で考えた探究テーマ
   const [step3Theme, setStep3Theme] = useState(''); // Step3で考えた探究テーマ
   const [step4Theme, setStep4Theme] = useState(''); // Step4で考えた探究テーマ
+  
+  // 振り返り機能
+  const [showReflectionDialog, setShowReflectionDialog] = useState(false);
+  const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
 
   // ステップ変更時のチャットリフレッシュ処理
   useEffect(() => {
@@ -668,6 +678,59 @@ AIアシスタントが社会との繋がりを見つけることをサポート
     }
   };
 
+  // 振り返り機能
+  const handleShowReflection = () => {
+    setShowReflectionDialog(true);
+  };
+
+  const handleReflectionSubmit = (data: ReflectionData) => {
+    setReflectionData(data);
+    setShowReflectionDialog(false);
+    
+    // 振り返りデータを保存
+    if (user?.id) {
+      localStorage.setItem(`user-${user.id}-step-${currentStep}-reflection`, JSON.stringify(data));
+    }
+    
+    // 次のステップに進む（振り返りを経由せずに直接）
+    handleNextDirect();
+  };
+
+  const handleNextDirect = () => {
+    // ユーザーIDを取得
+    let userId = null;
+    const authData = localStorage.getItem('auth-storage');
+    if (authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        if (parsed.state?.user?.id) {
+          userId = parsed.state.user.id;
+        }
+      } catch (e) {
+        console.error('認証データの解析に失敗:', e);
+      }
+    }
+
+    if (!userId) {
+      setError('ユーザーIDが見つかりません。再ログインしてください。');
+      return;
+    }
+
+    // 現在の内容を保存してから次へ
+    handleSave();
+    
+    if (currentStep === 4) {
+      // Step4からは特別にStep5（振り返りページ）へ遷移
+      navigate('/step/5');
+    } else if (currentStep < 5) {
+      navigate(`/step/${currentStep + 1}`);
+    }
+  };
+
+  const handleReflectionCancel = () => {
+    setShowReflectionDialog(false);
+  };
+
   // ナビゲーション
   const handleNext = () => {
     // ユーザーIDを取得
@@ -731,17 +794,19 @@ AIアシスタントが社会との繋がりを見つけることをサポート
       }
       // Step4のテーマを保存（ユーザー固有）
       localStorage.setItem(`user-${userId}-step-4-theme`, step4Theme);
-      // Step5の振り返りページに遷移
-      navigate('/step/5');
+      // Step4では振り返りを表示してからStep5に遷移
+      setShowReflectionDialog(true);
       return;
     }
     
-    // 現在の内容を保存してから次へ
-    handleSave();
-    
-    if (currentStep < 5) {
-      navigate(`/step/${currentStep + 1}`);
+    // Step2-3では振り返りを表示
+    if (currentStep >= 2 && currentStep <= 3) {
+      setShowReflectionDialog(true);
+      return;
     }
+    
+    // Step1では直接次へ
+    handleNextDirect();
   };
 
   const handlePrevious = () => {

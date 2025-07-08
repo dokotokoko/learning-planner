@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatHistory from './ChatHistory';
+import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 
 interface Message {
   id: string;
@@ -46,6 +47,8 @@ interface AIChatProps {
   forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
   loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
   isInitializing?: boolean; // 初期化中かどうか（外部から制御）
+  enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
+  onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
 }
 
 const AIChat: React.FC<AIChatProps> = ({
@@ -63,6 +66,8 @@ const AIChat: React.FC<AIChatProps> = ({
   forceRefresh = false,
   loadHistoryFromDB = true,
   isInitializing = false,
+  enableSmartNotifications = true,
+  onActivityRecord,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -74,6 +79,9 @@ const AIChat: React.FC<AIChatProps> = ({
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  
+  // 通知システムのref
+  const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
 
   // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
   const initializationKeyRef = useRef(pageId);
@@ -280,6 +288,13 @@ const AIChat: React.FC<AIChatProps> = ({
     setInputValue('');
     setIsLoading(true);
     
+    // 学習活動記録
+    if (onActivityRecord) {
+      onActivityRecord(userMessage.content, 'user');
+    }
+    // 通知システムにも記録
+    notificationManagerRef.current?.recordActivity(userMessage.content, 'user');
+    
     // メッセージ送信時は条件付きで最下部にスクロール
     scrollToBottomIfNeeded();
 
@@ -337,6 +352,13 @@ const AIChat: React.FC<AIChatProps> = ({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // 学習活動記録（AI応答）
+      if (onActivityRecord) {
+        onActivityRecord(assistantMessage.content, 'ai');
+      }
+      // 通知システムにも記録
+      notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
       
       // AI応答完了時も条件付きで最下部にスクロール
       setTimeout(() => scrollToBottomIfNeeded(), 200);
@@ -625,6 +647,14 @@ const AIChat: React.FC<AIChatProps> = ({
           />
         )}
       </AnimatePresence>
+
+      {/* スマート通知システム */}
+      {enableSmartNotifications && (
+        <SmartNotificationManager 
+          ref={notificationManagerRef}
+          pageId={pageId}
+        />
+      )}
     </Box>
   );
 };
