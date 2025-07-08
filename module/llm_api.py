@@ -2,27 +2,17 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 from prompt.prompt import system_prompt
-import streamlit as st
 
 class learning_plannner():
     def __init__(self):
         load_dotenv()
         self.model = "gpt-4.1"
         
-        # Streamlit secrets -> 環境変数の順で試行
-        api_key = None
-        try:
-            # Streamlitのsecretsから取得を試行
-            api_key = st.secrets.get("OPENAI_API_KEY")
-        except:
-            pass
+        # 環境変数からAPIキーを取得
+        api_key = os.getenv("OPENAI_API_KEY")
         
         if not api_key:
-            # 環境変数から取得
-            api_key = os.getenv("OPENAI_API_KEY")
-        
-        if not api_key:
-            raise ValueError("OpenAI APIキーが設定されていません。.streamlit/secrets.tomlにOPENAI_API_KEYを設定するか、環境変数OPENAI_API_KEYを設定してください。")
+            raise ValueError("OpenAI APIキーが設定されていません。環境変数OPENAI_API_KEYを設定してください。")
         
         self.client = OpenAI(api_key=api_key)
 
