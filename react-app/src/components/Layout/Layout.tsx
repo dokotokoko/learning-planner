@@ -30,10 +30,14 @@ import {
   LightMode,
   AccountCircle,
   Note as MemoIcon,
+  Psychology,
+  AccountTree,
+  EmojiEvents,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { Link } from 'react-router-dom';
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 64;
@@ -83,11 +87,14 @@ const Layout: React.FC = () => {
     navigate('/login');
   };
 
-  const menuItems = [
-    { text: 'ダッシュボード', icon: <Home />, path: '/dashboard' },
-    { text: 'テーマ設定', icon: <TipsAndUpdates />, path: '/step/1' },
-    { text: 'メモ管理', icon: <MemoIcon />, path: '/memos' },
-    { text: 'AI相談', icon: <QuestionAnswer />, path: '/inquiry' },
+  const mainListItems = [
+    { text: 'ホーム', icon: <Home />, path: '/home' },
+    { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
+    { text: 'プロジェクト', icon: <AccountTree />, path: '/projects/1' },
+    { text: 'マルチメモ', icon: <MemoIcon />, path: '/memos' },
+    { text: '思考フレームワーク', icon: <Psychology />, path: '/framework-games' },
+    { text: 'クエスト掲示板', icon: <EmojiEvents />, path: '/quests' },
+    { text: '問い合わせ', icon: <QuestionAnswer />, path: '/inquiry' },
   ];
 
   // 展開状態のサイドバー
@@ -118,7 +125,7 @@ const Layout: React.FC = () => {
       </Box>
 
       <List sx={{ flex: 1, px: 1 }}>
-        {menuItems.map((item) => (
+        {mainListItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
@@ -196,7 +203,7 @@ const Layout: React.FC = () => {
       </Box>
 
       <List sx={{ flex: 1, px: 0.5 }}>
-        {menuItems.map((item) => (
+        {mainListItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
@@ -268,7 +275,7 @@ const Layout: React.FC = () => {
           </IconButton>
           
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find(item => item.path === location.pathname)?.text || 'ホーム'}
+            {mainListItems.find(item => item.path === location.pathname)?.text || 'ホーム'}
           </Typography>
 
           <IconButton color="inherit" onClick={toggleDarkMode}>
