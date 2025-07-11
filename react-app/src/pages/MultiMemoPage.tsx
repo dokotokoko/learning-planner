@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores/chatStore';
 import MultiMemoManager from '../components/MultiMemo/MultiMemoManager';
 
 const MultiMemoPage: React.FC = () => {

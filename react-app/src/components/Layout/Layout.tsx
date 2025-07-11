@@ -1,10 +1,8 @@
 // react-app/src/components/Layout/Layout.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
-  AppBar,
-  Toolbar,
   Typography,
   IconButton,
   Drawer,
@@ -15,32 +13,32 @@ import {
   ListItemButton,
   Divider,
   Avatar,
-  Menu,
-  MenuItem,
+  Button,
   useTheme,
   useMediaQuery,
+  Card,
+  CardContent,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Home,
   TipsAndUpdates,
-  QuestionAnswer,
-  Logout,
-  DarkMode,
-  LightMode,
-  AccountCircle,
-  Note as MemoIcon,
   Psychology,
-  AccountTree,
-  EmojiEvents,
+  Chat as ChatIcon,
+  ChevronLeft,
+  ChevronRight,
+  Logout,
 } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
-import { useThemeStore } from '../../stores/themeStore';
+import { useChatStore } from '../../stores/chatStore';
 import { Link } from 'react-router-dom';
+import AIChat from '../MemoChat/AIChat';
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 64;
+const defaultChatSidebarWidth = 400;
+const minChatSidebarWidth = 300;
+const minMainContentWidth = 400; // メインコンテンツの最小幅
 
 interface LayoutContextType {
   sidebarOpen: boolean;
@@ -59,11 +57,19 @@ const Layout: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const { user, logout } = useAuthStore();
-  const { isDarkMode, toggleDarkMode } = useThemeStore();
+  const { 
+    isChatOpen, 
+    toggleChat, 
+    chatPageId, 
+    currentMemoTitle, 
+    currentMemoContent,
+    currentProjectId 
+  } = useChatStore();
   
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(defaultChatSidebarWidth);
+  const [isResizing, setIsResizing] = useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -73,25 +79,132 @@ const Layout: React.FC = () => {
     setSidebarOpen(!sidebarOpen);
   };
 
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
   const handleLogout = () => {
     logout();
-    handleMenuClose();
     navigate('/login');
   };
 
+  // チャットサイドバーのリサイズ機能
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const handleResize = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    const newWidth = window.innerWidth - e.clientX;
+    
+    // 現在の左サイドバーの幅を取得
+    const currentLeftSidebarWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+    
+    // 動的な最大幅を計算（メインコンテンツの最小幅を確保）
+    const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
+    
+    const clampedWidth = Math.max(
+      minChatSidebarWidth,
+      Math.min(dynamicMaxWidth, newWidth)
+    );
+    
+    setChatSidebarWidth(clampedWidth);
+  }, [isResizing, sidebarOpen]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // マウスイベントリスナーの管理
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResize);
+      document.addEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, handleResize, handleResizeEnd]);
+
+  // ウィンドウリサイズ時のチャット幅調整
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (!isChatOpen) return;
+      
+      const currentLeftSidebarWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+      const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
+      
+      // チャット幅が新しい最大幅を超えている場合は調整
+      if (chatSidebarWidth > dynamicMaxWidth) {
+        setChatSidebarWidth(Math.max(minChatSidebarWidth, dynamicMaxWidth));
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [isChatOpen, sidebarOpen, chatSidebarWidth]);
+
+  // AI応答の処理
+  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
+    try {
+      // ユーザーIDを取得
+      let userId = null;
+      
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
+      }
+
+      // 現在のメモコンテンツを使用
+      const contextContent = currentMemoContent || memoContent;
+
+      const response = await fetch('http://localhost:8000/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userId}`,
+        },
+        body: JSON.stringify({
+          message: message,
+          memo_content: contextContent,
+          page_id: chatPageId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.response;
+    } catch (error) {
+      console.error('AI応答の取得に失敗しました:', error);
+      throw error;
+    }
+  };
+
   const mainListItems = [
-    { text: 'ホーム', icon: <Home />, path: '/home' },
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
-    { text: 'マルチメモ', icon: <MemoIcon />, path: '/memos' },
-    { text: 'クエスト掲示板', icon: <EmojiEvents />, path: '/quests' },
   ];
 
   // 展開状態のサイドバー
@@ -100,12 +213,12 @@ const Layout: React.FC = () => {
       <Box sx={{ p: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-        <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
-          探Qメイト
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
-          探究学習支援アプリ
-        </Typography>
+            <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+              探Qメイト
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
+              探究学習支援アプリ
+            </Typography>
           </Box>
           <IconButton
             onClick={handleSidebarToggle}
@@ -158,13 +271,42 @@ const Layout: React.FC = () => {
       </List>
 
       <Divider />
+
+      {/* AIチャット開始ボタン */}
+      <Box sx={{ p: 2 }}>
+        <Card 
+          sx={{ 
+            bgcolor: isChatOpen ? 'primary.light' : 'rgba(102, 126, 234, 0.1)',
+            borderRadius: 2,
+            cursor: 'pointer',
+            '&:hover': {
+              bgcolor: 'rgba(102, 126, 234, 0.2)',
+            },
+          }}
+          onClick={toggleChat}
+        >
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Psychology color="primary" />
+              <Typography variant="body2" fontWeight={600}>
+                AIアシスタント
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              {isChatOpen ? '開いています' : '探究学習をサポート'}
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Divider />
       
       <Box sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
           <Avatar sx={{ bgcolor: 'primary.main' }}>
             {user?.username?.charAt(0).toUpperCase()}
           </Avatar>
-          <Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="body2" fontWeight={600}>
               {user?.username}
             </Typography>
@@ -173,6 +315,21 @@ const Layout: React.FC = () => {
             </Typography>
           </Box>
         </Box>
+        
+        <Button
+          fullWidth
+          variant="outlined"
+          color="primary"
+          startIcon={<Logout />}
+          onClick={handleLogout}
+          sx={{ 
+            borderRadius: 2,
+            textTransform: 'none',
+            fontSize: '0.875rem',
+          }}
+        >
+          ログアウト
+        </Button>
       </Box>
     </Box>
   );
@@ -230,64 +387,57 @@ const Layout: React.FC = () => {
       </List>
 
       <Divider />
+
+      {/* AIチャット開始ボタン（縮小版） */}
+      <Box sx={{ p: 1 }}>
+        <IconButton
+          onClick={toggleChat}
+          sx={{
+            width: '100%',
+            height: 48,
+            borderRadius: 2,
+            bgcolor: isChatOpen ? 'primary.light' : 'rgba(102, 126, 234, 0.1)',
+            color: 'primary.main',
+            '&:hover': {
+              bgcolor: 'rgba(102, 126, 234, 0.2)',
+            },
+          }}
+        >
+          <Psychology />
+        </IconButton>
+      </Box>
+
+      <Divider />
       
-      <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
-        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32, alignSelf: 'center' }}>
           {user?.username?.charAt(0).toUpperCase()}
         </Avatar>
+        
+        <IconButton
+          onClick={handleLogout}
+          sx={{
+            width: '100%',
+            height: 32,
+            borderRadius: 1,
+            color: 'primary.main',
+            '&:hover': {
+              bgcolor: 'rgba(102, 126, 234, 0.1)',
+            },
+          }}
+        >
+          <Logout fontSize="small" />
+        </IconButton>
       </Box>
     </Box>
   );
 
   return (
     <LayoutContext.Provider value={{ sidebarOpen, onSidebarToggle: handleSidebarToggle }}>
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* AppBar */}
-      <AppBar
-        position="fixed"
-        sx={{
-            width: { 
-              xs: '100%',
-              md: sidebarOpen ? `calc(100% - ${drawerWidth}px)` : `calc(100% - ${collapsedDrawerWidth}px)`
-            },
-            ml: { 
-              xs: 0,
-              md: sidebarOpen ? `${drawerWidth}px` : `${collapsedDrawerWidth}px`
-            },
-            transition: 'width 0.3s ease, margin-left 0.3s ease',
-          background: 'rgba(255, 255, 255, 0.9)',
-          backdropFilter: 'blur(10px)',
-          color: 'text.primary',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {mainListItems.find(item => item.path === location.pathname)?.text || 'ホーム'}
-          </Typography>
-
-          <IconButton color="inherit" onClick={toggleDarkMode}>
-            {isDarkMode ? <LightMode /> : <DarkMode />}
-          </IconButton>
-          
-          <IconButton color="inherit" onClick={handleProfileMenuOpen}>
-            <AccountCircle />
-          </IconButton>
-        </Toolbar>
-      </AppBar>
-
-      {/* Drawer */}
-      <Box
-        component="nav"
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Drawer */}
+        <Box
+          component="nav"
           sx={{ 
             width: { 
               xs: 0,
@@ -296,83 +446,212 @@ const Layout: React.FC = () => {
             flexShrink: { md: 0 },
             transition: 'width 0.3s ease',
           }}
-      >
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: drawerWidth,
-            },
-          }}
         >
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={handleDrawerToggle}
+            ModalProps={{
+              keepMounted: true, // Better open performance on mobile.
+            }}
+            sx={{
+              display: { xs: 'block', md: 'none' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
+                width: drawerWidth,
+                border: 'none',
+                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+              },
+            }}
+          >
             {fullDrawer}
-        </Drawer>
-        
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
+          </Drawer>
+          
+          <Drawer
+            variant="permanent"
+            sx={{
+              display: { xs: 'none', md: 'block' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
                 width: sidebarOpen ? drawerWidth : collapsedDrawerWidth,
-              border: 'none',
-              boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+                border: 'none',
+                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
                 transition: 'width 0.3s ease',
                 overflowX: 'hidden',
-            },
-          }}
-          open
-        >
+              },
+            }}
+            open
+          >
             {sidebarOpen ? fullDrawer : collapsedDrawer}
-        </Drawer>
-      </Box>
+          </Drawer>
+        </Box>
 
-      {/* Main content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
+        {/* Main content */}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
             width: { 
               xs: '100%',
-              md: sidebarOpen ? `calc(100% - ${drawerWidth}px)` : `calc(100% - ${collapsedDrawerWidth}px)`
+              md: (() => {
+                const leftWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+                const rightWidth = isChatOpen ? chatSidebarWidth : 0;
+                return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
+              })()
             },
-          minHeight: '100vh',
-          pt: '64px', // AppBar height
+            minHeight: '100vh',
             transition: 'width 0.3s ease',
-        }}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-          style={{ height: '100%' }}
+          }}
         >
-          <Outlet />
-        </motion.div>
-      </Box>
+          {/* モバイル用のメニューボタン */}
+          <Box sx={{ display: { xs: 'block', md: 'none' }, p: 1 }}>
+            <IconButton
+              color="primary"
+              onClick={handleDrawerToggle}
+              sx={{ mb: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          </Box>
 
-      {/* Profile Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <Logout fontSize="small" />
-          </ListItemIcon>
-          ログアウト
-        </MenuItem>
-      </Menu>
-    </Box>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{ height: '100%' }}
+          >
+            <Outlet />
+          </motion.div>
+        </Box>
+
+        {/* Right Chat Sidebar */}
+        <AnimatePresence>
+          {isChatOpen && (
+            <Box
+              component={motion.div}
+              initial={{ width: 0 }}
+              animate={{ width: chatSidebarWidth }}
+              exit={{ width: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              sx={{
+                width: chatSidebarWidth,
+                minHeight: '100vh',
+                backgroundColor: 'background.paper',
+                borderLeft: 1,
+                borderColor: 'divider',
+                boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* リサイズハンドル */}
+              <Box
+                onMouseDown={handleResizeStart}
+                sx={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: '8px',
+                  height: '100%',
+                  cursor: 'ew-resize',
+                  backgroundColor: 'transparent',
+                  borderRight: 1,
+                  borderColor: 'divider',
+                  '&:hover': {
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                  },
+                  zIndex: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '3px',
+                    height: '40px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '2px',
+                  }}
+                />
+              </Box>
+              
+              <Box sx={{ 
+                height: '100vh', 
+                display: 'flex', 
+                flexDirection: 'column',
+                pl: '8px', // リサイズハンドル分のパディング
+              }}>
+                {/* Chat Header */}
+                <Box sx={{ 
+                  p: 2, 
+                  borderBottom: 1, 
+                  borderColor: 'divider',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <Box>
+                    <Typography variant="h6" fontWeight={600}>
+                      AIアシスタント
+                    </Typography>
+                    {currentMemoTitle && (
+                      <Typography variant="body2" color="text.secondary">
+                        現在のメモ: {currentMemoTitle}
+                      </Typography>
+                    )}
+                  </Box>
+                  <IconButton onClick={toggleChat} size="small">
+                    <ChevronRight />
+                  </IconButton>
+                </Box>
+
+                {/* Chat Content */}
+                <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                  {currentProjectId && chatPageId ? (
+                    <AIChat
+                      pageId={chatPageId}
+                      title="AIアシスタント"
+                      currentMemoContent={currentMemoContent}
+                      currentMemoTitle={currentMemoTitle}
+                      persistentMode={true}
+                      loadHistoryFromDB={true}
+                      onMessageSend={handleAIMessage}
+                      initialMessage={`こんにちは！探究学習をサポートします。
+
+${currentMemoTitle ? `現在「${currentMemoTitle}」を開いています。` : 'メモを開くと、その内容を参考にしながら'}以下のようなサポートができます：
+
+• **内容の深掘り**: アイデアをさらに発展させる提案
+• **構造化のアドバイス**: 情報をより分かりやすく整理する方法  
+• **関連情報の提案**: 追加で調べると良い情報や資料
+• **探究の方向性**: 学習をより深めるためのアプローチ
+
+どのようなことでお困りですか？`}
+                    />
+                  ) : (
+                    <Box sx={{ 
+                      p: 3, 
+                      textAlign: 'center',
+                      color: 'text.secondary',
+                      mt: 4,
+                    }}>
+                      <ChatIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+                      <Typography variant="body1">
+                        プロジェクトを選択してください
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        メモを開くとAIチャットが利用できます
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </AnimatePresence>
+      </Box>
     </LayoutContext.Provider>
   );
 };

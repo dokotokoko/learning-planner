@@ -15,18 +15,12 @@ import {
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
-  Clear as ClearIcon,
-  Save as SaveIcon,
   SmartToy as AIIcon,
-  ExpandMore as ExpandIcon,
-  ExpandLess as CollapseIcon,
-  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores/chatStore';
 import { debounce } from 'lodash';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import AIChat from '../components/MemoChat/AIChat';
 
 interface Memo {
   id: number;
@@ -49,6 +43,7 @@ const MemoPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId, memoId } = useParams<{ projectId: string; memoId: string }>();
   const { user } = useAuthStore();
+  const { setCurrentMemo, updateMemoContent, setCurrentProject } = useChatStore();
 
   const [memo, setMemo] = useState<Memo | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -56,7 +51,6 @@ const MemoPage: React.FC = () => {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [isChatExpanded, setIsChatExpanded] = useState(true);
 
   // MemoChat風の状態管理
   const [memoContent, setMemoContent] = useState('');
@@ -133,6 +127,15 @@ const MemoPage: React.FC = () => {
     }
   }, [memo, title, content, memoContent]);
 
+  // グローバルチャットストアにメモ情報を更新
+  useEffect(() => {
+    if (projectId && memoId && memoContent) {
+      const lines = memoContent.split('\n');
+      const currentTitle = lines.length > 0 ? lines[0] : '';
+      setCurrentMemo(projectId, memoId, currentTitle, memoContent);
+    }
+  }, [projectId, memoId, memoContent, setCurrentMemo]);
+
   // 自動保存機能
   const saveChanges = async (newTitle: string, newContent: string) => {
     try {
@@ -191,158 +194,34 @@ const MemoPage: React.FC = () => {
     return lines.length > 0 ? lines[0] : '';
   };
 
-
-
-  // メモ変更時の処理（MemoChat風 - シンプル版）
+  // メモ内容の変更処理
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = event.target.value;
     setMemoContent(newContent);
     
-    // デバウンス保存（タイトルと本文の分離は保存時に行う）
-    debouncedSave('', newContent);
+    // memoContentからタイトルと本文を分離してchatStoreに送る
+    const lines = newContent.split('\n');
+    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
+                            (lines.length === 1 && !lines[0].trim() ? '' : newContent);
+    
+    updateMemoContent(extractedTitle, extractedContent);
   };
 
-  // キーボードショートカット処理
+  // キーボードショートカット
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Ctrl+S で手動保存
     if (event.ctrlKey && event.key === 's') {
       event.preventDefault();
-      handleMemoSave();
+      // 自動保存なので何もしない
     }
   };
 
-  // メモクリア
-  const handleMemoClear = async () => {
-    setMemoContent('');
-    setTitle('');
-    setContent('');
-    await saveChanges('', '');
-  };
-
-  // メモ保存
-  const handleMemoSave = async () => {
-    console.log('Memo saved:', memoContent);
-    
-    // memoContentからタイトルと本文を分離して保存
-    const lines = memoContent.split('\n');
-    const newTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-    const newContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                      (lines.length === 1 && !lines[0].trim() ? '' : memoContent);
-    
-    // 状態を更新
-    setTitle(newTitle);
-    setContent(newContent);
-    
-    // 保存実行
-    await saveChanges(newTitle, newContent);
-  };
-
-  // AI応答の処理
-  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
-    try {
-      // ユーザーIDを取得
-      let userId = null;
-      
-      // auth-storageからユーザーIDを取得
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (!userId) {
-        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
-      }
-
-      // バックエンドAPIに接続
-      const response = await fetch('http://localhost:8000/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
-        },
-        body: JSON.stringify({
-          message: message,
-          page: `memo-${memoId}`,
-          context: `現在のページ: メモ編集
-プロジェクト: ${project?.theme || 'unknown'}
-メモ内容: ${memoContent}
-
-ユーザーはこのメモについてAIに相談しています。メモの内容を参考にしながら、探究学習に関するアドバイスや質問への回答を提供してください。`
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error ${response.status}:`, errorText);
-        throw new Error(`API Error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      return data.response;
-    } catch (error) {
-      console.error('AI API エラー:', error);
-      
-      // エラー時の代替応答
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const responses = [
-            `「${message}」についてお答えします。
-
-${getCurrentTitle() ? `メモ「${getCurrentTitle()}」の内容` : 'このメモの内容'}を参考にさせていただきました。
-
-探究学習のメモ作成では以下のようなアプローチが効果的です：
-
-1. **構造化**: 見出しや箇条書きで情報を整理する
-2. **関連付け**: 既存の知識や他の情報と関連付ける
-3. **疑問点の記録**: わからないことや調べたいことを明記する
-4. **振り返り**: 定期的にメモを見返して気づきを追加する
-
-${project?.theme ? `プロジェクト「${project.theme}」` : 'あなたの探究'}に関して、他にもご質問があればお気軽にお聞かせください！`,
-            
-            `良いご質問ですね！${getCurrentTitle() ? `「${getCurrentTitle()}」というメモ` : 'このメモ'}について一緒に考えてみましょう。
-
-メモを効果的に活用するためのポイント：
-
-**📝 記録の充実**
-思いついたアイデアや疑問は忘れないうちにメモに記録
-
-**🔍 深掘りの実践**  
-表面的な情報だけでなく、「なぜ？」「どのように？」を追求
-
-**🔗 関連性の発見**
-他の知識や経験との関連性を見つけて記録
-
-継続的な記録と振り返りが探究学習の深化につながります。`,
-            
-            `とても重要なポイントについてのご質問ですね。${getCurrentTitle() ? `「${getCurrentTitle()}」のメモ内容` : 'このメモの内容'}から、あなたの探究への取り組みが伝わってきます。
-
-メモ活用のコツ：
-
-**💡 アイデアの発展**
-書かれている内容をさらに発展させるために、新しい視点や角度を考える
-
-**📚 情報の補完**
-現在の内容に関連する追加情報や具体例を調べて補強
-
-**🎯 目標との整合**
-${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究目標'}との関連性を確認
-
-ご不明な点があれば、さらに詳しくお聞かせください。`,
-          ];
-          
-          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-          resolve(randomResponse);
-        }, 1500);
-      });
+  // プロジェクトIDをセット
+  useEffect(() => {
+    if (projectId) {
+      setCurrentProject(projectId);
     }
-  };
+  }, [projectId, setCurrentProject]);
 
   if (isLoading) {
     return (
@@ -399,20 +278,8 @@ ${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究
               >
                 <BackIcon />
               </IconButton>
-              <Typography variant="h6" fontWeight="bold">
-                メモ
-              </Typography>
               {lastSaved && (
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-                  最終保存: {lastSaved.toLocaleTimeString()}
-                </Typography>
-              )}
-            </Box>
-
-            {/* メモ情報 */}
-            <Box display="flex" alignItems="center">
-              {lastSaved && (
-                <Typography variant="caption" color="text.secondary" sx={{ mr: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                   最終保存: {lastSaved.toLocaleTimeString()}
                 </Typography>
               )}
@@ -421,242 +288,45 @@ ${project?.theme ? `プロジェクト「${project.theme}」の目標` : '探究
         </Container>
       </Paper>
 
-      {/* メインコンテンツ - MemoChat風レイアウト */}
+      {/* メインコンテンツ - シンプルなメモエディター */}
       <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-        {!isMobile ? (
-          /* デスクトップ: 左右分割表示 */
-          <PanelGroup direction="horizontal" style={{ height: '100%' }}>
-            {/* メモパネル */}
-            <Panel defaultSize={45} minSize={25} maxSize={70}>
-              <Box sx={{ 
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: 'background.paper',
-                overflow: 'hidden',
-              }}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'flex-end',
-                  p: 2,
-                  backgroundColor: 'background.default',
-                  flexShrink: 0,
-                }}>
-                  <Tooltip title="メモをクリア" arrow>
-                    <IconButton onClick={handleMemoClear} size="small" sx={{ mr: 1 }}>
-                      <ClearIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="メモを保存" arrow>
-                    <IconButton onClick={handleMemoSave} size="small" color="primary">
-                      <SaveIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                <Box sx={{ 
-                  flex: 1,
-                  overflow: 'auto',
-                  p: 3,
-                }}>
-                  <TextField
-                    multiline
-                    fullWidth
-                    minRows={25}
-                    value={memoContent}
-                    onChange={handleMemoChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder={memoPlaceholder}
-                    variant="standard"
-                    sx={{
-                      '& .MuiInputBase-root': {
-                        padding: 0,
-                      },
-                      '& .MuiInput-underline:before': {
-                        display: 'none',
-                      },
-                      '& .MuiInput-underline:after': {
-                        display: 'none',
-                      },
-                    }}
-                    ref={memoRef}
-                  />
-                </Box>
-              </Box>
-            </Panel>
-
-            {/* リサイズハンドル */}
-            <PanelResizeHandle style={{
-              width: '8px',
-              backgroundColor: theme.palette.divider,
-              cursor: 'col-resize',
-              position: 'relative',
-            }}>
-              <Box sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '4px',
-                height: '40px',
-                backgroundColor: 'background.paper',
-                borderRadius: '2px',
-              }} />
-            </PanelResizeHandle>
-
-            {/* チャットパネル */}
-            <Panel defaultSize={55} minSize={30}>
-              <Box sx={{ 
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: 'background.default',
-              }}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  p: 3,
-                }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                    <AIIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      AIアシスタント
-                    </Typography>
-                  </Box>
-                </Box>
-                
-                {/* AI相談コンポーネント */}
-                <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  <AIChat 
-                    pageId={`memo-${memoId}`}
-                    title={getCurrentTitle()}
-                    memoContent={memoContent}
-                    loadHistoryFromDB={true}
-                    onMessageSend={handleAIMessage}
-                    initialMessage={`こんにちは！このメモについて何でもお気軽にご相談ください。
-
-${getCurrentTitle() ? `「${getCurrentTitle()}」というメモ` : 'このメモ'}の内容を参考にしながら、以下のようなサポートができます：
-
-• **内容の深掘り**: メモの内容をさらに発展させるアイデア
-• **構造化のアドバイス**: 情報をより分かりやすく整理する方法  
-• **関連情報の提案**: 追加で調べると良い情報や資料
-• **探究の方向性**: ${project?.theme ? `プロジェクト「${project.theme}」` : '探究学習'}への活用方法
-
-メモを見ながら、どのようなことでお困りですか？`}
-                  />
-                </Box>
-              </Box>
-            </Panel>
-          </PanelGroup>
-        ) : (
-          /* モバイル: 縦並び表示 */
+        <Box sx={{ 
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'background.paper',
+        }}>
+          {/* メモエディター */}
           <Box sx={{ 
-            height: '100%',
-            display: 'flex', 
-            flexDirection: 'column',
-            backgroundColor: 'background.default',
+            flex: 1,
+            overflow: 'auto',
+            p: 3,
           }}>
-            {/* メモエリア */}
-            <Box sx={{ backgroundColor: 'background.paper' }}>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                p: 2,
-              }}>
-                <IconButton 
-                  onClick={() => setIsChatExpanded(!isChatExpanded)}
-                  size="small"
-                  sx={{ mr: 1 }}
-                >
-                  {isChatExpanded ? <CollapseIcon /> : <ExpandIcon />}
-                </IconButton>
-                <Tooltip title="メモをクリア" arrow>
-                  <IconButton onClick={handleMemoClear} size="small" sx={{ mr: 1 }}>
-                    <ClearIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="メモを保存" arrow>
-                  <IconButton onClick={handleMemoSave} size="small" color="primary">
-                    <SaveIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-              {!isChatExpanded && (
-                <TextField
-                  multiline
-                  minRows={4}
-                  maxRows={8}
-                  fullWidth
-                  value={memoContent}
-                  onChange={handleMemoChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder={memoPlaceholder}
-                  variant="standard"
-                  sx={{
-                    px: 3,
-                    pb: 3,
-                    '& .MuiInputBase-root': {
-                      padding: 0,
-                    },
-                    '& .MuiInput-underline:before': {
-                      display: 'none',
-                    },
-                    '& .MuiInput-underline:after': {
-                      display: 'none',
-                    },
-                  }}
-                  ref={memoRef}
-                />
-              )}
-            </Box>
-
-            {/* チャットエリア */}
-            <Box sx={{ 
-              flex: isChatExpanded ? 1 : 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              height: isChatExpanded ? 'calc(100% - 72px)' : 'auto',
-            }}>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center',
-                p: 3,
-                backgroundColor: 'background.paper',
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                  <AIIcon sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    AIアシスタント
-                  </Typography>
-                </Box>
-              </Box>
-              
-              {/* AI相談コンポーネント */}
-              <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                <AIChat 
-                  pageId={`memo-${memoId}`}
-                  title={getCurrentTitle()}
-                  memoContent={memoContent}
-                  loadHistoryFromDB={true}
-                  onMessageSend={handleAIMessage}
-                  initialMessage={`こんにちは！このメモについて何でもお気軽にご相談ください。
-
-${getCurrentTitle() ? `「${getCurrentTitle()}」というメモ` : 'このメモ'}の内容を参考にしながら、以下のようなサポートができます：
-
-• **内容の深掘り**: メモの内容をさらに発展させるアイデア
-• **構造化のアドバイス**: 情報をより分かりやすく整理する方法  
-• **関連情報の提案**: 追加で調べると良い情報や資料
-• **探究の方向性**: ${project?.theme ? `プロジェクト「${project.theme}」` : '探究学習'}への活用方法
-
-メモを見ながら、どのようなことでお困りですか？`}
-                />
-              </Box>
-            </Box>
+            <TextField
+              multiline
+              fullWidth
+              minRows={isMobile ? 20 : 30}
+              value={memoContent}
+              onChange={handleMemoChange}
+              onKeyDown={handleKeyDown}
+              placeholder={memoPlaceholder}
+              variant="standard"
+              sx={{
+                '& .MuiInputBase-root': {
+                  padding: 0,
+                },
+                '& .MuiInput-underline:before': {
+                  display: 'none',
+                },
+                '& .MuiInput-underline:after': {
+                  display: 'none',
+                },
+              }}
+              ref={memoRef}
+            />
           </Box>
-        )}
+        </Box>
       </Box>
-
     </Box>
   );
 };

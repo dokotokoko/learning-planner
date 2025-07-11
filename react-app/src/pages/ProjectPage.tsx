@@ -21,7 +21,6 @@ import {
   Add as AddIcon,
   ArrowBack as BackIcon,
   MoreVert as MoreIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
   AccessTime as TimeIcon,
 } from '@mui/icons-material';
@@ -169,14 +168,9 @@ const ProjectPage: React.FC = () => {
     setSelectedMemo(null);
   };
 
-  // メモ内容のプレビュー取得
   const getContentPreview = (content: string): string => {
-    if (!content.trim()) return '（空のメモ）';
-    
-    const cleanContent = content
-      .replace(/[#*`\[\]]/g, '') // Markdown記号を除去
-      .replace(/\n+/g, ' ') // 改行をスペースに
-      .trim();
+    // HTMLタグを除去してプレーンテキストを取得
+    const cleanContent = content.replace(/<[^>]*>/g, '').trim();
     
     return cleanContent.length > 100 
       ? cleanContent.substring(0, 100) + '...'
@@ -232,35 +226,31 @@ const ProjectPage: React.FC = () => {
 
         {/* 問いと仮説 */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          {project.question && (
-            <Grid item xs={12} md={6}>
-              <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
-                <Typography variant="caption" color="primary.dark" fontWeight="bold">
-                  研究の問い
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {project.question}
-                </Typography>
-              </Box>
-            </Grid>
-          )}
+          <Grid item xs={12} md={6}>
+            <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
+              <Typography variant="caption" color="primary.dark" fontWeight="bold">
+                研究の問い
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {project.question || '※まだ設定されていません'}
+              </Typography>
+            </Box>
+          </Grid>
           
-          {project.hypothesis && (
-            <Grid item xs={12} md={6}>
-              <Box sx={{ p: 2, bgcolor: 'secondary.light', borderRadius: 1 }}>
-                <Typography variant="caption" color="secondary.dark" fontWeight="bold">
-                  仮説
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {project.hypothesis}
-                </Typography>
-              </Box>
-            </Grid>
-          )}
+          <Grid item xs={12} md={6}>
+            <Box sx={{ p: 2, bgcolor: 'secondary.light', borderRadius: 1 }}>
+              <Typography variant="caption" color="secondary.dark" fontWeight="bold">
+                仮説
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {project.hypothesis || '※まだ設定されていません'}
+              </Typography>
+            </Box>
+          </Grid>
         </Grid>
 
         {/* アクションボタン */}
-        <Box display="flex" gap={2} alignItems="center">
+        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -426,8 +416,8 @@ const ProjectPage: React.FC = () => {
             handleMenuClose();
           }}
         >
-          <EditIcon sx={{ mr: 1, fontSize: 20 }} />
-          編集
+          {/* EditIconを削除 */}
+          <Typography>編集</Typography>
         </MenuItem>
         <MenuItem
           onClick={() => {

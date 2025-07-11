@@ -147,11 +147,6 @@ const LoginPage = () => {
       description: 'AIアシスタントが探究学習の各ステップをサポートします',
     },
     {
-      icon: <School sx={{ fontSize: 48 }} />,
-      title: '段階的学習',
-      description: 'テーマ設定から成果物作成まで4つのステップで進行',
-    },
-    {
       icon: <AutoStories sx={{ fontSize: 48 }} />,
       title: '学習記録',
       description: '対話履歴や学習計画を自動保存・管理',

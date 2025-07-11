@@ -38,6 +38,8 @@ interface AIChatProps {
   initialMessage?: string;
   initialAIResponse?: string;
   memoContent?: string; // 使用しないが、既存コンポーネントとの互換性のため残す
+  currentMemoContent?: string; // 現在のメモコンテンツ（動的更新用）
+  currentMemoTitle?: string; // 現在のメモタイトル（動的更新用）
   onMessageSend?: (message: string, memoContent: string) => Promise<string>;
   onClose?: () => void;
   autoStart?: boolean; // 自動開始フラグ
@@ -49,6 +51,7 @@ interface AIChatProps {
   isInitializing?: boolean; // 初期化中かどうか（外部から制御）
   enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
   onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
+  persistentMode?: boolean; // 継続モード（メモ切り替えでリセットしない）
 }
 
 const AIChat: React.FC<AIChatProps> = ({
@@ -57,6 +60,8 @@ const AIChat: React.FC<AIChatProps> = ({
   initialMessage,
   initialAIResponse,
   memoContent = '',
+  currentMemoContent = '',
+  currentMemoTitle = '',
   onMessageSend,
   onClose,
   autoStart = false,
@@ -68,6 +73,7 @@ const AIChat: React.FC<AIChatProps> = ({
   isInitializing = false,
   enableSmartNotifications = true,
   onActivityRecord,
+  persistentMode = false,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -124,16 +130,16 @@ const AIChat: React.FC<AIChatProps> = ({
     };
   }, []);
 
-  // forceRefreshまたはpageId変更でメッセージをクリア
+  // forceRefreshまたはpageId変更でメッセージをクリア（継続モードの場合は除外）
   useEffect(() => {
-    if (forceRefresh || initializationKeyRef.current !== pageId) {
+    if (forceRefresh || (!persistentMode && initializationKeyRef.current !== pageId)) {
       setMessages([]);
       setHistoryLoaded(false);
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
       initializationKeyRef.current = pageId;
     }
-  }, [forceRefresh, pageId]);
+  }, [forceRefresh, pageId, persistentMode]);
 
   // データベースから対話履歴を読み込む
   useEffect(() => {
@@ -156,11 +162,11 @@ const AIChat: React.FC<AIChatProps> = ({
         }
         if (!userId) return;
 
-                  const response = await fetch(`http://localhost:8000/chat/history?page=${pageId}`, {
-            headers: {
-              'Authorization': `Bearer ${userId}`,
-            },
-          });
+        const response = await fetch(`http://localhost:8000/chat/history?page=${pageId}`, {
+          headers: {
+            'Authorization': `Bearer ${userId}`,
+          },
+        });
 
         if (response.ok) {
           const history = await response.json();
@@ -302,7 +308,9 @@ const AIChat: React.FC<AIChatProps> = ({
       let aiResponse = '';
       
       if (onMessageSend) {
-        aiResponse = await onMessageSend(userMessage.content, ''); // メモ内容は渡さない
+        // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
+        const contextContent = persistentMode ? currentMemoContent : memoContent;
+        aiResponse = await onMessageSend(userMessage.content, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
         // ユーザーIDを取得
@@ -321,13 +329,14 @@ const AIChat: React.FC<AIChatProps> = ({
         if (userId) {
           const response = await fetch('http://localhost:8000/chat', {
             method: 'POST',
-                          headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${userId}`,
-              },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userId}`,
+            },
             body: JSON.stringify({
               message: userMessage.content,
               page: pageId,
+              context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
             }),
           });
 
@@ -456,6 +465,11 @@ const AIChat: React.FC<AIChatProps> = ({
           >
             <HistoryIcon />
           </IconButton>
+          {persistentMode && (
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              {currentMemoTitle || '新しいメモ'}
+            </Typography>
+          )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {showMemoButton && !hideMemoButton && onOpenMemo && (
@@ -659,4 +673,4 @@ const AIChat: React.FC<AIChatProps> = ({
   );
 };
 
-export default AIChat; 
+export default AIChat;

@@ -6,7 +6,7 @@ from prompt.prompt import system_prompt
 class learning_plannner():
     def __init__(self):
         load_dotenv()
-        self.model = "gpt-4.1"
+        self.model = "gpt-4.1-nano"
         
         # 環境変数からAPIキーを取得
         api_key = os.getenv("OPENAI_API_KEY")
