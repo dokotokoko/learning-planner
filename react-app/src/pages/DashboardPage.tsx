@@ -18,6 +18,8 @@ import {
   ListItemSecondaryAction,
   ListItemIcon,
   Divider,
+  Fab,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -27,14 +29,19 @@ import {
   Delete as DeleteIcon,
   FolderOpen as FolderIcon,
   Assignment as AssignmentIcon,
+  Psychology as PsychologyIcon,
+  Description as DescriptionIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores/chatStore';
 import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
+import AIChat from '../components/MemoChat/AIChat';
 
 interface Project {
   id: number;
@@ -49,7 +56,8 @@ interface Project {
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-
+  const { isChatOpen, toggleChat } = useChatStore();
+  
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,180 +255,228 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* ヘッダー */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        {/* タイトルとAIチャットボタン */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 4 
+        }}>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
             探究ダッシュボード
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            {user?.username}さんの探究プロジェクト ({projects.length}件)
-          </Typography>
-        </Box>
-        
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          新しいプロジェクト
-        </Button>
-      </Box>
-
-      {/* プロジェクトが0件の場合 */}
-      {projects.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Paper
+          <Button
+            variant="contained"
+            startIcon={<PsychologyIcon />}
+            onClick={toggleChat}
             sx={{
-              p: 6,
-              textAlign: 'center',
-              bgcolor: 'grey.50',
-              border: '2px dashed',
-              borderColor: 'grey.300',
+              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+              },
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
             }}
           >
-            <FolderIcon sx={{ fontSize: 64, color: 'grey.400', mb: 2 }} />
-            <Typography variant="h5" gutterBottom color="text.secondary">
-              まだプロジェクトがありません
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              最初のプロジェクトを作成して、探究学習を始めましょう！
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<AddIcon />}
-              onClick={() => setIsCreateDialogOpen(true)}
-            >
-              最初のプロジェクトを作成
-            </Button>
-          </Paper>
-        </motion.div>
-      )}
+            AIアシスタント
+          </Button>
+        </Box>
 
-      {/* プロジェクト一覧 - リスト形式 */}
-      {projects.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Paper sx={{ boxShadow: 1, borderRadius: 3, overflow: 'hidden' }}>
-            <List sx={{ p: 0 }}>
-              {projects.map((project, index) => (
-                <React.Fragment key={project.id}>
-                  <ListItem
-                    sx={{
-                      py: 2,
-                      px: 3,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                    onClick={() => navigate(`/projects/${project.id}`)}
+        {/* 既存のコンテンツ（以下は変更なし） */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            探究プロジェクト
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setIsCreateDialogOpen(true)}
+            sx={{
+              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+              },
+            }}
+          >
+            新しいプロジェクト
+          </Button>
+        </Box>
+
+        {/* プロジェクト一覧 */}
+        <Box sx={{ mb: 4 }}>
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : projects.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <DescriptionIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary" gutterBottom>
+                まだプロジェクトがありません
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                新しいプロジェクトを作成して、探究を始めましょう
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setIsCreateDialogOpen(true)}
+                sx={{
+                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                  },
+                }}
+              >
+                最初のプロジェクトを作成
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <AnimatePresence>
+                {projects.map((project) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    <ListItemIcon sx={{ minWidth: 48 }}>
-                      <AssignmentIcon color="primary" />
-                    </ListItemIcon>
-                    
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="h6" fontWeight="bold">
-                            {project.theme}
-                          </Typography>
-                          <Chip
-                            icon={<TimeIcon />}
-                            label={format(new Date(project.updated_at), 'yyyy/MM/dd HH:mm', { locale: ja })}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.75rem' }}
-                          />
-                        </Box>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          {project.question && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                              <strong>問い:</strong> {project.question}
+                    <Card
+                      sx={{
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                        },
+                      }}
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                              {project.theme}
                             </Typography>
-                          )}
-                          {project.hypothesis && (
-                            <Typography variant="body2" color="text.secondary">
-                              <strong>仮説:</strong> {project.hypothesis}
-                            </Typography>
-                          )}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <CalendarIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(project.updated_at).toLocaleDateString('ja-JP')}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </Box>
+                          
+                          <IconButton
+                            onClick={(e) => handleMenuOpen(e, project)}
+                            sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                          >
+                            <MoreIcon />
+                          </IconButton>
                         </Box>
-                      }
-                    />
-                    
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        edge="end"
-                        onClick={(e) => handleMenuOpen(e, project)}
-                        sx={{ mr: 1 }}
-                      >
-                        <MoreIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                  
-                  {index < projects.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          </Paper>
-        </motion.div>
-      )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </Box>
+          )}
+        </Box>
 
-      {/* プロジェクト作成ダイアログ */}
-      <CreateProjectDialog
-        open={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        onSubmit={handleCreateProject}
-      />
+        {/* AIチャット */}
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 300 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: '400px',
+                height: '100vh',
+                zIndex: 1300,
+                background: 'white',
+                boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+              }}
+            >
+              <AIChat
+                pageId="dashboard"
+                title="探究ダッシュボード"
+                onClose={toggleChat}
+                persistentMode={true}
+                enableSmartNotifications={true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* プロジェクト編集ダイアログ */}
-      <EditProjectDialog
-        open={isEditDialogOpen}
-        project={selectedProject}
-        onClose={() => {
-          setIsEditDialogOpen(false);
-          setSelectedProject(null);
-        }}
-        onSubmit={handleEditProject}
-      />
+        {/* ダイアログ */}
+        <CreateProjectDialog
+          open={isCreateDialogOpen}
+          onClose={() => setIsCreateDialogOpen(false)}
+          onSubmit={handleCreateProject}
+        />
 
-      {/* プロジェクトメニュー */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => {
-          setIsEditDialogOpen(true);
-          setMenuAnchor(null);
-        }}>
-          <EditIcon sx={{ mr: 1 }} />
-          編集
-        </MenuItem>
-        <MenuItem onClick={() => {
-          if (selectedProject) {
-            handleDeleteProject(selectedProject.id);
-          }
-          setMenuAnchor(null);
-          setSelectedProject(null);
-        }}>
-          <DeleteIcon sx={{ mr: 1 }} />
-          削除
-        </MenuItem>
-      </Menu>
+        <EditProjectDialog
+          open={isEditDialogOpen}
+          project={selectedProject}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setSelectedProject(null);
+          }}
+          onSubmit={handleEditProject}
+        />
+
+        {/* コンテキストメニュー */}
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={handleMenuClose}
+        >
+          <MenuItem
+            onClick={() => {
+              if (selectedProject) {
+                setIsEditDialogOpen(true);
+              }
+              handleMenuClose();
+            }}
+          >
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>編集</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (selectedProject) {
+                handleDeleteProject(selectedProject.id);
+              }
+              handleMenuClose();
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" color="error" />
+            </ListItemIcon>
+            <ListItemText>削除</ListItemText>
+          </MenuItem>
+        </Menu>
+      </motion.div>
     </Container>
   );
 };

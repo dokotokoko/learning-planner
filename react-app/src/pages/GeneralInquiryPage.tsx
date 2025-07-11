@@ -5,11 +5,18 @@ import {
   Box, 
   Typography, 
   Alert,
+  Button,
 } from '@mui/material';
 import { motion } from 'framer-motion';
+import { Psychology as PsychologyIcon, Chat as ChatIcon } from '@mui/icons-material';
 import MemoChat from '../components/MemoChat/MemoChat';
+import { useChatStore } from '../stores/chatStore';
+import { AnimatePresence } from 'framer-motion';
+import AIChat from '../components/MemoChat/AIChat';
 
 const GeneralInquiryPage: React.FC = () => {
+  const { isChatOpen, toggleChat } = useChatStore();
+
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
@@ -118,47 +125,78 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
   };
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.6 }}
       >
-
-
-        {/* メイン：メモ&チャット統合UI */}
-        <Box sx={{ height: 'calc(100vh - 300px)', minHeight: '500px', mb: 4 }}>
-          <MemoChat
-            pageId="inquiry"
-            memoTitle="相談メモ"
-            memoPlaceholder={`思考整理のための個人的なメモスペースです。
-LLMには送信されません。
-
-例：
-- 漠然とした悩みや疑問
-- 思いついたアイデア
-- 整理したい考え
-- 頭の中の整理
-- 個人的なメモ
-- 自分だけの覚書`}
-            chatPlaceholder="相談内容を入力してください..."
-            initialMessage="こんにちは！探究学習に関することでしたら、どんなことでもお気軽にご相談ください。
-
-これまでの対話履歴を記憶していますので、継続的にサポートできます。
-
-左側のメモ欄はあなただけの思考整理スペースです。自由にお使いください。
-
-例えば以下のようなことでも構いません：
-• テーマが決まらない
-• 目標設定の方法が分からない
-• 活動内容のアイデアが欲しい
-• 調査方法について相談したい
-• 成果のまとめ方を知りたい
-
-どのようなことでお困りですか？"
-            onMessageSend={handleAIMessage}
-          />
+        {/* タイトルとAIチャットボタン */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 4 
+        }}>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+            AI相談
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<PsychologyIcon />}
+            onClick={toggleChat}
+            sx={{
+              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+              },
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+            }}
+          >
+            AIアシスタント
+          </Button>
         </Box>
+
+        <MemoChat
+          pageId="general-inquiry"
+          memoTitle="💭 相談メモ"
+          memoPlaceholder="相談したい内容や疑問をメモしてください..."
+          chatPlaceholder="AIに相談してください..."
+          onMessageSend={handleAIMessage}
+        />
+
+        {/* AIチャット */}
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 300 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: '400px',
+                height: '100vh',
+                zIndex: 1300,
+                background: 'white',
+                boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+              }}
+            >
+              <AIChat
+                pageId="general-inquiry"
+                title="AI相談アシスタント"
+                onClose={toggleChat}
+                persistentMode={true}
+                enableSmartNotifications={true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </Container>
   );

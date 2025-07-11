@@ -95,12 +95,34 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          // 現在、バックエンドAPIにユーザー登録エンドポイントがないため、
-          // 簡易的にフロントエンドでのみバリデーション
+          // バックエンドAPIにユーザー登録リクエストを送信
+          const response = await fetch('http://localhost:8000/auth/register', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              username: username,
+              password: password,
+              confirm_password: confirmPassword,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            set({ isLoading: false });
+            return { 
+              success: false, 
+              error: errorData.detail || 'ユーザー登録に失敗しました'
+            };
+          }
+
+          const data = await response.json();
+          
           set({ isLoading: false });
           return { 
-            success: false, 
-            error: 'ユーザー登録機能は現在利用できません。管理者にお問い合わせください。' 
+            success: true,
+            message: data.message || 'ユーザー登録が完了しました'
           };
 
         } catch (error) {

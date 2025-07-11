@@ -18,6 +18,7 @@ import {
   Link,
   TextField,
   ClickAwayListener,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -27,6 +28,9 @@ import {
   Edit as EditIcon,
   Check as CheckIcon,
   Close as CloseIcon,
+  Psychology as PsychologyIcon,
+  Chat as ChatIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -34,6 +38,7 @@ import { ja } from 'date-fns/locale';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
+import AIChat from '../components/MemoChat/AIChat';
 
 interface Project {
   id: number;
@@ -58,7 +63,7 @@ const ProjectPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const { user } = useAuthStore();
-  const { isChatOpen } = useChatStore();
+  const { isChatOpen, toggleChat } = useChatStore();
 
   const [project, setProject] = useState<Project | null>(null);
   const [memos, setMemos] = useState<Memo[]>([]);
@@ -69,6 +74,11 @@ const ProjectPage: React.FC = () => {
   // インライン編集の状態
   const [editingField, setEditingField] = useState<'question' | 'hypothesis' | null>(null);
   const [editingValue, setEditingValue] = useState('');
+
+  // AIチャット関連 - デフォルト値を設定
+  const chatPageId = projectId ? `project-${projectId}` : 'project';
+  const currentMemoTitle = project?.theme || '';
+  const currentMemoContent = '';
 
   // プロジェクト情報の取得
   const fetchProject = async () => {
@@ -238,15 +248,28 @@ const ProjectPage: React.FC = () => {
   // AIチャットが開いているかどうかに基づいてGrid列数を動的に計算
   const getGridColumns = () => {
     if (isMobile) {
-      return { xs: 12 }; // モバイルでは常に1列
+      return 1; // モバイルでは常に1列
     }
     
     if (isChatOpen) {
       // AIチャットが開いている時は少し列数を減らす
-      return { xs: 12, sm: 6, md: 6, lg: 4 };
+      return 2;
     } else {
       // AIチャットが閉じている時は通常の列数
-      return { xs: 12, sm: 6, md: 4, lg: 3 };
+      return 3;
+    }
+  };
+
+  const getGridItemProps = () => {
+    const columns = getGridColumns();
+    if (isMobile) {
+      return { xs: 12 };
+    }
+    
+    if (columns === 2) {
+      return { xs: 12, sm: 6, md: 6 };
+    } else {
+      return { xs: 12, sm: 6, md: 4 };
     }
   };
 
@@ -267,314 +290,336 @@ const ProjectPage: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* ブレッドクラム */}
-      <Breadcrumbs sx={{ mb: 3 }}>
-        <Link
-          component="button"
-          variant="body2"
-          onClick={() => navigate('/dashboard')}
-          sx={{ textDecoration: 'none' }}
-        >
-          ダッシュボード
-        </Link>
-        <Typography variant="body2" color="text.primary">
-          {project.theme}
-        </Typography>
-      </Breadcrumbs>
-
-      {/* プロジェクトヘッダー */}
-      <Box sx={{ mb: 4 }}>
-        <Box display="flex" alignItems="center" mb={2}>
-          <IconButton
-            onClick={() => navigate('/dashboard')}
-            sx={{ mr: 1 }}
-          >
-            <BackIcon />
-          </IconButton>
-          <Typography variant="h4" fontWeight="bold">
-            {project.theme}
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        {/* タイトルとAIチャットボタン */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 4 
+        }}>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+            探究プロジェクト
           </Typography>
+          <Button
+            variant="contained"
+            startIcon={<PsychologyIcon />}
+            onClick={toggleChat}
+            sx={{
+              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+              },
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+            }}
+          >
+            AIアシスタント
+          </Button>
         </Box>
 
-        {/* 問いと仮説 - インライン編集対応 */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
-              <Typography variant="caption" color="primary.dark" fontWeight="bold">
-                研究の問い
+        {/* プロジェクト情報 */}
+        {project && (
+          <Card sx={{ mb: 4, borderRadius: 3 }}>
+            <CardContent sx={{ p: 4 }}>
+              <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+                {project.theme}
               </Typography>
-              {editingField === 'question' ? (
-                <ClickAwayListener onClickAway={saveEdit}>
-                  <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') saveEdit();
-                        if (e.key === 'Escape') cancelEdit();
-                      }}
-                      placeholder="研究の問いを入力..."
-                      autoFocus
-                      multiline
-                      maxRows={3}
-                    />
-                    <IconButton size="small" onClick={saveEdit} color="primary">
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={cancelEdit}>
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </ClickAwayListener>
-              ) : (
-                <Box
-                  onClick={() => startEditing('question')}
-                  sx={{
-                    mt: 0.5,
-                    cursor: 'pointer',
-                    p: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ flex: 1 }}>
-                    {project.question || '※クリックして問いを設定'}
-                  </Typography>
-                  <EditIcon sx={{ fontSize: 16, opacity: 0.7 }} />
-                </Box>
-              )}
-            </Box>
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <Box sx={{ p: 2, bgcolor: 'secondary.light', borderRadius: 1 }}>
-              <Typography variant="caption" color="secondary.dark" fontWeight="bold">
-                仮説
-              </Typography>
-              {editingField === 'hypothesis' ? (
-                <ClickAwayListener onClickAway={saveEdit}>
-                  <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') saveEdit();
-                        if (e.key === 'Escape') cancelEdit();
-                      }}
-                      placeholder="仮説を入力..."
-                      autoFocus
-                      multiline
-                      maxRows={3}
-                    />
-                    <IconButton size="small" onClick={saveEdit} color="primary">
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={cancelEdit}>
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </ClickAwayListener>
-              ) : (
-                <Box
-                  onClick={() => startEditing('hypothesis')}
-                  sx={{
-                    mt: 0.5,
-                    cursor: 'pointer',
-                    p: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ flex: 1 }}>
-                    {project.hypothesis || '※クリックして仮説を設定'}
-                  </Typography>
-                  <EditIcon sx={{ fontSize: 16, opacity: 0.7 }} />
-                </Box>
-              )}
-            </Box>
-          </Grid>
-        </Grid>
 
-        {/* アクションボタン */}
-        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+              {/* 問い */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  問い
+                </Typography>
+                {editingField === 'question' ? (
+                  <ClickAwayListener onClickAway={saveEdit}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <TextField
+                        fullWidth
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') saveEdit();
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        autoFocus
+                        multiline
+                        rows={2}
+                      />
+                      <IconButton onClick={saveEdit} color="primary">
+                        <CheckIcon />
+                      </IconButton>
+                      <IconButton onClick={cancelEdit}>
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  </ClickAwayListener>
+                ) : (
+                  <Box
+                    onClick={() => startEditing('question')}
+                    sx={{
+                      p: 2,
+                      border: '1px dashed #ddd',
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      minHeight: 60,
+                      display: 'flex',
+                      alignItems: 'center',
+                      '&:hover': {
+                        backgroundColor: '#f5f5f5',
+                      },
+                    }}
+                  >
+                    <Typography color={project.question ? 'text.primary' : 'text.secondary'}>
+                      {project.question || 'クリックして問いを設定...'}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+
+              {/* 仮説 */}
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  仮説
+                </Typography>
+                {editingField === 'hypothesis' ? (
+                  <ClickAwayListener onClickAway={saveEdit}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <TextField
+                        fullWidth
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') saveEdit();
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        autoFocus
+                        multiline
+                        rows={2}
+                      />
+                      <IconButton onClick={saveEdit} color="primary">
+                        <CheckIcon />
+                      </IconButton>
+                      <IconButton onClick={cancelEdit}>
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  </ClickAwayListener>
+                ) : (
+                  <Box
+                    onClick={() => startEditing('hypothesis')}
+                    sx={{
+                      p: 2,
+                      border: '1px dashed #ddd',
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      minHeight: 60,
+                      display: 'flex',
+                      alignItems: 'center',
+                      '&:hover': {
+                        backgroundColor: '#f5f5f5',
+                      },
+                    }}
+                  >
+                    <Typography color={project.hypothesis ? 'text.primary' : 'text.secondary'}>
+                      {project.hypothesis || 'クリックして仮説を設定...'}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* メモ一覧 */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            メモ
+          </Typography>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleCreateMemo}
+            sx={{
+              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+              },
+            }}
           >
             新しいメモ
           </Button>
-          <Typography variant="body2" color="text.secondary">
-            {memos.length}個のメモ
-          </Typography>
         </Box>
-      </Box>
 
-      {/* メモ一覧（Scrapboxライク） */}
-      <Box>
-        {memos.length === 0 ? (
-          <Box
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            py={8}
-          >
+        <Grid container spacing={3}>
+          <AnimatePresence>
+            {memos.map((memo) => (
+              <Grid item {...getGridItemProps()} key={memo.id}>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card
+                    sx={{
+                      height: '100%',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                      },
+                    }}
+                    onClick={() => navigate(`/projects/${projectId}/memos/${memo.id}`)}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, flexGrow: 1, pr: 1 }}>
+                          {memo.title}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleMenuOpen(e, memo)}
+                          sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                        >
+                          <MoreIcon />
+                        </IconButton>
+                      </Box>
+                      
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 4,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.5,
+                          minHeight: '3.5em',
+                        }}
+                      >
+                        {getContentPreview(memo.content)}
+                      </Typography>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, gap: 1 }}>
+                        <DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(memo.updated_at).toLocaleDateString('ja-JP')}
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </Grid>
+            ))}
+          </AnimatePresence>
+        </Grid>
+
+        {memos.length === 0 && !isLoading && (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
+            <DescriptionIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" color="text.secondary" gutterBottom>
               まだメモがありません
             </Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              最初のメモを作成してアイデアを記録しましょう
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              新しいメモを作成して、探究の記録を始めましょう
             </Typography>
             <Button
               variant="contained"
               startIcon={<AddIcon />}
               onClick={handleCreateMemo}
+              sx={{
+                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                },
+              }}
             >
               最初のメモを作成
             </Button>
           </Box>
-        ) : (
-          <Grid container spacing={2}>
-            <AnimatePresence>
-              {memos.map((memo) => (
-                <Grid item {...getGridColumns()} key={memo.id}>
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.2 }}
-                    whileHover={{ y: -4 }}
-                  >
-                    <Card
-                      sx={{
-                        height: 200,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          boxShadow: theme.shadows[8],
-                        },
-                      }}
-                      onClick={() => navigate(`/projects/${projectId}/memos/${memo.id}`)}
-                    >
-                      <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
-                        {/* メニューボタン */}
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleMenuOpen(e, memo)}
-                          sx={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                            opacity: 0.7,
-                            '&:hover': { opacity: 1 },
-                          }}
-                        >
-                          <MoreIcon />
-                        </IconButton>
-
-                        {/* タイトル */}
-                        <Typography
-                          variant="h6"
-                          fontWeight="bold"
-                          sx={{
-                            mb: 2,
-                            pr: 4, // メニューボタンのスペース確保
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            minHeight: 48,
-                          }}
-                        >
-                          {memo.title || 'Untitled'}
-                        </Typography>
-
-                        {/* 内容プレビュー */}
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 6,
-                            WebkitBoxOrient: 'vertical',
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {getContentPreview(memo.content)}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                </Grid>
-              ))}
-            </AnimatePresence>
-          </Grid>
         )}
-      </Box>
 
-      {/* FAB（モバイル用） */}
-      {isMobile && (
-        <Fab
-          color="primary"
-          aria-label="add memo"
-          onClick={handleCreateMemo}
-          sx={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-          }}
-        >
-          <AddIcon />
-        </Fab>
-      )}
+        {/* AIチャット */}
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 300 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: '400px',
+                height: '100vh',
+                zIndex: 1300,
+                background: 'white',
+                boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
+              }}
+            >
+              <AIChat
+                pageId={chatPageId}
+                title="探究アシスタント"
+                currentMemoTitle={currentMemoTitle}
+                currentMemoContent={currentMemoContent}
+                onClose={toggleChat}
+                persistentMode={true}
+                enableSmartNotifications={true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* メモメニュー */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <MenuItem
-          onClick={() => {
-            if (selectedMemo) {
-              navigate(`/projects/${projectId}/memos/${selectedMemo.id}`);
-            }
-            handleMenuClose();
-          }}
+        {/* メニュー */}
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={handleMenuClose}
         >
-          <EditIcon sx={{ mr: 1, fontSize: 20 }} />
-          編集
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (selectedMemo) {
-              handleDeleteMemo(selectedMemo.id);
-            }
-          }}
-          sx={{ color: 'error.main' }}
-        >
-          <DeleteIcon sx={{ mr: 1, fontSize: 20 }} />
-          削除
-        </MenuItem>
-      </Menu>
+          <MenuItem
+            onClick={() => {
+              if (selectedMemo) {
+                navigate(`/projects/${projectId}/memos/${selectedMemo.id}`);
+              }
+              handleMenuClose();
+            }}
+          >
+            <EditIcon fontSize="small" sx={{ mr: 1 }} />
+            編集
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (selectedMemo) {
+                handleDeleteMemo(selectedMemo.id);
+              }
+              handleMenuClose();
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+            削除
+          </MenuItem>
+        </Menu>
+
+        {/* ローディング */}
+        {isLoading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        )}
+      </motion.div>
     </Container>
   );
 };
