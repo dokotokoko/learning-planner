@@ -18,6 +18,8 @@ import {
   useMediaQuery,
   Card,
   CardContent,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -27,6 +29,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Logout,
+  ExpandMore,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -70,6 +73,7 @@ const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatSidebarWidth, setChatSidebarWidth] = useState(defaultChatSidebarWidth);
   const [isResizing, setIsResizing] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -82,6 +86,15 @@ const Layout: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/login');
+    setUserMenuAnchor(null);
+  };
+
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setUserMenuAnchor(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setUserMenuAnchor(null);
   };
 
   // チャットサイドバーのリサイズ機能
@@ -210,7 +223,7 @@ const Layout: React.FC = () => {
   // 展開状態のサイドバー
   const fullDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
             <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
@@ -246,14 +259,14 @@ const Layout: React.FC = () => {
               sx={{
                 borderRadius: 2,
                 '&.Mui-selected': {
-                  background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                   color: 'white',
                   '& .MuiListItemIcon-root': {
                     color: 'white',
                   },
                 },
                 '&:hover': {
-                  background: 'rgba(102, 126, 234, 0.1)',
+                  background: 'rgba(5, 155, 255, 0.1)',
                 },
               }}
             >
@@ -276,11 +289,11 @@ const Layout: React.FC = () => {
       <Box sx={{ p: 2 }}>
         <Card 
           sx={{ 
-            bgcolor: isChatOpen ? 'primary.light' : 'rgba(102, 126, 234, 0.1)',
+            bgcolor: isChatOpen ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
             borderRadius: 2,
             cursor: 'pointer',
             '&:hover': {
-              bgcolor: 'rgba(102, 126, 234, 0.2)',
+              bgcolor: 'rgba(5, 155, 255, 0.2)',
             },
           }}
           onClick={toggleChat}
@@ -293,7 +306,7 @@ const Layout: React.FC = () => {
               </Typography>
             </Box>
             <Typography variant="caption" color="text.secondary">
-              {isChatOpen ? '開いています' : '探究学習をサポート'}
+              探究学習をサポート
             </Typography>
           </CardContent>
         </Card>
@@ -302,7 +315,21 @@ const Layout: React.FC = () => {
       <Divider />
       
       <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 2, 
+            mb: 2,
+            cursor: 'pointer',
+            p: 1,
+            borderRadius: 1,
+            '&:hover': {
+              bgcolor: 'rgba(5, 155, 255, 0.1)',
+            },
+          }}
+          onClick={handleUserMenuOpen}
+        >
           <Avatar sx={{ bgcolor: 'primary.main' }}>
             {user?.username?.charAt(0).toUpperCase()}
           </Avatar>
@@ -314,22 +341,8 @@ const Layout: React.FC = () => {
               ログイン中
             </Typography>
           </Box>
+          <ExpandMore sx={{ color: 'text.secondary' }} />
         </Box>
-        
-        <Button
-          fullWidth
-          variant="outlined"
-          color="primary"
-          startIcon={<Logout />}
-          onClick={handleLogout}
-          sx={{ 
-            borderRadius: 2,
-            textTransform: 'none',
-            fontSize: '0.875rem',
-          }}
-        >
-          ログアウト
-        </Button>
       </Box>
     </Box>
   );
@@ -339,7 +352,7 @@ const Layout: React.FC = () => {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ 
         p: 1.5, 
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
         display: 'flex',
         justifyContent: 'center',
       }}>
@@ -367,14 +380,14 @@ const Layout: React.FC = () => {
                 justifyContent: 'center',
                 minHeight: 48,
                 '&.Mui-selected': {
-                  background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                   color: 'white',
                   '& .MuiListItemIcon-root': {
                     color: 'white',
                   },
                 },
                 '&:hover': {
-                  background: 'rgba(102, 126, 234, 0.1)',
+                  background: 'rgba(5, 155, 255, 0.1)',
                 },
               }}
             >
@@ -396,10 +409,10 @@ const Layout: React.FC = () => {
             width: '100%',
             height: 48,
             borderRadius: 2,
-            bgcolor: isChatOpen ? 'primary.light' : 'rgba(102, 126, 234, 0.1)',
+            bgcolor: isChatOpen ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
             color: 'primary.main',
             '&:hover': {
-              bgcolor: 'rgba(102, 126, 234, 0.2)',
+              bgcolor: 'rgba(5, 155, 255, 0.2)',
             },
           }}
         >
@@ -410,23 +423,21 @@ const Layout: React.FC = () => {
       <Divider />
       
       <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32, alignSelf: 'center' }}>
-          {user?.username?.charAt(0).toUpperCase()}
-        </Avatar>
-        
         <IconButton
-          onClick={handleLogout}
+          onClick={handleUserMenuOpen}
           sx={{
             width: '100%',
-            height: 32,
+            height: 48,
             borderRadius: 1,
             color: 'primary.main',
             '&:hover': {
-              bgcolor: 'rgba(102, 126, 234, 0.1)',
+              bgcolor: 'rgba(5, 155, 255, 0.1)',
             },
           }}
         >
-          <Logout fontSize="small" />
+          <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+            {user?.username?.charAt(0).toUpperCase()}
+          </Avatar>
         </IconButton>
       </Box>
     </Box>
@@ -651,6 +662,26 @@ ${currentMemoTitle ? `現在「${currentMemoTitle}」を開いています。` :
             </Box>
           )}
         </AnimatePresence>
+
+        {/* ユーザーメニュー */}
+        <Menu
+          anchorEl={userMenuAnchor}
+          open={Boolean(userMenuAnchor)}
+          onClose={handleUserMenuClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'center',
+          }}
+        >
+          <MenuItem onClick={handleLogout}>
+            <Logout sx={{ mr: 1 }} />
+            ログアウト
+          </MenuItem>
+        </Menu>
       </Box>
     </LayoutContext.Provider>
   );

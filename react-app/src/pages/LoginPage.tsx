@@ -157,7 +157,7 @@ const LoginPage = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
         display: 'flex',
         alignItems: 'center',
         py: 4,
@@ -200,7 +200,7 @@ const LoginPage = () => {
                     gutterBottom
                     fontWeight={700}
                     sx={{
-                      background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                      background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                       backgroundClip: 'text',
                       textFillColor: 'transparent',
                       WebkitBackgroundClip: 'text',
@@ -334,9 +334,9 @@ const LoginPage = () => {
                         sx={{
                           py: 1.5,
                           fontSize: '1.1rem',
-                          background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                          background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                           '&:hover': {
-                            background: 'linear-gradient(45deg, #5a6fd8, #6a4190)',
+                            background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                           },
                         }}
                       >
@@ -426,9 +426,9 @@ const LoginPage = () => {
                         sx={{
                           py: 1.5,
                           fontSize: '1.1rem',
-                          background: 'linear-gradient(45deg, #47d7ac, #2196F3)',
+                          background: 'linear-gradient(45deg, #52BAFF, #059BFF)',
                           '&:hover': {
-                            background: 'linear-gradient(45deg, #3bc99c, #1976D2)',
+                            background: 'linear-gradient(45deg, #9ED8FF, #52BAFF)',
                           },
                         }}
                       >

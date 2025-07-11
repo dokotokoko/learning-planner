@@ -318,9 +318,13 @@ const ReflectionForm: React.FC<ReflectionFormProps> = ({
               onClick={handleSubmit}
               disabled={isSubmitting || completionScore < 50}
               sx={{
-                background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                py: 1.5,
+                px: 4,
+                fontSize: '1.1rem',
+                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                color: 'white',
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #5a67d8, #6b46a0)',
+                  background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                 },
               }}
             >

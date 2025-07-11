@@ -630,9 +630,9 @@ const QuestBoardPage: React.FC = () => {
                     fullWidth
                     onClick={handleStartQuest}
                     sx={{
-                      background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                      background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #5a67d8, #6b46a0)',
+                        background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                       },
                     }}
                   >
@@ -743,9 +743,11 @@ const QuestBoardPage: React.FC = () => {
                   onClick={handleNextToReflection}
                   disabled={!submissionData.description.trim()}
                   sx={{
-                    background: 'linear-gradient(45deg, #48bb78, #38a169)',
+                    mt: 3,
+                    background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                    color: 'white',
                     '&:hover': {
-                      background: 'linear-gradient(45deg, #38a169, #2d7d55)',
+                      background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                     },
                   }}
                 >

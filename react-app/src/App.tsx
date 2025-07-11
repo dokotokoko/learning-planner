@@ -50,13 +50,13 @@ function App() {
       mode: isDarkMode ? 'dark' : 'light',
       primary: {
         main: primaryColor,
-        light: isDarkMode ? '#90CAF9' : '#E3F2FD',
-        dark: '#1565C0',
+        light: isDarkMode ? '#52BAFF' : '#9ED8FF',
+        dark: '#006EB8',
       },
       secondary: {
-        main: '#47d7ac',
-        light: '#7DE8C3',
-        dark: '#2E8B7A',
+        main: '#52BAFF',
+        light: '#9ED8FF',
+        dark: '#00406B',
       },
       background: {
         default: isDarkMode ? '#121212' : '#f8f9fa',

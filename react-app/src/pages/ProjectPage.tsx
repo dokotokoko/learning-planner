@@ -16,19 +16,24 @@ import {
   useMediaQuery,
   Breadcrumbs,
   Link,
+  TextField,
+  ClickAwayListener,
 } from '@mui/material';
 import {
   Add as AddIcon,
   ArrowBack as BackIcon,
   MoreVert as MoreIcon,
   Delete as DeleteIcon,
-  AccessTime as TimeIcon,
+  Edit as EditIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores/chatStore';
 
 interface Project {
   id: number;
@@ -53,12 +58,17 @@ const ProjectPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const { user } = useAuthStore();
+  const { isChatOpen } = useChatStore();
 
   const [project, setProject] = useState<Project | null>(null);
   const [memos, setMemos] = useState<Memo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
+
+  // インライン編集の状態
+  const [editingField, setEditingField] = useState<'question' | 'hypothesis' | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   // プロジェクト情報の取得
   const fetchProject = async () => {
@@ -106,6 +116,54 @@ const ProjectPage: React.FC = () => {
       fetchMemos();
     }
   }, [projectId]);
+
+  // プロジェクト更新の処理
+  const updateProject = async (field: 'question' | 'hypothesis', value: string) => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      const updateData = {
+        theme: project!.theme,
+        question: field === 'question' ? value : project!.question,
+        hypothesis: field === 'hypothesis' ? value : project!.hypothesis,
+      };
+
+      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) throw new Error('プロジェクトの更新に失敗しました');
+      
+      await fetchProject();
+    } catch (error) {
+      console.error('Error updating project:', error);
+    }
+  };
+
+  // インライン編集の開始
+  const startEditing = (field: 'question' | 'hypothesis') => {
+    setEditingField(field);
+    setEditingValue(project?.[field] || '');
+  };
+
+  // インライン編集の保存
+  const saveEdit = async () => {
+    if (editingField && editingValue.trim() !== (project?.[editingField] || '')) {
+      await updateProject(editingField, editingValue.trim());
+    }
+    setEditingField(null);
+    setEditingValue('');
+  };
+
+  // インライン編集のキャンセル
+  const cancelEdit = () => {
+    setEditingField(null);
+    setEditingValue('');
+  };
 
   // 新規メモの作成（ワンクリック）
   const handleCreateMemo = async () => {
@@ -177,6 +235,21 @@ const ProjectPage: React.FC = () => {
       : cleanContent;
   };
 
+  // AIチャットが開いているかどうかに基づいてGrid列数を動的に計算
+  const getGridColumns = () => {
+    if (isMobile) {
+      return { xs: 12 }; // モバイルでは常に1列
+    }
+    
+    if (isChatOpen) {
+      // AIチャットが開いている時は少し列数を減らす
+      return { xs: 12, sm: 6, md: 6, lg: 4 };
+    } else {
+      // AIチャットが閉じている時は通常の列数
+      return { xs: 12, sm: 6, md: 4, lg: 3 };
+    }
+  };
+
   if (isLoading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -224,16 +297,58 @@ const ProjectPage: React.FC = () => {
           </Typography>
         </Box>
 
-        {/* 問いと仮説 */}
+        {/* 問いと仮説 - インライン編集対応 */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
           <Grid item xs={12} md={6}>
             <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
               <Typography variant="caption" color="primary.dark" fontWeight="bold">
                 研究の問い
               </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                {project.question || '※まだ設定されていません'}
-              </Typography>
+              {editingField === 'question' ? (
+                <ClickAwayListener onClickAway={saveEdit}>
+                  <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') saveEdit();
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      placeholder="研究の問いを入力..."
+                      autoFocus
+                      multiline
+                      maxRows={3}
+                    />
+                    <IconButton size="small" onClick={saveEdit} color="primary">
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={cancelEdit}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </ClickAwayListener>
+              ) : (
+                <Box
+                  onClick={() => startEditing('question')}
+                  sx={{
+                    mt: 0.5,
+                    cursor: 'pointer',
+                    p: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1 }}>
+                    {project.question || '※クリックして問いを設定'}
+                  </Typography>
+                  <EditIcon sx={{ fontSize: 16, opacity: 0.7 }} />
+                </Box>
+              )}
             </Box>
           </Grid>
           
@@ -242,9 +357,51 @@ const ProjectPage: React.FC = () => {
               <Typography variant="caption" color="secondary.dark" fontWeight="bold">
                 仮説
               </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                {project.hypothesis || '※まだ設定されていません'}
-              </Typography>
+              {editingField === 'hypothesis' ? (
+                <ClickAwayListener onClickAway={saveEdit}>
+                  <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') saveEdit();
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      placeholder="仮説を入力..."
+                      autoFocus
+                      multiline
+                      maxRows={3}
+                    />
+                    <IconButton size="small" onClick={saveEdit} color="primary">
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={cancelEdit}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </ClickAwayListener>
+              ) : (
+                <Box
+                  onClick={() => startEditing('hypothesis')}
+                  sx={{
+                    mt: 0.5,
+                    cursor: 'pointer',
+                    p: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1 }}>
+                    {project.hypothesis || '※クリックして仮説を設定'}
+                  </Typography>
+                  <EditIcon sx={{ fontSize: 16, opacity: 0.7 }} />
+                </Box>
+              )}
             </Box>
           </Grid>
         </Grid>
@@ -292,7 +449,7 @@ const ProjectPage: React.FC = () => {
           <Grid container spacing={2}>
             <AnimatePresence>
               {memos.map((memo) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={memo.id}>
+                <Grid item {...getGridColumns()} key={memo.id}>
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -355,26 +512,13 @@ const ProjectPage: React.FC = () => {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             display: '-webkit-box',
-                            WebkitLineClamp: 4,
+                            WebkitLineClamp: 6,
                             WebkitBoxOrient: 'vertical',
                             lineHeight: 1.4,
-                            mb: 2,
                           }}
                         >
                           {getContentPreview(memo.content)}
                         </Typography>
-
-                        {/* 更新日時 */}
-                        <Box
-                          display="flex"
-                          alignItems="center"
-                          sx={{ position: 'absolute', bottom: 16, left: 16 }}
-                        >
-                          <TimeIcon sx={{ fontSize: 14, color: 'text.secondary', mr: 0.5 }} />
-                          <Typography variant="caption" color="text.secondary">
-                            {format(new Date(memo.updated_at), 'M/d HH:mm', { locale: ja })}
-                          </Typography>
-                        </Box>
                       </CardContent>
                     </Card>
                   </motion.div>
@@ -416,8 +560,8 @@ const ProjectPage: React.FC = () => {
             handleMenuClose();
           }}
         >
-          {/* EditIconを削除 */}
-          <Typography>編集</Typography>
+          <EditIcon sx={{ mr: 1, fontSize: 20 }} />
+          編集
         </MenuItem>
         <MenuItem
           onClick={() => {

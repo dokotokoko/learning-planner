@@ -21,10 +21,23 @@ body {
 
 /* カスタム変数 */
 :root {
-  --primary-color: #73bbff;
-  --secondary-color: #47d7ac;
-  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --gradient-secondary: linear-gradient(45deg, #47d7ac, #2196F3);
+  /* カラーパレット */
+  --primary-color: #059BFF;
+  --primary-light: #9ED8FF;
+  --gradient-primary: linear-gradient(135deg, #059BFF 0%, #00406B 100%);
+  --gradient-secondary: linear-gradient(45deg, #52BAFF, #006EB8);
+  
+  /* セカンダリカラー */
+  --secondary-color: #52BAFF;
+  --accent-color: #006EB8;
+  --dark-color: #00406B;
+  
+  /* その他のカラー */
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --background-light: #f8f9fa;
+  --background-white: #ffffff;
+  --border-color: #e0e0e0;
   --shadow-light: 0 2px 10px rgba(0, 0, 0, 0.08);
   --shadow-medium: 0 4px 20px rgba(0, 0, 0, 0.12);
   --shadow-heavy: 0 8px 30px rgba(0, 0, 0, 0.16);
