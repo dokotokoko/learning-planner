@@ -132,7 +132,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         ? `/projects/${selectedProject}/memos`
         : '/memos';
       
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -154,7 +155,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const fetchProjects = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch('http://localhost:8000/projects', {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -243,7 +245,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         ? `/projects/${selectedProject}/memos`
         : '/memos';
       
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -268,7 +271,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const handleUpdateMemo = async (memoId: number, memoData: Partial<MultiMemo>) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/memos/${memoId}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -292,7 +296,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
 
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/memos/${memoId}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

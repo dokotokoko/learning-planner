@@ -42,6 +42,8 @@ import { useChatStore } from '../stores/chatStore';
 import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
 import AIChat from '../components/MemoChat/AIChat';
+import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
+import { simpleSteps } from '../components/Tutorial/DashboardTutorial';
 
 interface Project {
   id: number;
@@ -55,7 +57,7 @@ interface Project {
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, isNewUser } = useAuthStore();
   const { isChatOpen, toggleChat } = useChatStore();
   
   const [projects, setProjects] = useState<Project[]>([]);
@@ -65,6 +67,16 @@ const DashboardPage: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  
+  // SimpleTutorial用の状態管理
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // 初回ログイン時にチュートリアルを自動開始
+  useEffect(() => {
+    if (isNewUser()) {
+      setTimeout(() => setShowTutorial(true), 1000);
+    }
+  }, [isNewUser]);
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
@@ -77,7 +89,8 @@ const DashboardPage: React.FC = () => {
         throw new Error('認証トークンが見つかりません。再ログインが必要です。');
       }
 
-      const response = await fetch('http://localhost:8000/v2/projects', {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -115,8 +128,9 @@ const DashboardPage: React.FC = () => {
   }) => {
     try {
       const token = localStorage.getItem('auth-token');
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       
-      const response = await fetch('http://localhost:8000/v2/projects', {
+      const response = await fetch(`${apiBaseUrl}/v2/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -153,7 +167,8 @@ const DashboardPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +211,8 @@ const DashboardPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}`, {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -255,13 +271,15 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        {/* タイトルとAIチャットボタン */}
+    <>
+      <Container maxWidth="lg" sx={{ py: 4 }} data-tutorial="welcome-section">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+
+        {/* タイトルとボタン群 */}
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -271,23 +289,44 @@ const DashboardPage: React.FC = () => {
           <Typography variant="h4" sx={{ fontWeight: 600 }}>
             探究ダッシュボード
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<PsychologyIcon />}
-            onClick={toggleChat}
-            sx={{
-              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
-              },
-              borderRadius: 2,
-              px: 3,
-              py: 1.5,
-            }}
-          >
-            AIアシスタント
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<AssignmentIcon />}
+              onClick={() => setShowTutorial(true)}
+              sx={{
+                borderColor: '#059BFF',
+                color: '#059BFF',
+                '&:hover': {
+                  borderColor: '#006EB8',
+                  backgroundColor: 'rgba(5, 155, 255, 0.04)',
+                },
+                borderRadius: 2,
+                px: 3,
+                py: 1.5,
+              }}
+            >
+              チュートリアル
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<PsychologyIcon />}
+              onClick={toggleChat}
+              data-tutorial="ai-chat-section"
+              sx={{
+                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                },
+                borderRadius: 2,
+                px: 3,
+                py: 1.5,
+              }}
+            >
+              AIアシスタント
+            </Button>
+          </Box>
         </Box>
 
         {/* 既存のコンテンツ（以下は変更なし） */}
@@ -299,6 +338,7 @@ const DashboardPage: React.FC = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setIsCreateDialogOpen(true)}
+            data-tutorial="create-project-button"
             sx={{
               background: 'linear-gradient(45deg, #059BFF, #006EB8)',
               color: 'white',
@@ -312,7 +352,7 @@ const DashboardPage: React.FC = () => {
         </Box>
 
         {/* プロジェクト一覧 */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 4 }} data-tutorial="project-list">
           {isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
@@ -476,8 +516,17 @@ const DashboardPage: React.FC = () => {
             <ListItemText>削除</ListItemText>
           </MenuItem>
         </Menu>
-      </motion.div>
-    </Container>
+        </motion.div>
+      </Container>
+      
+      {/* SimpleTutorial */}
+      <SimpleTutorial
+        steps={simpleSteps}
+        isOpen={showTutorial}
+        onClose={() => setShowTutorial(false)}
+        onComplete={() => setShowTutorial(false)}
+      />
+    </>
   );
 };
 

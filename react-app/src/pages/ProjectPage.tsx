@@ -84,7 +84,8 @@ const ProjectPage: React.FC = () => {
   const fetchProject = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -103,7 +104,8 @@ const ProjectPage: React.FC = () => {
   const fetchMemos = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}/memos`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}/memos`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -137,7 +139,8 @@ const ProjectPage: React.FC = () => {
         hypothesis: field === 'hypothesis' ? value : project!.hypothesis,
       };
 
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -179,7 +182,8 @@ const ProjectPage: React.FC = () => {
   const handleCreateMemo = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/v2/projects/${projectId}/memos`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}/memos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -207,7 +211,8 @@ const ProjectPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/v2/memos/${memoId}`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

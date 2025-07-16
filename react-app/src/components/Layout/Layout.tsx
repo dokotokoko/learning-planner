@@ -34,6 +34,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useTutorialStore } from '../../stores/tutorialStore';
 import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
 
@@ -68,6 +69,7 @@ const Layout: React.FC = () => {
     currentMemoContent,
     currentProjectId 
   } = useChatStore();
+  const { startTutorialManually } = useTutorialStore();
   
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -191,7 +193,8 @@ const Layout: React.FC = () => {
       // 現在のメモコンテンツを使用
       const contextContent = currentMemoContent || memoContent;
 
-      const response = await fetch('http://localhost:8000/chat', {
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const response = await fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -216,8 +219,28 @@ const Layout: React.FC = () => {
     }
   };
 
-  const mainListItems = [
+  interface MenuItem {
+    text: string;
+    icon: React.ReactNode;
+    path: string;
+    action?: () => void;
+  }
+
+  const mainListItems: MenuItem[] = [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
+    { 
+      text: 'チュートリアル', 
+      icon: <Psychology />, 
+      path: '#', 
+      action: () => {
+        // 現在のページに応じてチュートリアルを開始
+        const currentPath = location.pathname;
+        if (currentPath === '/dashboard') {
+          startTutorialManually('dashboard');
+        }
+        // 他のページのチュートリアルも将来追加可能
+      }
+    },
   ];
 
   // 展開状態のサイドバー
@@ -247,13 +270,17 @@ const Layout: React.FC = () => {
         </Box>
       </Box>
 
-      <List sx={{ flex: 1, px: 1 }}>
+      <List sx={{ flex: 1, px: 1 }} data-tutorial="navigation-menu">
         {mainListItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
               onClick={() => {
-                navigate(item.path);
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                  navigate(item.path);
+                }
                 if (isMobile) setMobileOpen(false);
               }}
               sx={{
@@ -374,7 +401,13 @@ const Layout: React.FC = () => {
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => {
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                  navigate(item.path);
+                }
+              }}
               sx={{
                 borderRadius: 2,
                 justifyContent: 'center',

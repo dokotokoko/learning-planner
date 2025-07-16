@@ -18,7 +18,7 @@ const games = [
 
 const FrameworkGamesPage: React.FC = () => {
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }} data-tutorial="framework-games-section">
       <Typography variant="h4" component="h1" gutterBottom>
         思考フレームワーク・ミニゲーム
       </Typography>

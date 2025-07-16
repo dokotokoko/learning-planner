@@ -12,10 +12,15 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
+  isFirstLogin: boolean;
+  lastLoginTime: Date | null;
+  loginCount: number;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   initialize: () => Promise<void>;
+  markFirstLoginComplete: () => void;
+  isNewUser: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -24,6 +29,9 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isLoading: false,
       isInitialized: false,
+      isFirstLogin: true,
+      lastLoginTime: null,
+      loginCount: 0,
 
       initialize: async () => {
         const { user } = get();
@@ -34,12 +42,22 @@ export const useAuthStore = create<AuthState>()(
         set({ isInitialized: true });
       },
 
+      markFirstLoginComplete: () => {
+        set({ isFirstLogin: false });
+      },
+
+      isNewUser: () => {
+        const { loginCount, isFirstLogin } = get();
+        return isFirstLogin || loginCount <= 1;
+      },
+
       login: async (username: string, password: string) => {
         set({ isLoading: true });
         
         try {
           // バックエンドAPIを使用してログイン
-          const response = await fetch('http://localhost:8000/auth/login', {
+          const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const response = await fetch(`${apiBaseUrl}/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -69,7 +87,16 @@ export const useAuthStore = create<AuthState>()(
             username: data.username,
           };
 
-          set({ user, isLoading: false });
+          // ログイン情報を更新
+          const { loginCount } = get();
+          const currentTime = new Date();
+          
+          set({ 
+            user, 
+            isLoading: false,
+            lastLoginTime: currentTime,
+            loginCount: loginCount + 1,
+          });
           return { success: true };
 
         } catch (error) {
@@ -96,7 +123,8 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           // バックエンドAPIにユーザー登録リクエストを送信
-          const response = await fetch('http://localhost:8000/auth/register', {
+          const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const response = await fetch(`${apiBaseUrl}/auth/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -141,7 +169,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ user: state.user }),
+      partialize: (state) => ({ 
+        user: state.user, 
+        isFirstLogin: state.isFirstLogin,
+        lastLoginTime: state.lastLoginTime,
+        loginCount: state.loginCount,
+      }),
     }
   )
 );

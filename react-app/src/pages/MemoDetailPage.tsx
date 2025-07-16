@@ -20,7 +20,8 @@ const MemoDetailPage: React.FC = () => {
       const token = localStorage.getItem('auth-token');
       
       // Fetch memo
-      const memoResponse = await fetch(`http://localhost:8000/memos/${id}`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const memoResponse = await fetch(`${apiBaseUrl}/memos/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -32,7 +33,7 @@ const MemoDetailPage: React.FC = () => {
       setMemo(memoData);
 
       // Fetch all tags
-      const tagsResponse = await fetch(`http://localhost:8000/tags`, {
+      const tagsResponse = await fetch(`${apiBaseUrl}/tags`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -58,7 +59,8 @@ const MemoDetailPage: React.FC = () => {
     if (!id) return;
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`http://localhost:8000/memos/${id}`, {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/memos/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
