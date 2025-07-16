@@ -84,7 +84,7 @@ const ProjectPage: React.FC = () => {
   const fetchProject = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -104,7 +104,7 @@ const ProjectPage: React.FC = () => {
   const fetchMemos = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}/memos`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -129,6 +129,13 @@ const ProjectPage: React.FC = () => {
     }
   }, [projectId]);
 
+  // AIチャットをデフォルトで開く
+  useEffect(() => {
+    if (user && !isChatOpen) {
+      setTimeout(() => toggleChat(), 500);
+    }
+  }, [user, isChatOpen, toggleChat]);
+
   // プロジェクト更新の処理
   const updateProject = async (field: 'question' | 'hypothesis', value: string) => {
     try {
@@ -139,7 +146,7 @@ const ProjectPage: React.FC = () => {
         hypothesis: field === 'hypothesis' ? value : project!.hypothesis,
       };
 
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'PUT',
         headers: {
@@ -182,7 +189,7 @@ const ProjectPage: React.FC = () => {
   const handleCreateMemo = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}/memos`, {
         method: 'POST',
         headers: {
@@ -211,7 +218,7 @@ const ProjectPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         method: 'DELETE',
         headers: {

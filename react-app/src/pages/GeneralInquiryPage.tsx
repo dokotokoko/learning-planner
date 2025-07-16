@@ -1,5 +1,5 @@
 // react-app/src/pages/GeneralInquiryPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Container, 
   Box, 
@@ -11,11 +11,20 @@ import { motion } from 'framer-motion';
 import { Psychology as PsychologyIcon, Chat as ChatIcon } from '@mui/icons-material';
 import MemoChat from '../components/MemoChat/MemoChat';
 import { useChatStore } from '../stores/chatStore';
+import { useAuthStore } from '../stores/authStore';
 import { AnimatePresence } from 'framer-motion';
 import AIChat from '../components/MemoChat/AIChat';
 
 const GeneralInquiryPage: React.FC = () => {
   const { isChatOpen, toggleChat } = useChatStore();
+  const { user } = useAuthStore();
+
+  // AIチャットをデフォルトで開く
+  useEffect(() => {
+    if (user && !isChatOpen) {
+      setTimeout(() => toggleChat(), 500);
+    }
+  }, [user, isChatOpen, toggleChat]);
 
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
@@ -41,7 +50,7 @@ const GeneralInquiryPage: React.FC = () => {
       }
 
       // バックエンドAPIに接続
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
     const response = await fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {

@@ -71,12 +71,16 @@ const DashboardPage: React.FC = () => {
   // SimpleTutorial用の状態管理
   const [showTutorial, setShowTutorial] = useState(false);
 
-  // 初回ログイン時にチュートリアルを自動開始
+  // 初回ログイン時にチュートリアルを自動開始とAIチャットを開く
   useEffect(() => {
     if (isNewUser()) {
       setTimeout(() => setShowTutorial(true), 1000);
     }
-  }, [isNewUser]);
+    // ログイン後はAIチャットを確実に開く
+    if (user && !isChatOpen) {
+      setTimeout(() => toggleChat(), 500);
+    }
+  }, [isNewUser, user, isChatOpen, toggleChat]);
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {

@@ -43,7 +43,7 @@ const MemoPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId, memoId } = useParams<{ projectId: string; memoId: string }>();
   const { user } = useAuthStore();
-  const { setCurrentMemo, updateMemoContent, setCurrentProject } = useChatStore();
+  const { setCurrentMemo, updateMemoContent, setCurrentProject, isChatOpen, setChatOpen } = useChatStore();
 
   const [memo, setMemo] = useState<Memo | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -74,7 +74,7 @@ const MemoPage: React.FC = () => {
   const fetchMemo = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -96,7 +96,7 @@ const MemoPage: React.FC = () => {
   const fetchProject = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -138,11 +138,18 @@ const MemoPage: React.FC = () => {
     }
   }, [projectId, memoId, memoContent, setCurrentMemo]);
 
+  // AIチャットをデフォルトで開く
+  useEffect(() => {
+    if (user && !isChatOpen) {
+      setTimeout(() => setChatOpen(true), 500);
+    }
+  }, [user, isChatOpen, setChatOpen]);
+
   // 自動保存機能
   const saveChanges = async (newTitle: string, newContent: string) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         method: 'PUT',
         headers: {

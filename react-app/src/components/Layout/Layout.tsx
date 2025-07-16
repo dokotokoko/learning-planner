@@ -279,7 +279,7 @@ const Layout: React.FC = () => {
                 if (item.action) {
                   item.action();
                 } else if (item.path !== '#') {
-                  navigate(item.path);
+                navigate(item.path);
                 }
                 if (isMobile) setMobileOpen(false);
               }}

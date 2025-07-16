@@ -26,8 +26,8 @@ interface ChatState {
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
-      // 初期状態
-      isChatOpen: false,
+      // 初期状態（デフォルトでAIチャットを開く）
+      isChatOpen: true,
       currentProjectId: null,
       currentMemoId: null,
       currentMemoTitle: '',
