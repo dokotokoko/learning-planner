@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # nginx リバースプロキシ
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: learning-assistant-nginx
+    ports:
+      - "127.0.0.1:8080:80"  # IPv4のみにバインド
+    volumes:
+      - ./react-app/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_tmp:/var/tmp
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5  # リトライ回数を増加
+      start_period: 60s  # 開始猶予時間を延長
+
+  # フロントエンド（Vite開発サーバー）
+  frontend:
+    build:
+      context: ./react-app
+      dockerfile: Dockerfile
+      target: development
+      args:
+        - MODE=development
+    container_name: learning-assistant-frontend
+    expose:
+      - "3000"
+    volumes:
+      - ./react-app:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8080/api
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 15s  # タイムアウトを延長
+      retries: 5    # リトライ回数を増加
+      start_period: 120s  # Viteの起動時間を考慮して延長
+
+  # バックエンド（FastAPI）
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: learning-assistant-backend
+    expose:
+      - "8000"
+    volumes:
+      - ./backend:/app
+      - ./config:/app/config
+      - ./module:/app/module
+      - ./prompt:/app/prompt
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  nginx_cache:
+    driver: local
+  nginx_tmp:
+    driver: local
