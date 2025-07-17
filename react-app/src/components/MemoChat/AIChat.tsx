@@ -162,11 +162,12 @@ const AIChat: React.FC<AIChatProps> = ({
         }
         if (!userId) return;
 
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
         const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
           headers: {
             'Authorization': `Bearer ${userId}`,
           },
+          credentials: 'include',
         });
 
         if (response.ok) {
@@ -328,13 +329,14 @@ const AIChat: React.FC<AIChatProps> = ({
           }
         }
         if (userId) {
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${userId}`,
             },
+            credentials: 'include',
             body: JSON.stringify({
               message: userMessage.content,
               page: pageId,

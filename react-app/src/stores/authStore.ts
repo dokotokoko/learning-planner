@@ -56,12 +56,13 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           // バックエンドAPIを使用してログイン
-          const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({
               username: username,
               access_code: password,
@@ -123,12 +124,13 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           // バックエンドAPIにユーザー登録リクエストを送信
-          const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/auth/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({
               username: username,
               password: password,

@@ -132,11 +132,12 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         ? `/projects/${selectedProject}/memos`
         : '/memos';
       
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('メモの取得に失敗しました');
@@ -155,11 +156,12 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const fetchProjects = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('プロジェクトの取得に失敗しました');
@@ -245,13 +247,14 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         ? `/projects/${selectedProject}/memos`
         : '/memos';
       
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify({
           ...memoData,
           project_id: selectedProject,
@@ -271,13 +274,14 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const handleUpdateMemo = async (memoId: number, memoData: Partial<MultiMemo>) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(memoData),
       });
 
@@ -296,12 +300,13 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
 
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('メモの削除に失敗しました');

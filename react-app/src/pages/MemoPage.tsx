@@ -74,11 +74,12 @@ const MemoPage: React.FC = () => {
   const fetchMemo = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('メモの取得に失敗しました');
@@ -96,11 +97,12 @@ const MemoPage: React.FC = () => {
   const fetchProject = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('プロジェクトの取得に失敗しました');
@@ -149,13 +151,14 @@ const MemoPage: React.FC = () => {
   const saveChanges = async (newTitle: string, newContent: string) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify({
           title: newTitle,
           content: newContent,

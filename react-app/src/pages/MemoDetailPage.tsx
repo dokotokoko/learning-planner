@@ -20,11 +20,12 @@ const MemoDetailPage: React.FC = () => {
       const token = localStorage.getItem('auth-token');
       
       // Fetch memo
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const memoResponse = await fetch(`${apiBaseUrl}/memos/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
       if (!memoResponse.ok) {
         throw new Error('Failed to fetch memo');
@@ -37,6 +38,7 @@ const MemoDetailPage: React.FC = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
       if (!tagsResponse.ok) {
         throw new Error('Failed to fetch tags');
@@ -59,13 +61,14 @@ const MemoDetailPage: React.FC = () => {
     if (!id) return;
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(memoData),
       });
       if (!response.ok) {

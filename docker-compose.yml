@@ -14,7 +14,7 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
-      backend:
+      backend:                                
         condition: service_healthy
     networks:
       - app_network

@@ -111,11 +111,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       // 新しいconversation APIを試行
       try {
         console.log('📡 conversation API呼び出し...');
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         const conversationResponse = await fetch(`${apiBaseUrl}/chat/conversations?limit=50`, {
           headers: {
             'Authorization': `Bearer ${userId}`,
           },
+          credentials: 'include',
         });
 
         if (conversationResponse.ok) {
@@ -152,11 +153,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
       // フォールバック: 従来のchat/history API
       console.log('📡 レガシーchat/history API呼び出し...');
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?limit=200`, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -238,11 +240,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       if (session.page.startsWith('memo-')) {
         try {
           const memoId = session.page.replace('memo-', '');
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+          const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
           const memoResponse = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
+            credentials: 'include',
           });
           
           if (memoResponse.ok) {
@@ -253,11 +256,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
             // プロジェクト名も取得
             if (memoData.project_id) {
               try {
-                const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
                 const projectResponse = await fetch(`${apiBaseUrl}/v2/projects/${memoData.project_id}`, {
                   headers: {
                     'Authorization': `Bearer ${token}`,
                   },
+                  credentials: 'include',
                 });
                 if (projectResponse.ok) {
                   const projectData = await projectResponse.json();
@@ -341,12 +345,13 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
       if (!userId) return;
 
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -399,11 +404,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       }
 
       console.log(`📡 conversation ${session.id} の詳細メッセージ取得...`);
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     const response = await fetch(`${apiBaseUrl}/chat/conversations/${session.id}/messages`, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
+        credentials: 'include',
       });
 
       if (response.ok) {

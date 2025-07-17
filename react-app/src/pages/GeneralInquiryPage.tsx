@@ -50,13 +50,14 @@ const GeneralInquiryPage: React.FC = () => {
       }
 
       // バックエンドAPIに接続
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
     const response = await fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${userId}`,
         },
+        credentials: 'include',
         body: JSON.stringify({
           message: message,
           page: "general_inquiry",

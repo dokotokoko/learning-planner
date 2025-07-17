@@ -93,11 +93,12 @@ const DashboardPage: React.FC = () => {
         throw new Error('認証トークンが見つかりません。再ログインが必要です。');
       }
 
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -132,7 +133,7 @@ const DashboardPage: React.FC = () => {
   }) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/v2/projects`, {
         method: 'POST',
@@ -140,6 +141,7 @@ const DashboardPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
@@ -171,13 +173,14 @@ const DashboardPage: React.FC = () => {
         return;
       }
 
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
@@ -215,12 +218,13 @@ const DashboardPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) throw new Error('プロジェクトの削除に失敗しました');
