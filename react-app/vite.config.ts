@@ -53,7 +53,8 @@ export default defineConfig({
     allowedHosts: [
       'mammoth-enabled-bird.ngrok-free.app',
       'localhost',
-      '127.0.0.1'
+      '127.0.0.1',
+      'demo.tanqmates.org'
     ],
   },
   build: {
