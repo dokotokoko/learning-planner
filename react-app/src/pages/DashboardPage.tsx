@@ -71,16 +71,52 @@ const DashboardPage: React.FC = () => {
   // SimpleTutorial用の状態管理
   const [showTutorial, setShowTutorial] = useState(false);
 
+  // ユーザーID取得の共通関数
+  const getUserId = (): string | null => {
+    const authData = localStorage.getItem('auth-storage');
+    if (authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        return parsed.state?.user?.id || null;
+      } catch (e) {
+        console.error('認証データの解析に失敗:', e);
+        return null;
+      }
+    }
+    return null;
+  };
+
+  // チュートリアル表示済みフラグの管理
+  const getTutorialShownFlag = (): boolean => {
+    const userId = getUserId();
+    if (!userId) return false;
+    
+    const flag = localStorage.getItem(`tutorial-shown-${userId}`);
+    return flag === 'true';
+  };
+
+  const setTutorialShownFlag = (): void => {
+    const userId = getUserId();
+    if (!userId) return;
+    
+    localStorage.setItem(`tutorial-shown-${userId}`, 'true');
+  };
+
   // 初回ログイン時にチュートリアルを自動開始とAIチャットを開く
   useEffect(() => {
-    if (isNewUser()) {
-      setTimeout(() => setShowTutorial(true), 1000);
+    // 初回ログイン時かつチュートリアル未表示の場合のみチュートリアルを開始
+    if (isNewUser() && !getTutorialShownFlag()) {
+      setTimeout(() => {
+        setShowTutorial(true);
+        setTutorialShownFlag(); // フラグを設定
+      }, 1000);
     }
+    
     // ログイン後はAIチャットを確実に開く
     if (user && !isChatOpen) {
       setTimeout(() => toggleChat(), 500);
     }
-  }, [isNewUser, user, isChatOpen, toggleChat]);
+  }, [user, isChatOpen, toggleChat]); // isNewUserを依存配列から削除
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
@@ -295,13 +331,17 @@ const DashboardPage: React.FC = () => {
           mb: 4 
         }}>
           <Typography variant="h4" sx={{ fontWeight: 600 }}>
-            探究ダッシュボード
+            ダッシュボード
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
               variant="outlined"
               startIcon={<AssignmentIcon />}
-              onClick={() => setShowTutorial(true)}
+              onClick={() => {
+                setShowTutorial(true);
+                // 手動でチュートリアルを開始した場合は、完了時にフラグを設定する
+                // 自動開始と区別するため、ここではフラグを設定しない
+              }}
               sx={{
                 borderColor: '#059BFF',
                 color: '#059BFF',
@@ -531,8 +571,14 @@ const DashboardPage: React.FC = () => {
       <SimpleTutorial
         steps={simpleSteps}
         isOpen={showTutorial}
-        onClose={() => setShowTutorial(false)}
-        onComplete={() => setShowTutorial(false)}
+        onClose={() => {
+          setShowTutorial(false);
+          setTutorialShownFlag(); // チュートリアルを閉じた時もフラグを設定
+        }}
+        onComplete={() => {
+          setShowTutorial(false);
+          setTutorialShownFlag(); // チュートリアル完了時もフラグを設定
+        }}
       />
     </>
   );

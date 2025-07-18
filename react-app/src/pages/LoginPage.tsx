@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -90,6 +90,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  
   const [loginData, setLoginData] = useState({
     username: '',
     password: '',
@@ -101,7 +102,21 @@ const LoginPage = () => {
     confirmPassword: '',
   });
 
-  const { login, register, isLoading } = useAuthStore();
+  const { login, register, isLoading, registrationMessage, clearRegistrationMessage } = useAuthStore();
+
+  // registrationMessageを監視し、4秒後にクリア
+  useEffect(() => {
+    if (registrationMessage) {
+      const timeoutId = setTimeout(() => {
+        clearRegistrationMessage();
+        setTabValue(0); // ログインタブに切り替え
+      }, 4000);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [registrationMessage, clearRegistrationMessage]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -132,9 +147,12 @@ const LoginPage = () => {
     );
     
     if (result.success) {
-      setSuccess('ユーザー登録が完了しました。ログインしてください。');
-      setTabValue(0);
+      // 登録に使用したデータを保存（自動ログイン用）
+      const savedUsername = registerData.username;
       setRegisterData({ username: '', password: '', confirmPassword: '' });
+      
+      // ログインフォームに登録時のユーザー名を自動入力
+      setLoginData({ username: savedUsername, password: '' });
     } else {
       setError(result.error || '登録に失敗しました');
     }
@@ -252,33 +270,24 @@ const LoginPage = () => {
                     <Tab label="新規登録" />
                   </Tabs>
 
-                  <AnimatePresence mode="wait">
-                    {error && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                          {error}
-                        </Alert>
-                      </motion.div>
-                    )}
-                    
-                    {success && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Alert severity="success" sx={{ mb: 2 }}>
-                          {success}
-                        </Alert>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {error}
+                    </Alert>
+                  )}
+
+                  {(success || registrationMessage) && (
+                    <Alert 
+                      severity="success" 
+                      sx={{ 
+                        mb: 2,
+                        fontSize: '1rem',
+                        fontWeight: 500
+                      }}
+                    >
+                      🎉 {success || registrationMessage}
+                    </Alert>
+                  )}
 
                   <TabPanel value={tabValue} index={0}>
                     <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

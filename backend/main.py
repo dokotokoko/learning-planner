@@ -314,49 +314,69 @@ async def login(user_data: UserLogin):
             detail="ログイン処理でエラーが発生しました"
         )
 
-@app.post("/auth/register", response_model=UserResponse)
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserRegister):
     """ユーザー新規登録"""
+    logger.info(f"Registration attempt for username: {user_data.username}")
+    
     try:
         validate_supabase()
         
         # パスワードの確認
         if user_data.password != user_data.confirm_password:
+            logger.warning(f"Password mismatch for user: {user_data.username}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="パスワードと確認用パスワードが一致しません"
             )
         
         # Supabaseのusersテーブルでユーザー重複チェック
+        logger.info(f"Checking if username exists: {user_data.username}")
         existing_user = supabase.table("users").select("id").eq("username", user_data.username).execute()
+        
         if existing_user.data:
+            logger.warning(f"Username already exists: {user_data.username}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="そのユーザー名は既に使用されています"
             )
         
         # 新しいユーザーを作成
+        logger.info(f"Creating new user: {user_data.username}")
         result = supabase.table("users").insert({
             "username": user_data.username,
             "password": user_data.password
         }).execute()
         
+        logger.info(f"Supabase insert result: {result}")
+        
         if result.data and len(result.data) > 0:
             new_user = result.data[0]
             user_id = new_user.get("id")
             logger.info(f"新規登録成功: ユーザー={user_data.username}, ID={user_id}")
-            return UserResponse(
+            
+            response = UserResponse(
                 id=user_id,
                 username=user_data.username,
-                message="新規登録に成功しました"
+                message="アカウント登録が完了しました！探Qメイトへようこそ！"
+            )
+            logger.info(f"Returning success response: {response.dict()}")
+            
+            # 明示的にJSONレスポンスとして返す
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content=response.dict()
             )
         else:
+            logger.error(f"No data returned from Supabase insert for user: {user_data.username}")
             raise HTTPException(status_code=500, detail="新規登録に失敗しました")
             
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"HTTPException in register: {e.detail}")
         raise
     except Exception as e:
-        logger.error(f"新規登録エラー: {e}")
+        logger.error(f"新規登録エラー: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"新規登録処理でエラーが発生しました: {str(e)}"

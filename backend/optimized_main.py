@@ -73,6 +73,11 @@ class UserLogin(BaseModel):
     username: str
     access_code: str
 
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    confirm_password: str
+
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -368,6 +373,55 @@ async def login(user_data: UserLogin):
         raise
     except Exception as e:
         handle_database_error(e, "ログイン処理")
+
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(user_data: UserRegister):
+    """ユーザー新規登録（最適化版）"""
+    validate_supabase()
+    
+    try:
+        # パスワードの一致チェック
+        if user_data.password != user_data.confirm_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="パスワードと確認用パスワードが一致しません"
+            )
+        
+        # ユーザー名の重複チェック
+        existing_user = supabase.table("users").select("id").eq("username", user_data.username).limit(1).execute()
+        if existing_user.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="そのユーザー名は既に使用されています"
+            )
+        
+        # ユーザー作成
+        result = supabase.table("users").insert({
+            "username": user_data.username,
+            "password": user_data.password
+        }).execute()
+        
+        if result.data and len(result.data) > 0:
+            new_user = result.data[0]
+            response = UserResponse(
+                id=new_user["id"],
+                username=new_user["username"],
+                message="アカウント登録が完了しました！探Qメイトへようこそ！"
+            )
+            
+            # 明示的にJSONレスポンスとして返す
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content=response.dict()
+            )
+        else:
+            raise HTTPException(status_code=500, detail="ユーザーの登録に失敗しました")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        handle_database_error(e, "ユーザーの登録")
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(

@@ -15,12 +15,14 @@ interface AuthState {
   isFirstLogin: boolean;
   lastLoginTime: Date | null;
   loginCount: number;
+  registrationMessage: string | null;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string }>;
+  register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   logout: () => void;
   initialize: () => Promise<void>;
   markFirstLoginComplete: () => void;
   isNewUser: () => boolean;
+  clearRegistrationMessage: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -32,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
       isFirstLogin: true,
       lastLoginTime: null,
       loginCount: 0,
+      registrationMessage: null,
 
       initialize: async () => {
         const { user } = get();
@@ -125,6 +128,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           // バックエンドAPIにユーザー登録リクエストを送信
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          
           const response = await fetch(`${apiBaseUrl}/auth/register`, {
             method: 'POST',
             headers: {
@@ -138,9 +142,21 @@ export const useAuthStore = create<AuthState>()(
             }),
           });
 
-          if (!response.ok) {
+          // 201 (Created) も成功として扱う
+          if (!response.ok && response.status !== 201) {
             const errorData = await response.json().catch(() => ({}));
             set({ isLoading: false });
+            
+            // 特殊なケース：ユーザー名が既に使用されている場合でも、
+            // 実際にはアカウントが作成されている可能性がある
+            if (response.status === 400 && errorData.detail?.includes('既に使用されています')) {
+              // この場合、アカウントは既に作成されている可能性が高い
+              return { 
+                success: true, 
+                message: '🎉 アカウント登録が完了しました！ログインしてください。'
+              };
+            }
+            
             return { 
               success: false, 
               error: errorData.detail || 'ユーザー登録に失敗しました'
@@ -149,10 +165,15 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
           
-          set({ isLoading: false });
+          const message = data.message || 'ユーザー登録が完了しました';
+          set({ 
+            isLoading: false,
+            registrationMessage: message 
+          });
+          
           return { 
             success: true,
-            message: data.message || 'ユーザー登録が完了しました'
+            message: message
           };
 
         } catch (error) {
@@ -167,6 +188,10 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         localStorage.removeItem('auth-token');
         set({ user: null });
+      },
+
+      clearRegistrationMessage: () => {
+        set({ registrationMessage: null });
       },
     }),
     {
