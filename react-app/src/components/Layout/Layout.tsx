@@ -39,8 +39,10 @@ import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
 
 const drawerWidth = 280;
+const tabletDrawerWidth = 240;
 const collapsedDrawerWidth = 64;
 const defaultChatSidebarWidth = 400;
+const tabletChatSidebarWidth = 350;
 const minChatSidebarWidth = 300;
 const minMainContentWidth = 400; // メインコンテンツの最小幅
 
@@ -58,7 +60,9 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
   const { user, logout } = useAuthStore();
   const { 
@@ -72,8 +76,8 @@ const Layout: React.FC = () => {
   const { startTutorialManually } = useTutorialStore();
   
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [chatSidebarWidth, setChatSidebarWidth] = useState(defaultChatSidebarWidth);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(isTablet ? tabletChatSidebarWidth : defaultChatSidebarWidth);
   const [isResizing, setIsResizing] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
@@ -111,7 +115,7 @@ const Layout: React.FC = () => {
     const newWidth = window.innerWidth - e.clientX;
     
     // 現在の左サイドバーの幅を取得
-    const currentLeftSidebarWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+    const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
     
     // 動的な最大幅を計算（メインコンテンツの最小幅を確保）
     const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
@@ -155,7 +159,7 @@ const Layout: React.FC = () => {
     const handleWindowResize = () => {
       if (!isChatOpen) return;
       
-      const currentLeftSidebarWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+      const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
       const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
       
       // チャット幅が新しい最大幅を超えている場合は調整
@@ -229,19 +233,6 @@ const Layout: React.FC = () => {
 
   const mainListItems: MenuItem[] = [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
-    { 
-      text: 'チュートリアル', 
-      icon: <Psychology />, 
-      path: '#', 
-      action: () => {
-        // 現在のページに応じてチュートリアルを開始
-        const currentPath = location.pathname;
-        if (currentPath === '/dashboard') {
-          startTutorialManually('dashboard');
-        }
-        // 他のページのチュートリアルも将来追加可能
-      }
-    },
   ];
 
   // 展開状態のサイドバー
@@ -486,9 +477,10 @@ const Layout: React.FC = () => {
           sx={{ 
             width: { 
               xs: 0,
+              sm: isTablet ? (sidebarOpen ? tabletDrawerWidth : collapsedDrawerWidth) : 0,
               md: sidebarOpen ? drawerWidth : collapsedDrawerWidth
             },
-            flexShrink: { md: 0 },
+            flexShrink: { sm: 0 },
             transition: 'width 0.3s ease',
           }}
         >
@@ -500,7 +492,7 @@ const Layout: React.FC = () => {
               keepMounted: true, // Better open performance on mobile.
             }}
             sx={{
-              display: { xs: 'block', md: 'none' },
+              display: { xs: 'block', sm: 'none' },
               '& .MuiDrawer-paper': { 
                 boxSizing: 'border-box', 
                 width: drawerWidth,
@@ -515,10 +507,10 @@ const Layout: React.FC = () => {
           <Drawer
             variant="permanent"
             sx={{
-              display: { xs: 'none', md: 'block' },
+              display: { xs: 'none', sm: 'block' },
               '& .MuiDrawer-paper': { 
                 boxSizing: 'border-box', 
-                width: sidebarOpen ? drawerWidth : collapsedDrawerWidth,
+                width: sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth,
                 border: 'none',
                 boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
                 transition: 'width 0.3s ease',
@@ -538,8 +530,8 @@ const Layout: React.FC = () => {
             flexGrow: 1,
             width: { 
               xs: '100%',
-              md: (() => {
-                const leftWidth = sidebarOpen ? drawerWidth : collapsedDrawerWidth;
+              sm: (() => {
+                const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
                 const rightWidth = isChatOpen ? chatSidebarWidth : 0;
                 return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
               })()
@@ -549,7 +541,7 @@ const Layout: React.FC = () => {
           }}
         >
           {/* モバイル用のメニューボタン */}
-          <Box sx={{ display: { xs: 'block', md: 'none' }, p: 1 }}>
+          <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1 }}>
             <IconButton
               color="primary"
               onClick={handleDrawerToggle}
@@ -586,9 +578,13 @@ const Layout: React.FC = () => {
                 borderLeft: 1,
                 borderColor: 'divider',
                 boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
-                position: 'relative',
+                position: isMobile ? 'fixed' : 'relative',
+                right: isMobile ? 0 : 'auto',
+                top: isMobile ? 0 : 'auto',
+                zIndex: isMobile ? 1200 : 'auto',
                 overflow: 'hidden',
               }}
+              className="chat-sidebar"
             >
               {/* リサイズハンドル */}
               <Box

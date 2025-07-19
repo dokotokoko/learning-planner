@@ -1,6 +1,9 @@
 /* フォント読み込み */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap');
 
+/* タブレット専用スタイル */
+@import './tablet.css';
+
 /* グローバルスタイル */
 * {
   box-sizing: border-box;

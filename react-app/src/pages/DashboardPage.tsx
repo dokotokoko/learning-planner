@@ -335,28 +335,6 @@ const DashboardPage: React.FC = () => {
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
-              variant="outlined"
-              startIcon={<AssignmentIcon />}
-              onClick={() => {
-                setShowTutorial(true);
-                // 手動でチュートリアルを開始した場合は、完了時にフラグを設定する
-                // 自動開始と区別するため、ここではフラグを設定しない
-              }}
-              sx={{
-                borderColor: '#059BFF',
-                color: '#059BFF',
-                '&:hover': {
-                  borderColor: '#006EB8',
-                  backgroundColor: 'rgba(5, 155, 255, 0.04)',
-                },
-                borderRadius: 2,
-                px: 3,
-                py: 1.5,
-              }}
-            >
-              チュートリアル
-            </Button>
-            <Button
               variant="contained"
               startIcon={<PsychologyIcon />}
               onClick={toggleChat}
@@ -491,6 +469,7 @@ const DashboardPage: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 300 }}
               transition={{ duration: 0.3 }}
+              data-tutorial="ai-chat-panel"
               style={{
                 position: 'fixed',
                 top: 0,
@@ -578,6 +557,12 @@ const DashboardPage: React.FC = () => {
         onComplete={() => {
           setShowTutorial(false);
           setTutorialShownFlag(); // チュートリアル完了時もフラグを設定
+        }}
+        onStepChange={(stepIndex) => {
+          // AIアシスタントのステップ（index 5）の場合、チャットを開く
+          if (stepIndex === 5 && !isChatOpen) {
+            toggleChat();
+          }
         }}
       />
     </>

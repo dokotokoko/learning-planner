@@ -24,6 +24,7 @@ interface SimpleTutorialProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: () => void;
+  onStepChange?: (stepIndex: number) => void;
 }
 
 const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
@@ -31,6 +32,7 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
   isOpen,
   onClose,
   onComplete,
+  onStepChange,
 }) => {
   const theme = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
@@ -102,6 +104,13 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
       return () => clearTimeout(timer);
     }
   }, [currentStep, isOpen, step]);
+
+  // ステップ変更時のコールバック
+  useEffect(() => {
+    if (isOpen && onStepChange) {
+      onStepChange(currentStep);
+    }
+  }, [currentStep, isOpen, onStepChange]);
 
   // ウィンドウリサイズ時に位置を再計算
   useEffect(() => {
@@ -197,37 +206,98 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
 
   return (
     <>
-      {/* オーバーレイ */}
-      <Backdrop
-        open={isOpen}
-        sx={{
-          zIndex: 2147483646,
-          backgroundColor: 'rgba(0, 0, 0, 0.4)',
-        }}
-        onClick={handleClose}
-      />
-
       {/* ハイライト（ターゲット要素を強調） */}
       {targetRect && step.placement !== 'center' && (
-        <Box
+        <>
+          {/* 上部のオーバーレイ */}
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: targetRect.top - 4,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 2147483646,
+            }}
+            onClick={handleClose}
+          />
+          
+          {/* 左側のオーバーレイ */}
+          <Box
+            sx={{
+              position: 'fixed',
+              top: targetRect.top - 4,
+              left: 0,
+              width: targetRect.left - 4,
+              height: targetRect.height + 8,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 2147483646,
+            }}
+            onClick={handleClose}
+          />
+          
+          {/* 右側のオーバーレイ */}
+          <Box
+            sx={{
+              position: 'fixed',
+              top: targetRect.top - 4,
+              left: targetRect.left + targetRect.width + 4,
+              right: 0,
+              height: targetRect.height + 8,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 2147483646,
+            }}
+            onClick={handleClose}
+          />
+          
+          {/* 下部のオーバーレイ */}
+          <Box
+            sx={{
+              position: 'fixed',
+              top: targetRect.top + targetRect.height + 4,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 2147483646,
+            }}
+            onClick={handleClose}
+          />
+          
+          {/* 青い枠線 */}
+          <Box
+            sx={{
+              position: 'fixed',
+              left: targetRect.left - 4,
+              top: targetRect.top - 4,
+              width: targetRect.width + 8,
+              height: targetRect.height + 8,
+              border: `3px solid ${theme.palette.primary.main}`,
+              borderRadius: '8px',
+              zIndex: 2147483647,
+              pointerEvents: 'none',
+              boxShadow: '0 0 20px rgba(5, 155, 255, 0.5)',
+              animation: 'pulse 2s infinite',
+              '@keyframes pulse': {
+                '0%': { transform: 'scale(1)', opacity: 1 },
+                '50%': { transform: 'scale(1.05)', opacity: 0.8 },
+                '100%': { transform: 'scale(1)', opacity: 1 },
+              },
+            }}
+          />
+        </>
+      )}
+      
+      {/* センター配置の場合の通常のオーバーレイ */}
+      {(!targetRect || step.placement === 'center') && (
+        <Backdrop
+          open={isOpen}
           sx={{
-            position: 'fixed',
-            left: targetRect.left - 4,
-            top: targetRect.top - 4,
-            width: targetRect.width + 8,
-            height: targetRect.height + 8,
-            border: `3px solid ${theme.palette.primary.main}`,
-            borderRadius: '8px',
-            zIndex: 2147483647,
-            pointerEvents: 'none',
-            boxShadow: `0 0 0 9999px rgba(0, 0, 0, 0.4)`,
-            animation: 'pulse 2s infinite',
-            '@keyframes pulse': {
-              '0%': { transform: 'scale(1)', opacity: 1 },
-              '50%': { transform: 'scale(1.05)', opacity: 0.8 },
-              '100%': { transform: 'scale(1)', opacity: 1 },
-            },
+            zIndex: 2147483646,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
           }}
+          onClick={handleClose}
         />
       )}
 

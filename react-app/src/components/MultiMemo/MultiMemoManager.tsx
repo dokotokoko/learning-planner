@@ -95,7 +95,9 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   onMemosChange,
 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const navigate = useNavigate();
 
   // State管理
@@ -411,6 +413,8 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
                 flexDirection: viewMode === 'list' ? 'column' : undefined,
                 gridTemplateColumns: isMobile 
                   ? '1fr' 
+                  : isTablet
+                  ? 'repeat(2, 1fr)'
                   : 'repeat(auto-fill, minmax(300px, 1fr))',
                 gap: 2,
               }}
@@ -476,8 +480,10 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         onClick={() => setIsCreateDialogOpen(true)}
         sx={{
           position: 'fixed',
-          bottom: 16,
-          right: 16,
+          bottom: { xs: 16, sm: 32, md: 16 },
+          right: { xs: 16, sm: 32, md: 16 },
+          width: { xs: 56, sm: 64, md: 56 },
+          height: { xs: 56, sm: 64, md: 56 },
         }}
       >
         <AddIcon />

@@ -1,0 +1,316 @@
+/* Tablet-specific styles for iPad and similar devices (768px - 1024px) */
+
+/* Define tablet breakpoint */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Root variables for tablet */
+  :root {
+    --tablet-drawer-width: 240px;
+    --tablet-collapsed-drawer: 80px;
+    --tablet-chat-width: 350px;
+    --tablet-touch-target: 44px; /* Apple's recommended touch target size */
+    --tablet-spacing: 20px;
+    --tablet-font-scale: 1.05;
+  }
+
+  /* Global adjustments */
+  body {
+    font-size: calc(1rem * var(--tablet-font-scale));
+  }
+
+  /* Enhanced touch targets */
+  button, 
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .MuiListItemButton-root {
+    min-height: var(--tablet-touch-target);
+    min-width: var(--tablet-touch-target);
+  }
+
+  /* Drawer optimizations */
+  .MuiDrawer-paper {
+    width: var(--tablet-drawer-width) !important;
+  }
+
+  /* List items spacing */
+  .MuiListItem-root {
+    padding: 8px 12px;
+  }
+
+  .MuiListItemButton-root {
+    padding: 12px 16px;
+  }
+
+  /* Chat sidebar adjustments */
+  .chat-sidebar {
+    width: var(--tablet-chat-width) !important;
+    max-width: 40vw;
+  }
+
+  /* Grid layouts for tablets */
+  .MuiGrid-root > .MuiGrid-item {
+    padding: var(--tablet-spacing);
+  }
+
+  /* Card optimizations */
+  .MuiCard-root {
+    margin-bottom: var(--tablet-spacing);
+  }
+
+  /* Dialog sizes */
+  .MuiDialog-paper {
+    max-width: 90vw !important;
+    margin: var(--tablet-spacing);
+  }
+
+  /* Toolbar adjustments */
+  .MuiToolbar-root {
+    padding-left: var(--tablet-spacing);
+    padding-right: var(--tablet-spacing);
+  }
+
+  /* FAB positioning */
+  .MuiFab-root {
+    bottom: calc(var(--tablet-spacing) * 2);
+    right: calc(var(--tablet-spacing) * 2);
+  }
+
+  /* Text field optimizations */
+  .MuiTextField-root,
+  .MuiOutlinedInput-root {
+    min-height: var(--tablet-touch-target);
+  }
+
+  .MuiInputBase-input {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 12px 14px;
+  }
+
+  /* Table optimizations */
+  .MuiTableCell-root {
+    padding: 12px 16px;
+  }
+
+  /* Scrollbar adjustments */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Typography adjustments */
+  .MuiTypography-h1 { font-size: 2.5rem; }
+  .MuiTypography-h2 { font-size: 2.2rem; }
+  .MuiTypography-h3 { font-size: 1.9rem; }
+  .MuiTypography-h4 { font-size: 1.6rem; }
+  .MuiTypography-h5 { font-size: 1.4rem; }
+  .MuiTypography-h6 { font-size: 1.2rem; }
+
+  /* Memo editor adjustments */
+  .memo-editor {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  /* Project grid optimization */
+  .project-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--tablet-spacing);
+  }
+
+  /* Step progress bar */
+  .step-progress-bar {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: var(--tablet-spacing);
+  }
+
+  /* Modal backdrop touch handling */
+  .MuiModal-backdrop {
+    cursor: pointer;
+  }
+
+  /* Tooltip positioning */
+  .MuiTooltip-popper {
+    pointer-events: none;
+  }
+
+  /* Select dropdown optimization */
+  .MuiSelect-root {
+    min-height: var(--tablet-touch-target);
+  }
+
+  /* Tab component spacing */
+  .MuiTab-root {
+    min-height: var(--tablet-touch-target);
+    padding: 12px 20px;
+  }
+
+  /* Breadcrumb spacing */
+  .MuiBreadcrumbs-li {
+    margin: 0 8px;
+  }
+
+  /* Alert component */
+  .MuiAlert-root {
+    padding: 12px 16px;
+  }
+
+  /* Chip component */
+  .MuiChip-root {
+    height: 36px;
+    font-size: 14px;
+  }
+
+  /* Accordion optimization */
+  .MuiAccordion-root {
+    margin-bottom: 12px;
+  }
+
+  .MuiAccordionSummary-root {
+    min-height: var(--tablet-touch-target);
+  }
+
+  /* Speed dial positioning */
+  .MuiSpeedDial-root {
+    bottom: calc(var(--tablet-spacing) * 3);
+    right: calc(var(--tablet-spacing) * 2);
+  }
+
+  /* Navigation rail mode for drawer */
+  .navigation-rail {
+    width: var(--tablet-collapsed-drawer);
+  }
+
+  /* Chat input area */
+  .chat-input-container {
+    padding: 16px;
+  }
+
+  /* Framework game cards */
+  .framework-game-card {
+    min-height: 120px;
+  }
+
+  /* Loading screen adjustments */
+  .loading-screen {
+    padding: var(--tablet-spacing);
+  }
+
+  /* Notification positioning */
+  .notification-container {
+    bottom: calc(var(--tablet-spacing) * 4);
+    right: var(--tablet-spacing);
+    max-width: 400px;
+  }
+
+  /* Hover effects - reduce for touch devices */
+  @media (hover: none) {
+    .card-hover:hover {
+      transform: none;
+    }
+
+    .button-hover-effect::before {
+      display: none;
+    }
+  }
+}
+
+/* Portrait orientation specific */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  /* Optimize for portrait tablet viewing */
+  .MuiDrawer-paper {
+    width: 200px !important;
+  }
+
+  .chat-sidebar {
+    width: 320px !important;
+  }
+
+  /* Stack certain layouts vertically */
+  .workspace-panels {
+    flex-direction: column;
+  }
+}
+
+/* Landscape orientation specific */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+  /* Optimize for landscape tablet viewing */
+  .MuiDrawer-paper {
+    width: var(--tablet-drawer-width) !important;
+  }
+
+  /* Reduce vertical spacing in landscape */
+  .MuiToolbar-root {
+    min-height: 56px;
+  }
+
+  /* Adjust FAB position for landscape */
+  .MuiFab-root {
+    bottom: var(--tablet-spacing);
+  }
+}
+
+/* iPad Pro specific (larger tablets) */
+@media (min-width: 1024px) and (max-width: 1366px) {
+  :root {
+    --tablet-drawer-width: 280px;
+    --tablet-chat-width: 400px;
+  }
+
+  /* Allow more content in larger tablets */
+  .project-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .MuiDialog-paper {
+    max-width: 800px !important;
+  }
+}
+
+/* Touch-specific optimizations */
+@media (pointer: coarse) {
+  /* Increase interactive element sizes */
+  .MuiSlider-thumb {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Checkbox and radio button touch targets */
+  .MuiCheckbox-root,
+  .MuiRadio-root {
+    padding: 12px;
+  }
+
+  /* Switch component optimization */
+  .MuiSwitch-root {
+    padding: 12px;
+  }
+
+  /* Rating component stars */
+  .MuiRating-icon {
+    font-size: 2rem;
+  }
+}
+
+/* Accessibility improvements for tablets */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Focus indicators */
+  *:focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+
+  /* High contrast mode adjustments */
+  @media (prefers-contrast: high) {
+    .MuiButton-contained {
+      border: 2px solid currentColor;
+    }
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}

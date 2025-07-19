@@ -92,7 +92,9 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   nextButtonText = '次へ',
 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
   const [internalIsAIOpen, setInternalIsAIOpen] = useState(false);
   const isAIOpen = externalIsAIOpen !== undefined ? externalIsAIOpen : internalIsAIOpen;
@@ -432,7 +434,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                     style={{ height: '100%' }}
                   >
                     {/* AIチャットパネル */}
-                    <Panel defaultSize={60} minSize={40} maxSize={80}>
+                    <Panel 
+                      defaultSize={isMobile ? 50 : isTablet ? 55 : 60} 
+                      minSize={isMobile ? 30 : isTablet ? 40 : 40} 
+                      maxSize={isMobile ? 70 : isTablet ? 75 : 80}
+                    >
                                           <AIChat
                       key={aiChatKey}
                       pageId={pageId}
@@ -463,7 +469,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                     </PanelResizeHandle>
 
                     {/* メモ帳パネル */}
-                    <Panel defaultSize={40} minSize={20} maxSize={60}>
+                    <Panel 
+                      defaultSize={isMobile ? 50 : isTablet ? 45 : 40} 
+                      minSize={isMobile ? 30 : isTablet ? 25 : 20} 
+                      maxSize={isMobile ? 70 : isTablet ? 60 : 60}
+                    >
                       <MemoPanel onClose={() => onMemoOpenChange?.(false)} />
                     </Panel>
                   </PanelGroup>
@@ -609,7 +619,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                 style={{ height: '100%' }}
               >
                 {/* ワークスペースパネル */}
-                <Panel defaultSize={60} minSize={30} maxSize={80}>
+                <Panel 
+                  defaultSize={isMobile ? 50 : isTablet ? 55 : 60} 
+                  minSize={isMobile ? 30 : isTablet ? 35 : 30} 
+                  maxSize={isMobile ? 70 : isTablet ? 75 : 80}
+                >
                   <Box sx={{ height: '100%', p: 3, display: 'flex', flexDirection: 'column' }}>
                     {/* ツールバー */}
                     <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
@@ -671,7 +685,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                 </PanelResizeHandle>
 
                 {/* メモ帳パネル */}
-                <Panel defaultSize={40} minSize={20} maxSize={70}>
+                <Panel 
+                  defaultSize={isMobile ? 50 : isTablet ? 45 : 40} 
+                  minSize={isMobile ? 30 : isTablet ? 25 : 20} 
+                  maxSize={isMobile ? 70 : isTablet ? 65 : 70}
+                >
                   <MemoPanel onClose={handleCloseAI} />
                 </Panel>
               </PanelGroup>
@@ -687,9 +705,11 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
           onClick={handleOpenAI}
           sx={{
             position: 'fixed',
-            bottom: 80, // ナビゲーションボタンと重ならないよう調整
-            right: 24,
+            bottom: { xs: 80, sm: 100, md: 80 }, // タブレットでの調整
+            right: { xs: 16, sm: 32, md: 24 }, // タブレットでの間隔調整
             zIndex: 1000,
+            width: { xs: 56, sm: 64, md: 56 }, // タブレットでのタッチターゲット
+            height: { xs: 56, sm: 64, md: 56 },
           }}
         >
           <Badge color="error" variant="dot" invisible={!hasNewMessage}>
