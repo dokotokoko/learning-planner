@@ -70,6 +70,15 @@ const DashboardPage: React.FC = () => {
   
   // SimpleTutorial用の状態管理
   const [showTutorial, setShowTutorial] = useState(false);
+  
+  // ユーザーが手動でチャットを操作したかどうかのフラグ
+  const [hasUserToggledChat, setHasUserToggledChat] = useState(false);
+
+  // ユーザーが手動でチャットをトグルする関数
+  const handleUserToggleChat = () => {
+    setHasUserToggledChat(true);
+    toggleChat();
+  };
 
   // ユーザーID取得の共通関数
   const getUserId = (): string | null => {
@@ -112,11 +121,11 @@ const DashboardPage: React.FC = () => {
       }, 1000);
     }
     
-    // ログイン後はAIチャットを確実に開く
-    if (user && !isChatOpen) {
+    // ログイン後はAIチャットを確実に開く（ユーザーが手動で操作していない場合のみ）
+    if (user && !isChatOpen && !hasUserToggledChat) {
       setTimeout(() => toggleChat(), 500);
     }
-  }, [user, isChatOpen, toggleChat]); // isNewUserを依存配列から削除
+  }, [user, isChatOpen, toggleChat, hasUserToggledChat]);
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
@@ -337,7 +346,7 @@ const DashboardPage: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<PsychologyIcon />}
-              onClick={toggleChat}
+              onClick={handleUserToggleChat}
               data-tutorial="ai-chat-section"
               sx={{
                 background: 'linear-gradient(45deg, #059BFF, #006EB8)',
@@ -561,7 +570,7 @@ const DashboardPage: React.FC = () => {
         onStepChange={(stepIndex) => {
           // AIアシスタントのステップ（index 5）の場合、チャットを開く
           if (stepIndex === 5 && !isChatOpen) {
-            toggleChat();
+            toggleChat(); // チュートリアル中は自動開閉なのでフラグは設定しない
           }
         }}
       />
