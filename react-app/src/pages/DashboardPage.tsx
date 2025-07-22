@@ -20,6 +20,8 @@ import {
   Divider,
   Fab,
   CircularProgress,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -57,6 +59,9 @@ interface Project {
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user, isNewUser } = useAuthStore();
   const { isChatOpen, toggleChat } = useChatStore();
   
@@ -325,7 +330,14 @@ const DashboardPage: React.FC = () => {
 
   return (
     <>
-      <Container maxWidth="lg" sx={{ py: 4 }} data-tutorial="welcome-section">
+      <Container 
+        maxWidth="lg" 
+        sx={{ 
+          py: { xs: 2, sm: 4 },
+          px: { xs: 2, sm: 3 }
+        }} 
+        data-tutorial="welcome-section"
+      >
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -336,13 +348,26 @@ const DashboardPage: React.FC = () => {
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
-          alignItems: 'center', 
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 2, sm: 0 },
           mb: 4 
         }}>
-          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          <Typography 
+            variant="h4" 
+            sx={{ 
+              fontWeight: 600,
+              fontSize: { xs: '1.75rem', sm: '2.125rem' }
+            }}
+          >
             ダッシュボード
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: { xs: 1, sm: 2 },
+            width: { xs: '100%', sm: 'auto' },
+            justifyContent: { xs: 'flex-end', sm: 'flex-start' }
+          }}>
             <Button
               variant="contained"
               startIcon={<PsychologyIcon />}
@@ -355,18 +380,34 @@ const DashboardPage: React.FC = () => {
                   background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                 },
                 borderRadius: 2,
-                px: 3,
+                px: { xs: 2, sm: 3 },
                 py: 1.5,
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minWidth: { xs: 'auto', sm: 'auto' }
               }}
             >
-              AIアシスタント
+              <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>AIアシスタント</Box>
+              <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>AI</Box>
             </Button>
           </Box>
         </Box>
 
         {/* 既存のコンテンツ（以下は変更なし） */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 2, sm: 0 },
+          mb: 3 
+        }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 600,
+              fontSize: { xs: '1.25rem', sm: '1.5rem' }
+            }}
+          >
             探究プロジェクト
           </Typography>
           <Button
@@ -380,9 +421,15 @@ const DashboardPage: React.FC = () => {
               '&:hover': {
                 background: 'linear-gradient(45deg, #52BAFF, #00406B)',
               },
+              borderRadius: 2,
+              px: { xs: 2, sm: 3 },
+              py: 1.5,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              width: { xs: '100%', sm: 'auto' }
             }}
           >
-            新しいプロジェクト
+            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>新しいプロジェクト</Box>
+            <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>プロジェクト作成</Box>
           </Button>
         </Box>
 
@@ -393,12 +440,34 @@ const DashboardPage: React.FC = () => {
               <CircularProgress />
             </Box>
           ) : projects.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <DescriptionIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" gutterBottom>
+            <Box sx={{ 
+              textAlign: 'center', 
+              py: { xs: 4, sm: 8 },
+              px: { xs: 2, sm: 0 }
+            }}>
+              <DescriptionIcon sx={{ 
+                fontSize: { xs: 48, sm: 64 }, 
+                color: 'text.secondary', 
+                mb: 2 
+              }} />
+              <Typography 
+                variant="h6" 
+                color="text.secondary" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+              >
                 まだプロジェクトがありません
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography 
+                variant="body2" 
+                color="text.secondary" 
+                sx={{ 
+                  mb: 3,
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  maxWidth: { xs: '280px', sm: 'none' },
+                  mx: 'auto'
+                }}
+              >
                 新しいプロジェクトを作成して、探究を始めましょう
               </Typography>
               <Button
@@ -411,13 +480,28 @@ const DashboardPage: React.FC = () => {
                   '&:hover': {
                     background: 'linear-gradient(45deg, #52BAFF, #00406B)',
                   },
+                  borderRadius: 2,
+                  px: { xs: 3, sm: 4 },
+                  py: { xs: 1.5, sm: 2 },
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  width: { xs: '100%', sm: 'auto' },
+                  maxWidth: { xs: '280px', sm: 'none' }
                 }}
               >
                 最初のプロジェクトを作成
               </Button>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ 
+              display: 'grid',
+              gridTemplateColumns: { 
+                xs: '1fr', 
+                sm: 'repeat(2, 1fr)', 
+                md: 'repeat(2, 1fr)',
+                lg: 'repeat(3, 1fr)'
+              },
+              gap: { xs: 2, sm: 3 }
+            }}>
               <AnimatePresence>
                 {projects.map((project) => (
                   <motion.div
@@ -438,16 +522,46 @@ const DashboardPage: React.FC = () => {
                       }}
                       onClick={() => navigate(`/projects/${project.id}`)}
                     >
-                      <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'flex-start',
+                          gap: { xs: 1, sm: 2 }
+                        }}>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: 600, 
+                                mb: 1,
+                                fontSize: { xs: '1rem', sm: '1.25rem' },
+                                lineHeight: 1.3,
+                                wordBreak: 'break-word'
+                              }}
+                            >
                               {project.theme}
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+                            <Box sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: { xs: 1, sm: 2 }, 
+                              mt: 2,
+                              flexWrap: 'wrap'
+                            }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <CalendarIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                                <Typography variant="caption" color="text.secondary">
+                                <CalendarIcon 
+                                  fontSize="small" 
+                                  sx={{ 
+                                    color: 'text.secondary',
+                                    fontSize: { xs: '16px', sm: '20px' }
+                                  }} 
+                                />
+                                <Typography 
+                                  variant="caption" 
+                                  color="text.secondary"
+                                  sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                >
                                   {new Date(project.updated_at).toLocaleDateString('ja-JP')}
                                 </Typography>
                               </Box>
@@ -456,9 +570,13 @@ const DashboardPage: React.FC = () => {
                           
                           <IconButton
                             onClick={(e) => handleMenuOpen(e, project)}
-                            sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                            sx={{ 
+                              opacity: 0.7, 
+                              '&:hover': { opacity: 1 },
+                              p: { xs: 1, sm: 1.5 }
+                            }}
                           >
-                            <MoreIcon />
+                            <MoreIcon sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
                           </IconButton>
                         </Box>
                       </CardContent>
@@ -483,7 +601,7 @@ const DashboardPage: React.FC = () => {
                 position: 'fixed',
                 top: 0,
                 right: 0,
-                width: '400px',
+                width: isMobile ? '100vw' : isTablet ? '350px' : '400px',
                 height: '100vh',
                 zIndex: 1300,
                 background: 'white',

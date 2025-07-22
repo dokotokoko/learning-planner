@@ -1032,6 +1032,36 @@ async def generate_theme_suggestions(
     except Exception as e:
         handle_database_error(e, "提案の生成")
 
+@app.post("/framework-games/theme-deep-dive/save-selection")
+async def save_theme_selection(
+    request: Dict[str, Any],
+    current_user: int = Depends(get_current_user_cached)
+):
+    """テーマ選択の保存"""
+    try:
+        theme = request.get("theme")
+        path = request.get("path", [])
+        
+        if not theme:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="テーマが指定されていません"
+            )
+        
+        # ここでは選択を記録するだけで、特にDBへの保存は行わない
+        # 将来的にDBに保存する場合はここに実装を追加
+        logger.info(f"User {current_user} selected theme: {theme}, path: {path}")
+        
+        return {"message": "選択が保存されました", "theme": theme, "path": path}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"テーマ選択の保存エラー: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="選択の保存に失敗しました"
+        )
+
 # =============================================================================
 # 管理者機能（最適化版）
 # =============================================================================

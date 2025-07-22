@@ -30,6 +30,7 @@ import {
   ChevronRight,
   Logout,
   ExpandMore,
+  Explore,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -233,6 +234,7 @@ const Layout: React.FC = () => {
 
   const mainListItems: MenuItem[] = [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
+    { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
   ];
 
   // 展開状態のサイドバー

@@ -175,6 +175,13 @@ const ThemeDeepDiveGame: React.FC = () => {
       );
       setSuggestions(suggestions);
       setShowCustomInput(false);
+      
+      // APIが利用できない場合は、オフラインモードで動作していることを通知
+      if (error instanceof Error && error.message.includes('Failed to generate')) {
+        setError('AIサーバーに接続できないため、オフラインモードで動作しています。基本的な提案のみ表示されます。');
+        // 3秒後にエラーメッセージを消す
+        setTimeout(() => setError(null), 3000);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -189,36 +196,85 @@ const ThemeDeepDiveGame: React.FC = () => {
     const baseKeywords = extractKeywords(theme);
     const interestKeywords = profile.interests.flatMap(extractKeywords);
     
-    // デモ用の提案生成ロジック
-    const templates = [
-      `${theme}の社会的影響`,
-      `${theme}の技術的側面`,
-      `${theme}と環境の関係`,
-      `${theme}の歴史的背景`,
-      `${theme}の未来予測`,
-      `${theme}の具体的事例`,
-      `${theme}に関する課題`,
-      `${theme}の可能性`,
-    ];
+    // 深さに応じて異なる探索アプローチを提供
+    let templates: string[] = [];
+    
+    // レベル1: 基本的な分野・アプローチの分岐
+    if (depth === 0) {
+      templates = [
+        `${theme}の理論・基礎研究`,
+        `${theme}の実践・応用分野`,
+        `${theme}と社会・人間の関係`,
+        `${theme}の技術・ツール`,
+        `${theme}のビジネス・産業応用`,
+        `${theme}の教育・学習方法`,
+        `${theme}の最新動向・トレンド`,
+        `${theme}の課題・問題点`,
+      ];
+    }
+    // レベル2: より具体的な分野への深掘り
+    else if (depth === 1) {
+      templates = [
+        `${theme}の具体的な手法・メソッド`,
+        `${theme}における主要なプレイヤー・組織`,
+        `${theme}の成功事例・ベストプラクティス`,
+        `${theme}で使われる専門用語・概念`,
+        `${theme}の歴史的発展・マイルストーン`,
+        `${theme}と他分野の融合・連携`,
+        `${theme}の評価基準・指標`,
+        `${theme}における最新の研究テーマ`,
+      ];
+    }
+    // レベル3: 実践的・具体的なアプローチ
+    else if (depth === 2) {
+      templates = [
+        `${theme}の入門プロジェクト・チュートリアル`,
+        `${theme}で解決できる具体的な問題`,
+        `${theme}の学習リソース・教材`,
+        `${theme}のコミュニティ・ネットワーク`,
+        `${theme}の実装・実験方法`,
+        `${theme}のツール・フレームワーク比較`,
+        `${theme}でのキャリア・仕事`,
+        `${theme}の個人プロジェクトアイデア`,
+      ];
+    }
+    // レベル4以降: より専門的・ニッチな探索
+    else {
+      templates = [
+        `${theme}の最新論文・研究成果`,
+        `${theme}の未解決問題・研究課題`,
+        `${theme}の実験設計・方法論`,
+        `${theme}のニッチな応用分野`,
+        `${theme}の専門家インタビュー・意見`,
+        `${theme}のワークショップ・実習`,
+        `${theme}の独自アプローチ・視点`,
+        `${theme}での革新的なアイデア`,
+      ];
+    }
 
     // プロフィールに基づいた追加提案
     if (profile.interests.length > 0) {
-      const randomInterest = profile.interests[Math.floor(Math.random() * profile.interests.length)];
-      templates.push(`${theme}と${randomInterest}の関連性`);
+      // ランダムに2つの興味分野を選んで掛け合わせ
+      const interest1 = profile.interests[Math.floor(Math.random() * profile.interests.length)];
+      const interest2 = profile.interests[Math.floor(Math.random() * profile.interests.length)];
+      templates.push(`${theme}×${interest1}の可能性`);
+      if (interest1 !== interest2) {
+        templates.push(`${theme}を${interest2}に応用する方法`);
+      }
     }
 
-    // 深さに応じて具体化
-    if (depth > 1) {
+    // テーマの具体性に応じて追加の提案
+    if (theme.includes('AI') || theme.includes('人工知能')) {
       templates.push(
-        `${theme}の実践方法`,
-        `${theme}の測定・評価`,
-        `${theme}のケーススタディ`
+        `${theme}の倫理的な考慮事項`,
+        `${theme}のオープンソースプロジェクト`
       );
     }
 
-    // ランダムに5-7個選択
+    // ランダムに5-7個選択（重複を避けて）
     const shuffled = templates.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.floor(Math.random() * 3) + 5);
+    const selectedCount = Math.floor(Math.random() * 3) + 5;
+    return shuffled.slice(0, Math.min(selectedCount, templates.length));
   };
 
   // キーワード抽出（簡易版）
@@ -375,17 +431,40 @@ const ThemeDeepDiveGame: React.FC = () => {
           <Box sx={{ mt: 4 }}>
             {/* パスの表示 */}
             <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+                探索の道筋
+              </Typography>
               <Stepper activeStep={path.length - 1} alternativeLabel>
                 {path.map((theme, index) => (
                   <Step key={index} completed={index < path.length - 1}>
-                    <StepLabel>
-                      <Typography variant="caption" noWrap sx={{ maxWidth: 150 }}>
+                    <StepLabel
+                      StepIconProps={{
+                        sx: {
+                          color: index === path.length - 1 ? 'primary.main' : 'success.main',
+                          '& .MuiStepIcon-text': {
+                            fill: 'white',
+                          },
+                        },
+                      }}
+                    >
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          maxWidth: 150,
+                          display: 'block',
+                          fontWeight: index === path.length - 1 ? 'bold' : 'normal',
+                          color: index === path.length - 1 ? 'primary.main' : 'text.primary',
+                        }}
+                      >
                         {theme}
                       </Typography>
                     </StepLabel>
                   </Step>
                 ))}
               </Stepper>
+              <Typography variant="caption" color="text.secondary" align="center" sx={{ mt: 1, display: 'block' }}>
+                クリックして選択したテーマが、より具体的になっていく様子が確認できます
+              </Typography>
             </Box>
 
             {/* 現在のテーマ */}
@@ -424,280 +503,252 @@ const ThemeDeepDiveGame: React.FC = () => {
                     どの方向に深掘りしますか？
                   </Typography>
                   
-                  {/* ツリービジュアライゼーション */}
+                  {/* ツリービジュアライゼーション - 縦型階層構造 */}
                   <Box sx={{ 
-                    position: 'relative',
-                    minHeight: 400,
-                    overflow: 'visible',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
                     py: 4,
+                    overflow: 'auto',
+                    maxHeight: '70vh',
                   }}>
-                    {/* 現在のノード（中央） */}
-                    <Box sx={{
-                      position: 'absolute',
-                      left: '50%',
-                      top: 0,
-                      transform: 'translateX(-50%)',
-                      zIndex: 2,
-                    }}>
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ duration: 0.3 }}
+                    {/* 現在のノード（親ノード） */}
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Paper
+                        elevation={8}
+                        sx={{
+                          p: 3,
+                          borderRadius: 2,
+                          minWidth: 250,
+                          maxWidth: 400,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: 'primary.main',
+                          color: 'primary.contrastText',
+                          textAlign: 'center',
+                          position: 'relative',
+                        }}
                       >
-                        <Paper
-                          elevation={8}
-                          sx={{
-                            p: 2,
-                            borderRadius: '50%',
-                            width: 120,
-                            height: 120,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            bgcolor: 'primary.main',
-                            color: 'primary.contrastText',
-                            textAlign: 'center',
-                          }}
-                        >
-                          <Typography variant="body2" fontWeight="bold">
-                            {treeNodes[currentNodeId]?.theme}
-                          </Typography>
-                        </Paper>
-                      </motion.div>
+                        <Typography variant="h6" fontWeight="bold">
+                          {treeNodes[currentNodeId]?.theme}
+                        </Typography>
+                      </Paper>
+                    </motion.div>
+
+                    {/* 接続線エリア */}
+                    <Box sx={{ position: 'relative', width: '100%', height: 50 }}>
+                      <svg
+                        style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          left: 0,
+                          top: 0,
+                          overflow: 'visible',
+                        }}
+                      >
+                        {/* 中央の縦線 */}
+                        <motion.line
+                          x1="50%"
+                          y1="0"
+                          x2="50%"
+                          y2="30"
+                          stroke="#ccc"
+                          strokeWidth="2"
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: 1 }}
+                          transition={{ duration: 0.3 }}
+                        />
+                        {/* 横線 */}
+                        {suggestions.length > 1 && (
+                          <motion.line
+                            x1="10%"
+                            y1="30"
+                            x2="90%"
+                            y2="30"
+                            stroke="#ccc"
+                            strokeWidth="2"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 0.3, delay: 0.1 }}
+                          />
+                        )}
+                        {/* 各子ノードへの縦線 */}
+                        {[...suggestions, 'custom'].map((_, index) => {
+                          const total = suggestions.length + 1;
+                          const position = total === 1 ? 50 : 10 + (80 / (total - 1)) * index;
+                          return (
+                            <motion.line
+                              key={index}
+                              x1={`${position}%`}
+                              y1="30"
+                              x2={`${position}%`}
+                              y2="50"
+                              stroke="#ccc"
+                              strokeWidth="2"
+                              initial={{ pathLength: 0 }}
+                              animate={{ pathLength: 1 }}
+                              transition={{ duration: 0.3, delay: 0.2 }}
+                            />
+                          );
+                        })}
+                      </svg>
                     </Box>
 
-                    {/* 接続線とサジェスチョンノード */}
-                    <Box sx={{ position: 'relative', mt: 20 }}>
-                      {suggestions.map((suggestion, index) => {
-                        const totalSuggestions = suggestions.length + 1; // +1 for custom input
-                        const angle = (index / (totalSuggestions - 1)) * 180 - 90; // -90度から90度の範囲
-                        const radius = 250;
-                        const x = Math.cos((angle * Math.PI) / 180) * radius;
-                        const y = Math.sin((angle * Math.PI) / 180) * radius + 50;
+                    {/* 子ノード（選択肢） */}
+                    <Box sx={{ 
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 2,
+                      justifyContent: 'center',
+                      width: '100%',
+                      maxWidth: 1200,
+                      px: 2,
+                    }}>
+                      {suggestions.map((suggestion, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 + 0.3 }}
+                          style={{ flex: '1 1 300px', maxWidth: 350 }}
+                        >
+                          <Card
+                            sx={{
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              height: '100%',
+                              '&:hover': {
+                                transform: 'translateY(-5px)',
+                                boxShadow: 6,
+                                borderColor: 'primary.main',
+                              },
+                              border: '1px solid',
+                              borderColor: 'divider',
+                            }}
+                            onClick={() => handleSelectSuggestion(suggestion)}
+                          >
+                            <CardContent sx={{ p: 3 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                                <Box
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: '50%',
+                                    bgcolor: 'primary.light',
+                                    color: 'primary.main',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    fontWeight: 'bold',
+                                    fontSize: '0.875rem',
+                                  }}
+                                >
+                                  {index + 1}
+                                </Box>
+                                <Typography 
+                                  variant="body1" 
+                                  sx={{ 
+                                    lineHeight: 1.6,
+                                    color: 'text.primary',
+                                  }}
+                                >
+                                  {suggestion}
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      ))}
 
-                        return (
-                          <React.Fragment key={index}>
-                            {/* 接続線 */}
-                            <svg
-                              style={{
-                                position: 'absolute',
-                                left: '50%',
-                                top: -120,
-                                width: Math.abs(x) + 60,
-                                height: y + 120,
-                                transform: x < 0 ? 'translateX(-100%)' : 'translateX(-60px)',
-                                pointerEvents: 'none',
-                                zIndex: 0,
-                              }}
-                            >
-                              <motion.line
-                                x1={x < 0 ? Math.abs(x) + 60 : 60}
-                                y1={60}
-                                x2={x < 0 ? 60 : Math.abs(x) + 60}
-                                y2={y + 120}
-                                stroke="#ccc"
-                                strokeWidth="2"
-                                initial={{ pathLength: 0 }}
-                                animate={{ pathLength: 1 }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
+                      {/* カスタム入力カード */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: suggestions.length * 0.1 + 0.3 }}
+                        style={{ flex: '1 1 300px', maxWidth: 350 }}
+                      >
+                        <Card
+                          sx={{
+                            border: '2px dashed',
+                            borderColor: 'divider',
+                            bgcolor: 'background.default',
+                            cursor: showCustomInput ? 'default' : 'pointer',
+                            transition: 'all 0.3s ease',
+                            height: '100%',
+                            minHeight: 120,
+                            ...(!showCustomInput && {
+                              '&:hover': {
+                                transform: 'translateY(-5px)',
+                                borderColor: 'primary.main',
+                                boxShadow: 2,
+                              },
+                            }),
+                          }}
+                          onClick={() => !showCustomInput && setShowCustomInput(true)}
+                        >
+                          {!showCustomInput ? (
+                            <CardContent sx={{ 
+                              height: '100%', 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              p: 3,
+                            }}>
+                              <EditIcon sx={{ fontSize: 32, color: 'action.active', mb: 1 }} />
+                              <Typography variant="body1" color="text.secondary">
+                                自分で入力
+                              </Typography>
+                            </CardContent>
+                          ) : (
+                            <CardContent sx={{ p: 3 }}>
+                              <TextField
+                                autoFocus
+                                fullWidth
+                                label="テーマを入力"
+                                value={customInput}
+                                onChange={(e) => setCustomInput(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleCustomInput()}
+                                variant="outlined"
+                                sx={{ mb: 2 }}
                               />
-                            </svg>
-
-                            {/* サジェスチョンノード */}
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: index * 0.1 + 0.3 }}
-                              style={{
-                                position: 'absolute',
-                                left: `calc(50% + ${x}px)`,
-                                top: y,
-                                transform: 'translateX(-50%)',
-                                zIndex: 1,
-                              }}
-                            >
-                              <Card
-                                sx={{
-                                  width: 200,
-                                  cursor: 'pointer',
-                                  transition: 'all 0.3s ease',
-                                  '&:hover': {
-                                    transform: 'scale(1.05)',
-                                    boxShadow: 6,
-                                    '& .node-circle': {
-                                      bgcolor: 'primary.main',
-                                      color: 'primary.contrastText',
-                                    },
-                                  },
-                                }}
-                                onClick={() => handleSelectSuggestion(suggestion)}
-                              >
-                                <CardContent sx={{ p: 2 }}>
-                                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <Box
-                                      className="node-circle"
-                                      sx={{
-                                        width: 40,
-                                        height: 40,
-                                        borderRadius: '50%',
-                                        bgcolor: 'background.paper',
-                                        border: '2px solid',
-                                        borderColor: 'primary.main',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        mb: 1,
-                                        transition: 'all 0.3s ease',
-                                      }}
-                                    >
-                                      <Typography variant="caption" fontWeight="bold">
-                                        {index + 1}
-                                      </Typography>
-                                    </Box>
-                                    <Typography 
-                                      variant="body2" 
-                                      align="center"
-                                      sx={{ 
-                                        fontSize: '0.875rem',
-                                        lineHeight: 1.4,
-                                      }}
-                                    >
-                                      {suggestion}
-                                    </Typography>
-                                  </Box>
-                                </CardContent>
-                              </Card>
-                            </motion.div>
-                          </React.Fragment>
-                        );
-                      })}
-
-                      {/* カスタム入力ノード */}
-                      {(() => {
-                        const index = suggestions.length;
-                        const totalSuggestions = suggestions.length + 1;
-                        const angle = (index / (totalSuggestions - 1)) * 180 - 90;
-                        const radius = 250;
-                        const x = Math.cos((angle * Math.PI) / 180) * radius;
-                        const y = Math.sin((angle * Math.PI) / 180) * radius + 50;
-
-                        return (
-                          <React.Fragment>
-                            {/* 接続線 */}
-                            <svg
-                              style={{
-                                position: 'absolute',
-                                left: '50%',
-                                top: -120,
-                                width: Math.abs(x) + 60,
-                                height: y + 120,
-                                transform: x < 0 ? 'translateX(-100%)' : 'translateX(-60px)',
-                                pointerEvents: 'none',
-                                zIndex: 0,
-                              }}
-                            >
-                              <motion.line
-                                x1={x < 0 ? Math.abs(x) + 60 : 60}
-                                y1={60}
-                                x2={x < 0 ? 60 : Math.abs(x) + 60}
-                                y2={y + 120}
-                                stroke="#ccc"
-                                strokeWidth="2"
-                                strokeDasharray="5,5"
-                                initial={{ pathLength: 0 }}
-                                animate={{ pathLength: 1 }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
-                              />
-                            </svg>
-
-                            {/* カスタム入力ノード */}
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: index * 0.1 + 0.3 }}
-                              style={{
-                                position: 'absolute',
-                                left: `calc(50% + ${x}px)`,
-                                top: y,
-                                transform: 'translateX(-50%)',
-                                zIndex: 1,
-                              }}
-                            >
-                              <Card
-                                sx={[
-                                  {
-                                    width: 200,
-                                    border: '2px dashed',
-                                    borderColor: 'divider',
-                                    bgcolor: 'background.default',
-                                    cursor: showCustomInput ? 'default' : 'pointer',
-                                    transition: 'all 0.3s ease',
-                                  },
-                                  !showCustomInput && {
-                                    '&:hover': {
-                                      transform: 'scale(1.05)',
-                                      borderColor: 'primary.main',
-                                    },
-                                  },
-                                ]}
-                                onClick={() => !showCustomInput && setShowCustomInput(true)}
-                              >
-                                {!showCustomInput ? (
-                                  <CardContent sx={{ p: 2 }}>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                      <EditIcon sx={{ fontSize: 30, color: 'action.active', mb: 1 }} />
-                                      <Typography variant="body2" color="text.secondary" align="center">
-                                        自分で入力
-                                      </Typography>
-                                    </Box>
-                                  </CardContent>
-                                ) : (
-                                  <CardContent sx={{ p: 2 }}>
-                                    <TextField
-                                      autoFocus
-                                      fullWidth
-                                      label="テーマを入力"
-                                      value={customInput}
-                                      onChange={(e) => setCustomInput(e.target.value)}
-                                      onKeyPress={(e) => e.key === 'Enter' && handleCustomInput()}
-                                      variant="outlined"
-                                      size="small"
-                                      sx={{ mb: 1 }}
-                                    />
-                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                      <Button
-                                        size="small"
-                                        variant="contained"
-                                        onClick={handleCustomInput}
-                                        fullWidth
-                                      >
-                                        決定
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="outlined"
-                                        onClick={() => {
-                                          setShowCustomInput(false);
-                                          setCustomInput('');
-                                        }}
-                                        fullWidth
-                                      >
-                                        キャンセル
-                                      </Button>
-                                    </Box>
-                                  </CardContent>
-                                )}
-                              </Card>
-                            </motion.div>
-                          </React.Fragment>
-                        );
-                      })()}
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  variant="contained"
+                                  onClick={handleCustomInput}
+                                  fullWidth
+                                >
+                                  決定
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => {
+                                    setShowCustomInput(false);
+                                    setCustomInput('');
+                                  }}
+                                  fullWidth
+                                >
+                                  キャンセル
+                                </Button>
+                              </Box>
+                            </CardContent>
+                          )}
+                        </Card>
+                      </motion.div>
                     </Box>
                   </Box>
 
                   {/* プロフィールベースのヒント */}
                   {userProfile.interests.length > 0 && (
-                    <Box sx={{ mt: 6, p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
+                    <Box sx={{ mt: 4, p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
                       <Typography variant="body2" color="info.dark">
                         💡 ヒント: あなたの興味（{userProfile.interests.slice(0, 3).join('、')}）
                         に関連する視点も考慮されています

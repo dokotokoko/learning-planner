@@ -1051,8 +1051,8 @@ async def generate_theme_suggestions(
         
         # プロンプトの構築
         system_prompt_theme = """あなたは探究学習の専門家です。
-生徒が持っているテーマに対して、より具体的で興味深い方向性を提案する役割があります。
-提案は探究可能で高校生にとって理解可能で実行可能なものにしてください。"""
+生徒は抽象度の高いテーマしか持っておらず、多くの場合は自分ごとになっていないテーマが多いです（例えば、AIと伝統産業、スポーツサイエンスなど）。
+ユーザーが選択肢を選択肢ながら、より自分事になった「本当に興味がある」探究テーマに辿り着けるような選択肢を提案するのが仕事です。"""
 
         # 深さに応じたプロンプトの調整
         depth_guidance = "より具体的な探究の切り口を示してください。" if request.depth >= 2 else "具体的な領域や側面に分けてください。"
@@ -1060,7 +1060,7 @@ async def generate_theme_suggestions(
         # ユーザーの興味を考慮
         interest_context = f"\n生徒の興味関心: {', '.join(request.user_interests)}" if request.user_interests else ""
         
-        user_prompt = f"""探究テーマ「{request.theme}」について、次のレベルの具体的な探究の方向性を5〜7個提案してください。
+        user_prompt = f"""探究テーマ「{request.theme}」について、次の段階の具体的な探究の方向性を5〜7個提案してください。
 
 {depth_guidance}
 {interest_context}
@@ -1121,6 +1121,36 @@ async def generate_theme_suggestions(
         raise
     except Exception as e:
         handle_database_error(e, "提案の生成")
+
+@app.post("/framework-games/theme-deep-dive/save-selection")
+async def save_theme_selection(
+    request: Dict[str, Any],
+    current_user: int = Depends(get_current_user)
+):
+    """テーマ選択の保存"""
+    try:
+        theme = request.get("theme")
+        path = request.get("path", [])
+        
+        if not theme:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="テーマが指定されていません"
+            )
+        
+        # ここでは選択を記録するだけで、特にDBへの保存は行わない
+        # 将来的にDBに保存する場合はここに実装を追加
+        logger.info(f"User {current_user} selected theme: {theme}, path: {path}")
+        
+        return {"message": "選択が保存されました", "theme": theme, "path": path}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"テーマ選択の保存エラー: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="選択の保存に失敗しました"
+        )
 
 @app.post("/admin/create-test-user")
 async def create_test_user(user_data: AdminUserCreate):

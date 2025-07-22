@@ -308,15 +308,52 @@ a:hover {
 }
 
 /* レスポンシブユーティリティ */
-@media (max-width: 768px) {
+@media (max-width: 599px) {
   .hide-mobile {
     display: none !important;
   }
+  
+  /* モバイル専用スタイル */
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  
+  .mobile-center {
+    text-align: center !important;
+  }
+  
+  .mobile-padding {
+    padding: 16px !important;
+  }
+  
+  .mobile-margin {
+    margin: 8px !important;
+  }
 }
 
-@media (min-width: 769px) {
+@media (min-width: 600px) and (max-width: 959px) {
+  .hide-tablet {
+    display: none !important;
+  }
+  
+  /* タブレット専用スタイル */
+  .tablet-two-column {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+@media (min-width: 960px) {
   .hide-desktop {
     display: none !important;
+  }
+  
+  /* デスクトップ専用スタイル */
+  .desktop-three-column {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 24px !important;
   }
 }
 
@@ -329,6 +366,35 @@ a:hover {
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+}
+
+/* モバイル固有の最適化 */
+@media (max-width: 599px) {
+  /* タッチ対象サイズの最適化 */
+  button, 
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .MuiListItemButton-root {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  /* インプット要素のズーム防止 */
+  input, 
+  textarea, 
+  select {
+    font-size: 16px !important;
+  }
+  
+  /* スクロール性能の向上 */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* タップハイライトの無効化 */
+  * {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
