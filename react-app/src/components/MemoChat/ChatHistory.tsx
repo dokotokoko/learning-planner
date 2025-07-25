@@ -197,13 +197,13 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
           ));
         });
 
-        // 最後のメッセージを設定
+        // メッセージを時系列順（古い→新しい）にソートして最後のメッセージを設定
         sessionMap.forEach((session) => {
           session.messages.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           );
           if (session.messages.length > 0) {
-            const lastMsg = session.messages[0];
+            const lastMsg = session.messages[session.messages.length - 1];
             session.lastMessage = lastMsg.message.substring(0, 100) + 
               (lastMsg.message.length > 100 ? '...' : '');
           }

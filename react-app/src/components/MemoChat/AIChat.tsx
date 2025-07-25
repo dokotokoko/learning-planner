@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
+import { useChatStore } from '../../stores/chatStore';
 
 interface Message {
   id: string;
@@ -75,7 +76,10 @@ const AIChat: React.FC<AIChatProps> = ({
   onActivityRecord,
   persistentMode = false,
 }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // chatStoreからの機能を使用
+  const { getMessages, addMessage, clearMessages } = useChatStore();
+  const storedMessages = getMessages(pageId);
+  const [messages, setMessages] = useState<Message[]>(storedMessages);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -162,13 +166,23 @@ const AIChat: React.FC<AIChatProps> = ({
   // forceRefreshまたはpageId変更でメッセージをクリア（継続モードの場合は除外）
   useEffect(() => {
     if (forceRefresh || (!persistentMode && initializationKeyRef.current !== pageId)) {
+      // chatStoreのメッセージをクリア
+      clearMessages(pageId);
       setMessages([]);
       setHistoryLoaded(false);
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
       initializationKeyRef.current = pageId;
     }
-  }, [forceRefresh, pageId, persistentMode]);
+  }, [forceRefresh, pageId, persistentMode, clearMessages]);
+
+  // chatStoreからメッセージを同期
+  useEffect(() => {
+    const stored = getMessages(pageId);
+    if (stored.length > 0 && messages.length === 0) {
+      setMessages(stored);
+    }
+  }, [pageId, getMessages]);
 
   // データベースから対話履歴を読み込む
   useEffect(() => {
@@ -330,6 +344,8 @@ const AIChat: React.FC<AIChatProps> = ({
     };
 
     setMessages(prev => [...prev, userMessage]);
+    // chatStoreにも保存
+    addMessage(pageId, userMessage);
     setInputValue('');
     setIsLoading(true);
     
@@ -402,6 +418,8 @@ const AIChat: React.FC<AIChatProps> = ({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      // chatStoreにも保存
+      addMessage(pageId, assistantMessage);
       
       // 学習活動記録（AI応答）
       if (onActivityRecord) {
@@ -421,6 +439,8 @@ const AIChat: React.FC<AIChatProps> = ({
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      // chatStoreにも保存
+      addMessage(pageId, errorMessage);
       
       // エラーメッセージ表示時も条件付きで最下部にスクロール
       setTimeout(() => scrollToBottomIfNeeded(), 200);

@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
 interface ChatState {
   // チャットUI状態
   isChatOpen: boolean;
@@ -14,6 +21,9 @@ interface ChatState {
   // チャットセッションID（プロジェクト単位）
   chatPageId: string;
   
+  // メッセージ履歴（プロジェクトごと）
+  messageHistory: Record<string, ChatMessage[]>;
+  
   // Actions
   setChatOpen: (open: boolean) => void;
   toggleChat: () => void;
@@ -21,6 +31,11 @@ interface ChatState {
   updateMemoContent: (title: string, content: string) => void;
   clearCurrentMemo: () => void;
   setCurrentProject: (projectId: string) => void;
+  
+  // メッセージ管理
+  addMessage: (projectId: string, message: ChatMessage) => void;
+  getMessages: (projectId: string) => ChatMessage[];
+  clearMessages: (projectId: string) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -33,6 +48,7 @@ export const useChatStore = create<ChatState>()(
       currentMemoTitle: '',
       currentMemoContent: '',
       chatPageId: '',
+      messageHistory: {},
 
       // チャット開閉
       setChatOpen: (open: boolean) => set({ isChatOpen: open }),
@@ -78,13 +94,38 @@ export const useChatStore = create<ChatState>()(
           // メモ情報はクリアしない（メモ一覧に戻っても保持）
         });
       },
+
+      // メッセージ管理
+      addMessage: (projectId: string, message: ChatMessage) => {
+        set((state) => ({
+          messageHistory: {
+            ...state.messageHistory,
+            [projectId]: [...(state.messageHistory[projectId] || []), message],
+          },
+        }));
+      },
+
+      getMessages: (projectId: string) => {
+        const state = get();
+        return state.messageHistory[projectId] || [];
+      },
+
+      clearMessages: (projectId: string) => {
+        set((state) => ({
+          messageHistory: {
+            ...state.messageHistory,
+            [projectId]: [],
+          },
+        }));
+      },
     }),
     {
       name: 'chat-storage',
-      // 永続化しない項目（セッション内でのみ有効）
+      // 永続化する項目（メッセージ履歴を追加）
       partialize: (state) => ({
         isChatOpen: state.isChatOpen,
         currentProjectId: state.currentProjectId,
+        messageHistory: state.messageHistory,
       }),
     }
   )

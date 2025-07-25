@@ -453,6 +453,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                       hideMemoButton={true}
                       forceRefresh={forceRefreshChat}
                       isInitializing={isInitializingAI}
+                      persistentMode={true}
                     />
                     </Panel>
 
@@ -495,6 +496,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                       hideMemoButton={false}
                       forceRefresh={forceRefreshChat}
                       isInitializing={isInitializingAI}
+                      persistentMode={true}
                     />
                   </Box>
                 )}
