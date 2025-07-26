@@ -38,6 +38,8 @@ import { useChatStore } from '../../stores/chatStore';
 import { useTutorialStore } from '../../stores/tutorialStore';
 import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
+import QuestSuggestion from './QuestSuggestion';
+import QuestBoardPage from '../../pages/QuestBoardPage';
 
 const drawerWidth = 280;
 const tabletDrawerWidth = 240;
@@ -235,6 +237,7 @@ const Layout: React.FC = () => {
   const mainListItems: MenuItem[] = [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'}
   ];
 
   // 展開状態のサイドバー
@@ -303,6 +306,11 @@ const Layout: React.FC = () => {
           </ListItem>
         ))}
       </List>
+
+      <Divider />
+
+      {/* クエスト提案 */}
+      <QuestSuggestion />
 
       <Divider />
 

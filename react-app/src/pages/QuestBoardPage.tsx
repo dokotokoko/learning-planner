@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { questApi, Quest, UserQuest, QuestStats } from '../lib/api';
 import { 
   Box, 
   Container, 
@@ -53,23 +54,33 @@ import {
 import { motion } from 'framer-motion';
 import ReflectionForm, { ReflectionData } from '../components/Reflection/ReflectionForm';
 
-// クエストの型定義
-interface Quest {
-  id: string;
-  title: string;
-  description: string;
-  category: 'creative' | 'research' | 'experiment' | 'communication';
-  difficulty: 1 | 2 | 3;
-  points: number;
-  requiredEvidence: string;
+// アイコンマッピング
+const iconMap: Record<string, React.ReactNode> = {
+  'Explore': <Explore />,
+  'CameraAlt': <CameraAlt />,
+  'Group': <Group />,
+  'Build': <Build />,
+  'Psychology': <Psychology />,
+  'SpeakerNotes': <SpeakerNotes />,
+  'Movie': <Movie />,
+  'Science': <Science />,
+  'MenuBook': <MenuBook />,
+  'Public': <Public />,
+  'Lightbulb': <Lightbulb />,
+};
+
+// 拡張クエスト型（Quest + ユーザー進捗情報）
+interface ExtendedQuest extends Quest {
   status: 'available' | 'in_progress' | 'completed';
-  progress?: number;
+  progress: number;
+  user_quest_id?: number;
   icon: React.ReactNode;
 }
 
 const QuestBoardPage: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState(0);
-  const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null);
+  const [selectedQuest, setSelectedQuest] = useState<ExtendedQuest | null>(null);
+  const [selectedUserQuest, setSelectedUserQuest] = useState<UserQuest | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false);
   const [submissionData, setSubmissionData] = useState({
@@ -79,141 +90,60 @@ const QuestBoardPage: React.FC = () => {
   const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
   const [submissionStep, setSubmissionStep] = useState<'submission' | 'reflection'>('submission');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [quests, setQuests] = useState<Quest[]>([
-    {
-      id: '1',
-      title: '初めての観察日記',
-      description: '身の回りの何か興味深いものを3日間観察して、変化を記録してみよう！植物、天気、人の行動など、なんでもOK！',
-      category: 'research',
-      difficulty: 1,
-      points: 1000,
-      requiredEvidence: '3日分の観察記録（写真または文章）',
-      status: 'available',
-      icon: <Explore />,
-    },
-    {
-      id: '2',
-      title: 'アートで表現してみよう',
-      description: '今の気持ちや考えを絵、コラージュ、デジタルアートなど、好きな方法で表現してみよう。正解はないから自由に！',
-      category: 'creative',
-      difficulty: 1,
-      points: 1000,
-      requiredEvidence: '作品の写真',
-      status: 'available',
-      icon: <CameraAlt />,
-    },
-    {
-      id: '3',
-      title: 'インタビューマスター',
-      description: '興味のあるテーマについて、身近な人（家族、友達、先生など）3人にインタビューしてみよう。質問は5つ以上考えてね！',
-      category: 'communication',
-      difficulty: 2,
-      points: 5000,
-      requiredEvidence: 'インタビューの質問と回答のまとめ',
-      status: 'available',
-      icon: <Group />,
-    },
-    {
-      id: '4',
-      title: 'プロトタイプチャレンジ',
-      description: '身の回りの問題を解決するアイデアを、ペーパーモック、段ボール、粘土などを使って形にしてみよう！',
-      category: 'experiment',
-      difficulty: 2,
-      points: 5000,
-      requiredEvidence: 'プロトタイプの写真と説明',
-      status: 'in_progress',
-      progress: 60,
-      icon: <Build />,
-    },
-    {
-      id: '5',
-      title: 'フィールドワーク探検隊',
-      description: '興味のある場所（図書館、博物館、商店街など）に実際に行って、5つ以上の発見をしてこよう！',
-      category: 'research',
-      difficulty: 3,
-      points: 8000,
-      requiredEvidence: '発見したことのレポート（写真付き）',
-      status: 'available',
-      icon: <Psychology />,
-    },
-    {
-      id: '6',
-      title: '1分間スピーチ・チャレンジ',
-      description: '自分の好きなテーマで1分間のスピーチ動画を撮影してみよう！完璧である必要はありません。伝える練習をしよう！',
-      category: 'communication',
-      difficulty: 1,
-      points: 1000,
-      requiredEvidence: 'スピーチ動画または音声録音',
-      status: 'available',
-      icon: <SpeakerNotes />,
-    },
-    {
-      id: '7',
-      title: 'ドキュメンタリー制作',
-      description: '身近な「面白い人」や「面白いこと」を5分以内の動画で紹介してみよう。スマホ撮影でOK！',
-      category: 'creative',
-      difficulty: 3,
-      points: 8000,
-      requiredEvidence: '制作した動画ファイル',
-      status: 'available',
-      icon: <Movie />,
-    },
-    {
-      id: '8',
-      title: '24時間チャレンジ実験',
-      description: '何かを24時間やってみる、または24時間やめてみる実験をしよう。変化を記録してね！',
-      category: 'experiment',
-      difficulty: 2,
-      points: 5000,
-      requiredEvidence: '実験レポート（開始前・途中・終了後の記録）',
-      status: 'available',
-      icon: <Science />,
-    },
-    {
-      id: '9',
-      title: '地域の歴史ハンター',
-      description: '自分の住んでいる地域の知られざる歴史や面白いエピソードを調べて、友達に教えられるレベルでまとめよう！',
-      category: 'research',
-      difficulty: 2,
-      points: 5000,
-      requiredEvidence: '調査レポート（参考資料も含む）',
-      status: 'available',
-      icon: <MenuBook />,
-    },
-    {
-      id: '10',
-      title: '世界とつながる！国際交流',
-      description: '海外の人と実際に会話してみよう！オンライン言語交換、留学生との交流、SNSでの交流など方法は自由！',
-      category: 'communication',
-      difficulty: 3,
-      points: 8000,
-      requiredEvidence: '交流の記録（会話内容、学んだこと、感想）',
-      status: 'completed',
-      icon: <Public />,
-    },
-    {
-      id: '11',
-      title: '逆転の発想・創作',
-      description: '身の回りの「当たり前」を逆転させた面白いアイデアを考えて、文章・絵・動画などで表現してみよう！',
-      category: 'creative',
-      difficulty: 2,
-      points: 5000,
-      requiredEvidence: '創作物と発想プロセスの説明',
-      status: 'available',
-      icon: <Lightbulb />,
-    },
-    {
-      id: '12',
-      title: 'ミニ社会実験',
-      description: '興味のある社会現象について、小規模な実験や調査を行ってみよう。友達や家族の協力もOK！',
-      category: 'experiment',
-      difficulty: 3,
-      points: 8000,
-      requiredEvidence: '実験計画・実施記録・結果分析レポート',
-      status: 'available',
-      icon: <Psychology />,
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // APIから取得するデータ
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const [userQuests, setUserQuests] = useState<UserQuest[]>([]);
+  const [questStats, setQuestStats] = useState<QuestStats>({
+    total_quests: 0,
+    available_quests: 0,
+    completed_quests: 0,
+    in_progress_quests: 0,
+    total_points: 0
+  });
+
+  // データ取得用の関数
+  const loadQuestData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const [questsResult, userQuestsResult, statsResult] = await Promise.all([
+        questApi.getQuests(),
+        questApi.getUserQuests(),
+        questApi.getQuestStats()
+      ]);
+      
+      setQuests(questsResult);
+      setUserQuests(userQuestsResult);
+      setQuestStats(statsResult);
+    } catch (err) {
+      console.error('Failed to load quest data:', err);
+      setError('クエストデータの読み込みに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadQuestData();
+  }, []);
+
+  // クエストの統合データを作成（Quest + UserQuest）
+  const getQuestWithStatus = (quest: Quest): ExtendedQuest => {
+    const userQuest = userQuests.find(uq => uq.quest_id === quest.id);
+    return {
+      ...quest,
+      status: userQuest?.status || 'available',
+      progress: userQuest?.progress || 0,
+      user_quest_id: userQuest?.id,
+      icon: iconMap[quest.icon_name || ''] || <Explore />
+    };
+  };
+
+  // クエストデータは API から取得
 
   const categoryColors = {
     creative: '#FF6B6B',
@@ -233,7 +163,7 @@ const QuestBoardPage: React.FC = () => {
     setSelectedTab(newValue);
   };
 
-  const filteredQuests = quests.filter(quest => {
+  const filteredQuests = quests.map(getQuestWithStatus).filter(quest => {
     // ステータスフィルター
     const statusMatch = selectedTab === 0 || 
       (selectedTab === 1 && quest.status === 'available') ||
@@ -246,18 +176,28 @@ const QuestBoardPage: React.FC = () => {
     return statusMatch && categoryMatch;
   });
 
-  const handleQuestClick = (quest: Quest) => {
+  const handleQuestClick = (quest: ExtendedQuest) => {
     setSelectedQuest(quest);
+    const userQuest = userQuests.find(uq => uq.quest_id === quest.id);
+    setSelectedUserQuest(userQuest || null);
   };
 
-  const handleStartQuest = () => {
-    if (selectedQuest) {
-      setQuests(quests.map(q => 
-        q.id === selectedQuest.id 
-          ? { ...q, status: 'in_progress', progress: 0 }
-          : q
-      ));
-      setSelectedQuest({ ...selectedQuest, status: 'in_progress', progress: 0 });
+  const handleStartQuest = async () => {
+    if (selectedQuest && selectedQuest.status === 'available') {
+      try {
+        const result = await questApi.startQuest(selectedQuest.id);
+        
+        // ユーザークエストリストを更新
+        setUserQuests(prev => [...prev.filter(uq => uq.quest_id !== selectedQuest.id), result]);
+        setSelectedUserQuest(result);
+        
+        // 選択中のクエストも更新
+        const updatedQuest = { ...selectedQuest, status: 'in_progress' as const, progress: 0, user_quest_id: result.id };
+        setSelectedQuest(updatedQuest);
+      } catch (err) {
+        console.error('Failed to start quest:', err);
+        setError('クエストの開始に失敗しました');
+      }
     }
   };
 
@@ -265,22 +205,45 @@ const QuestBoardPage: React.FC = () => {
     setShowSubmissionDialog(true);
   };
 
-  const handleSubmissionComplete = () => {
-    if (selectedQuest && reflectionData) {
-      setQuests(quests.map(q => 
-        q.id === selectedQuest.id 
-          ? { ...q, status: 'completed', progress: 100 }
-          : q
-      ));
-      setSelectedQuest({ ...selectedQuest, status: 'completed', progress: 100 });
-      setShowSubmissionDialog(false);
-      setSubmissionData({
-        description: '',
-        fileUrl: '',
-      });
-      setReflectionData(null);
-      setSubmissionStep('submission');
-      setShowSuccessMessage(true);
+  const handleSubmissionComplete = async () => {
+    if (selectedQuest && selectedUserQuest && reflectionData) {
+      try {
+        const submitData = {
+          description: submissionData.description,
+          file_url: submissionData.fileUrl || undefined,
+          reflection_data: reflectionData
+        };
+        
+        const result = await questApi.submitQuest(selectedUserQuest.id, submitData);
+        
+        // ユーザークエストを更新
+        setUserQuests(prev => prev.map(uq => 
+          uq.id === selectedUserQuest.id 
+            ? { ...uq, status: 'completed', progress: 100 }
+            : uq
+        ));
+        
+        // 選択中のクエストも更新
+        const updatedQuest = { ...selectedQuest, status: 'completed' as const, progress: 100 };
+        setSelectedQuest(updatedQuest);
+        
+        // ダイアログを閉じる
+        setShowSubmissionDialog(false);
+        setSubmissionData({
+          description: '',
+          fileUrl: '',
+        });
+        setReflectionData(null);
+        setSubmissionStep('submission');
+        setShowSuccessMessage(true);
+        
+        // 統計を再読み込み
+        const newStats = await questApi.getQuestStats();
+        setQuestStats(newStats);
+      } catch (err) {
+        console.error('Failed to submit quest:', err);
+        setError('クエストの提出に失敗しました');
+      }
     }
   };
 
@@ -296,6 +259,22 @@ const QuestBoardPage: React.FC = () => {
       setSubmissionStep('reflection');
     }
   };
+
+  if (loading) {
+    return (
+      <Container maxWidth="xl" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <Typography>クエストデータを読み込み中...</Typography>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Typography color="error" sx={{ textAlign: 'center' }}>{error}</Typography>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -319,7 +298,7 @@ const QuestBoardPage: React.FC = () => {
                 利用可能:
               </Typography>
               <Chip 
-                label={quests.filter(q => q.status === 'available').length} 
+                label={questStats.available_quests} 
                 size="small" 
                 color="success" 
               />
@@ -329,7 +308,7 @@ const QuestBoardPage: React.FC = () => {
                 進行中:
               </Typography>
               <Chip 
-                label={quests.filter(q => q.status === 'in_progress').length} 
+                label={questStats.in_progress_quests} 
                 size="small" 
                 color="warning" 
               />
@@ -339,7 +318,7 @@ const QuestBoardPage: React.FC = () => {
                 完了済み:
               </Typography>
               <Chip 
-                label={quests.filter(q => q.status === 'completed').length} 
+                label={questStats.completed_quests} 
                 size="small" 
                 color="primary" 
               />
@@ -349,7 +328,7 @@ const QuestBoardPage: React.FC = () => {
                 総獲得ポイント:
               </Typography>
               <Chip 
-                label={`${quests.filter(q => q.status === 'completed').reduce((sum, q) => sum + q.points, 0).toLocaleString()} pt`}
+                label={`${questStats.total_points.toLocaleString()} pt`}
                 size="small" 
                 color="secondary"
                 icon={<LocalFireDepartment />}
@@ -603,7 +582,7 @@ const QuestBoardPage: React.FC = () => {
                       提出するもの
                     </Typography>
                     <Typography variant="body2">
-                      {selectedQuest.requiredEvidence}
+                      {selectedQuest.required_evidence}
                     </Typography>
                   </Paper>
 
@@ -684,7 +663,7 @@ const QuestBoardPage: React.FC = () => {
                   {selectedQuest?.title}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  必要な提出物: {selectedQuest?.requiredEvidence}
+                  必要な提出物: {selectedQuest?.required_evidence}
                 </Typography>
 
                 <Grid container spacing={3}>
