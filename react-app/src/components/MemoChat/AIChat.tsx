@@ -30,7 +30,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
+  timestamp: Date | string | undefined | null;
 }
 
 interface AIChatProps {
@@ -219,7 +219,7 @@ const AIChat: React.FC<AIChatProps> = ({
             id: item.id.toString(),
             role: item.sender === 'user' ? 'user' : 'assistant',
             content: item.message,
-            timestamp: new Date(item.created_at),
+            timestamp: item.created_at ? new Date(item.created_at) : new Date(),
           }));
 
           setMessages(historyMessages);
@@ -345,7 +345,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
     setMessages(prev => [...prev, userMessage]);
     // chatStoreにも保存
-    addMessage(pageId, userMessage);
+    addMessage(pageId, { ...userMessage, timestamp: new Date(userMessage.timestamp ?? Date.now()) });
     setInputValue('');
     setIsLoading(true);
     
@@ -419,7 +419,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
       setMessages(prev => [...prev, assistantMessage]);
       // chatStoreにも保存
-      addMessage(pageId, assistantMessage);
+      addMessage(pageId, { ...assistantMessage, timestamp: new Date(assistantMessage.timestamp ?? Date.now()) });
       
       // 学習活動記録（AI応答）
       if (onActivityRecord) {
@@ -440,7 +440,7 @@ const AIChat: React.FC<AIChatProps> = ({
       };
       setMessages(prev => [...prev, errorMessage]);
       // chatStoreにも保存
-      addMessage(pageId, errorMessage);
+      addMessage(pageId, { ...errorMessage, timestamp: new Date(errorMessage.timestamp ?? Date.now()) });
       
       // エラーメッセージ表示時も条件付きで最下部にスクロール
       setTimeout(() => scrollToBottomIfNeeded(), 200);
@@ -458,11 +458,44 @@ const AIChat: React.FC<AIChatProps> = ({
     }
   };
 
-  const formatTime = (timestamp: Date) => {
-    return timestamp.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatTime = (timestamp: Date | string | undefined | null) => {
+    try {
+      // timestampがnullまたはundefinedの場合は現在時刻を使用
+      if (!timestamp) {
+        return new Date().toLocaleTimeString('ja-JP', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+
+      // 文字列の場合はDateオブジェクトに変換
+      let date: Date;
+      if (typeof timestamp === 'string') {
+        date = new Date(timestamp);
+      } else if (timestamp instanceof Date) {
+        date = timestamp;
+      } else {
+        // その他の型の場合は現在時刻を使用
+        date = new Date();
+      }
+      
+      // 無効な日付の場合は現在時刻を使用
+      if (isNaN(date.getTime())) {
+        date = new Date();
+      }
+      
+      return date.toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      console.error('formatTime error:', error, 'timestamp:', timestamp);
+      // エラーが発生した場合は現在時刻を返す
+      return new Date().toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
   };
 
   // 履歴セッション選択時の処理
@@ -471,7 +504,7 @@ const AIChat: React.FC<AIChatProps> = ({
       id: item.id.toString(),
       role: item.sender === 'user' ? 'user' : 'assistant',
       content: item.message,
-      timestamp: new Date(item.created_at),
+      timestamp: item.created_at ? new Date(item.created_at) : new Date(),
     }));
     
     setMessages(historyMessages);
@@ -611,7 +644,14 @@ const AIChat: React.FC<AIChatProps> = ({
                       color="text.secondary"
                       sx={{ mb: 0.5 }}
                     >
-                      {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {formatTime(message.timestamp)}
+                      {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {(() => {
+                        try {
+                          return formatTime(message.timestamp);
+                        } catch (error) {
+                          console.error('Timestamp formatting error:', error, 'message:', message);
+                          return '時刻不明';
+                        }
+                      })()}
                     </Typography>
                     
                     <Box

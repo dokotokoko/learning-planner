@@ -437,7 +437,7 @@ const StepPage: React.FC = () => {
         theme: theme || '（未設定）'
       });
 
-      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
     const response = await fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
