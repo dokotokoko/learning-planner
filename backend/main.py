@@ -58,7 +58,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", 
         "http://localhost:3000",
-        os.environ.get("ENGROK_ENDPOINT")
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "https://demo.tanqmates.org"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -409,8 +411,10 @@ async def login(user_data: UserLogin):
         
         user = result.data[0]
         
-        # アクセスコード確認（実際の実装では暗号化）
-        if user_data.access_code != "test123":
+        # パスワード確認
+        # 注意: 本番環境では必ずパスワードをハッシュ化して比較してください
+        result_password = supabase.table("users").select("password").eq("id", user["id"]).execute()
+        if not result_password.data or result_password.data[0]["password"] != user_data.access_code:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="ユーザー名またはアクセスコードが正しくありません"
