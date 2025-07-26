@@ -9,6 +9,7 @@ psycopg2-binary==2.9.10
 
 # AI関連
 openai==1.61.1
+tiktoken==0.8.0
 
 # ユーティリティ
 python-dotenv==1.0.1
