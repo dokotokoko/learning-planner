@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// https://vitejs.dev/config/
+// Docker環境専用のVite設定
 export default defineConfig({
   plugins: [
     react(),
@@ -50,26 +50,46 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
-    allowedHosts: [
-      'mammoth-enabled-bird.ngrok-free.app',
-      'localhost',
-      '127.0.0.1',
-      'demo.tanqmates.org'
-    ],
     watch: {
-      // ポーリングを使用してファイル監視のメモリ使用量を削減
+      // Docker環境でのファイル監視設定
       usePolling: true,
-      interval: 1000,
-      // 無視するパスを追加
-      ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/coverage/**'],
+      interval: 2000, // ポーリング間隔を長めに設定
+      depth: 2, // 監視の深さを制限
+      // 大きなディレクトリを除外
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/coverage/**',
+        '**/public/assets/**',
+        '**/*.log',
+        '**/.DS_Store',
+        '**/tmp/**'
+      ],
     },
     fs: {
-      // ファイルシステムの監視を制限
       strict: true,
+      // シンボリックリンクを無視
+      allow: ['.'],
     },
   },
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // メモリ使用量を削減
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'mui-vendor': ['@mui/material', '@mui/icons-material'],
+          'utils': ['lodash', 'date-fns', 'marked'],
+        },
+      },
+    },
   },
-}); 
+  // 最適化設定
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
+    exclude: ['@vite-pwa/assets-generator'],
+  },
+});

@@ -18,6 +18,9 @@ COPY . .
 # ポート3000を公開
 EXPOSE 3000
 
+# Docker環境用のVite設定ファイルをコピー
+RUN mv vite.config.docker.ts vite.config.ts || true
+
 # 開発サーバー起動用のコマンド（修正版）
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000", "--strictPort"]
 

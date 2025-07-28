@@ -14,6 +14,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { AnimatePresence } from 'framer-motion';
 import AIChat from '../components/MemoChat/AIChat';
+import { supabase } from '../lib/supabase';
 
 const GeneralInquiryPage: React.FC = () => {
   const { isChatOpen, toggleChat } = useChatStore();
@@ -25,6 +26,59 @@ const GeneralInquiryPage: React.FC = () => {
       setTimeout(() => toggleChat(), 500);
     }
   }, [user, isChatOpen, toggleChat]);
+
+  // 自動保存機能
+  const handleAutoSave = async (content: string) => {
+    try {
+      const userId = user?.id;
+      if (!userId) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // 既存のメモを確認
+      const { data: existingMemo, error: fetchError } = await supabase
+        .from('user_memos')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('page_id', 'general-inquiry')
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      const now = new Date().toISOString();
+
+      if (existingMemo) {
+        // 既存のメモを更新
+        const { error: updateError } = await supabase
+          .from('user_memos')
+          .update({
+            content: content,
+            updated_at: now,
+          })
+          .eq('id', existingMemo.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // 新規メモを作成
+        const { error: insertError } = await supabase
+          .from('user_memos')
+          .insert({
+            user_id: userId,
+            page_id: 'general-inquiry',
+            content: content,
+            created_at: now,
+            updated_at: now,
+          });
+
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      console.error('自動保存エラー:', error);
+      throw error;
+    }
+  };
 
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
@@ -177,6 +231,8 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
           memoPlaceholder="相談したい内容や疑問をメモしてください..."
           chatPlaceholder="AIに相談してください..."
           onMessageSend={handleAIMessage}
+          onAutoSave={handleAutoSave}
+          autoSaveDelay={2000}
         />
 
         {/* AIチャット */}

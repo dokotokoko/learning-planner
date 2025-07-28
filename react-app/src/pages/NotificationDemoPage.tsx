@@ -22,6 +22,7 @@ import AIChat from '../components/MemoChat/AIChat';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../components/SmartNotificationManager';
 import LearningNotifications from '../components/LearningNotifications';
 import { useNotifications } from '../hooks/useNotifications';
+import { AI_INITIAL_MESSAGE } from '../constants/aiMessages';
 
 const NotificationDemoPage: React.FC = () => {
   const [demoStep, setDemoStep] = useState(0);
@@ -256,7 +257,7 @@ const NotificationDemoPage: React.FC = () => {
                 <AIChat
                   pageId="notification-demo"
                   title="通知デモ"
-                  initialMessage="こんにちは！通知機能のデモページです。いろいろ話しかけてみてください。特に「わからない」「複雑」「でも」などの言葉を使うと思考停滞が検出されます。"
+                  initialMessage={AI_INITIAL_MESSAGE}
                   enableSmartNotifications={true}
                   loadHistoryFromDB={false}
                 />

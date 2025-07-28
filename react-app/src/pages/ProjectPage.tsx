@@ -38,7 +38,6 @@ import { ja } from 'date-fns/locale';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
-import AIChat from '../components/MemoChat/AIChat';
 
 interface Project {
   id: number;
@@ -63,7 +62,7 @@ const ProjectPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const { user } = useAuthStore();
-  const { isChatOpen, toggleChat } = useChatStore();
+  const { isChatOpen, toggleChat, setCurrentProject } = useChatStore();
 
   const [project, setProject] = useState<Project | null>(null);
   const [memos, setMemos] = useState<Memo[]>([]);
@@ -75,10 +74,6 @@ const ProjectPage: React.FC = () => {
   const [editingField, setEditingField] = useState<'question' | 'hypothesis' | null>(null);
   const [editingValue, setEditingValue] = useState('');
 
-  // AIチャット関連 - デフォルト値を設定
-  const chatPageId = projectId ? `project-${projectId}` : 'project';
-  const currentMemoTitle = project?.theme || '';
-  const currentMemoContent = '';
 
   // プロジェクト情報の取得
   const fetchProject = async () => {
@@ -128,8 +123,10 @@ const ProjectPage: React.FC = () => {
     if (projectId) {
       fetchProject();
       fetchMemos();
+      // Layout.tsxのAIチャット用にプロジェクトIDを設定
+      setCurrentProject(projectId);
     }
-  }, [projectId]);
+  }, [projectId, setCurrentProject]);
 
   // AIチャットをデフォルトで開く
   useEffect(() => {
@@ -567,37 +564,6 @@ const ProjectPage: React.FC = () => {
           </Box>
         )}
 
-        {/* AIチャット */}
-        <AnimatePresence>
-          {isChatOpen && (
-            <motion.div
-              initial={{ opacity: 0, x: 300 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 300 }}
-              transition={{ duration: 0.3 }}
-              style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                width: '400px',
-                height: '100vh',
-                zIndex: 1300,
-                background: 'white',
-                boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
-              }}
-            >
-              <AIChat
-                pageId={chatPageId}
-                title="探究アシスタント"
-                currentMemoTitle={currentMemoTitle}
-                currentMemoContent={currentMemoContent}
-                onClose={toggleChat}
-                persistentMode={true}
-                enableSmartNotifications={true}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* メニュー */}
         <Menu

@@ -11,6 +11,7 @@ interface ChatMessage {
 interface ChatState {
   // チャットUI状態
   isChatOpen: boolean;
+  isHydrated: boolean; // Zustand persistの復元完了フラグ
   
   // 現在のコンテキスト
   currentProjectId: string | null;
@@ -41,8 +42,9 @@ interface ChatState {
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
-      // 初期状態（デフォルトでAIチャットを開く）
-      isChatOpen: true,
+      // 初期状態（persistから復元されるまでは閉じておく）
+      isChatOpen: false,
+      isHydrated: false,
       currentProjectId: null,
       currentMemoId: null,
       currentMemoTitle: '',
@@ -127,6 +129,12 @@ export const useChatStore = create<ChatState>()(
         currentProjectId: state.currentProjectId,
         messageHistory: state.messageHistory,
       }),
+      onRehydrateStorage: () => (state) => {
+        // persistの復元が完了したらフラグを立てる
+        if (state) {
+          state.isHydrated = true;
+        }
+      },
     }
   )
 ); 

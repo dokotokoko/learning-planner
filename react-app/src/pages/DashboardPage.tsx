@@ -43,7 +43,6 @@ import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
-import AIChat from '../components/MemoChat/AIChat';
 import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
 import { simpleSteps } from '../components/Tutorial/DashboardTutorial';
 
@@ -63,7 +62,7 @@ const DashboardPage: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user, isNewUser } = useAuthStore();
-  const { isChatOpen, toggleChat } = useChatStore();
+  const { isChatOpen, toggleChat, clearCurrentMemo } = useChatStore();
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,8 +115,11 @@ const DashboardPage: React.FC = () => {
     localStorage.setItem(`tutorial-shown-${userId}`, 'true');
   };
 
-  // 初回ログイン時にチュートリアルを自動開始とAIチャットを開く
+  // ダッシュボードページ初期化時の処理
   useEffect(() => {
+    // メモ情報をクリアしてLayout.tsxのAIチャットを汎用モードにする
+    clearCurrentMemo();
+    
     // 初回ログイン時かつチュートリアル未表示の場合のみチュートリアルを開始
     if (isNewUser() && !getTutorialShownFlag()) {
       setTimeout(() => {
@@ -130,7 +132,7 @@ const DashboardPage: React.FC = () => {
     if (user && !isChatOpen && !hasUserToggledChat) {
       setTimeout(() => toggleChat(), 500);
     }
-  }, [user, isChatOpen, toggleChat, hasUserToggledChat]);
+  }, [user, isChatOpen, toggleChat, hasUserToggledChat, clearCurrentMemo]);
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
@@ -588,36 +590,6 @@ const DashboardPage: React.FC = () => {
           )}
         </Box>
 
-        {/* AIチャット */}
-        <AnimatePresence>
-          {isChatOpen && (
-            <motion.div
-              initial={{ opacity: 0, x: 300 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 300 }}
-              transition={{ duration: 0.3 }}
-              data-tutorial="ai-chat-panel"
-              style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                width: isMobile ? '100vw' : isTablet ? '350px' : '400px',
-                height: '100vh',
-                zIndex: 1300,
-                background: 'white',
-                boxShadow: '-4px 0 20px rgba(0,0,0,0.15)',
-              }}
-            >
-              <AIChat
-                pageId="dashboard"
-                title="探究ダッシュボード"
-                onClose={toggleChat}
-                persistentMode={true}
-                enableSmartNotifications={true}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ダイアログ */}
         <CreateProjectDialog

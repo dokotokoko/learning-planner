@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -45,6 +45,8 @@ interface MemoChatProps {
   onMessageSend?: (message: string, memoContent: string) => Promise<string>;
   sidebarOpen?: boolean;
   onSidebarToggle?: () => void;
+  onAutoSave?: (content: string) => Promise<void>;
+  autoSaveDelay?: number;
 }
 
 const MemoChat: React.FC<MemoChatProps> = ({
@@ -57,6 +59,8 @@ const MemoChat: React.FC<MemoChatProps> = ({
   onMessageSend,
   sidebarOpen = true,
   onSidebarToggle,
+  onAutoSave,
+  autoSaveDelay = 2000,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -67,9 +71,13 @@ const MemoChat: React.FC<MemoChatProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(true);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedContent, setLastSavedContent] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const memoRef = useRef<HTMLDivElement>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 初期メッセージの設定
   useEffect(() => {
@@ -83,28 +91,77 @@ const MemoChat: React.FC<MemoChatProps> = ({
     }
   }, [initialMessage]);
 
+  // コンポーネントのアンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
   // チャット自動スクロール
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // 自動保存の実行
+  const performAutoSave = useCallback(async (content: string) => {
+    if (!onAutoSave || content === lastSavedContent) return;
+    
+    setIsSaving(true);
+    setSaveError(null);
+    
+    try {
+      await onAutoSave(content);
+      setLastSavedContent(content);
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+      setSaveError('自動保存に失敗しました');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [onAutoSave, lastSavedContent]);
+
+  // デバウンスされた自動保存
+  const debouncedAutoSave = useCallback((content: string) => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    autoSaveTimerRef.current = setTimeout(() => {
+      performAutoSave(content);
+    }, autoSaveDelay);
+  }, [performAutoSave, autoSaveDelay]);
 
   // メモ内容変更時の処理
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const content = event.target.value;
     setMemoContent(content);
     onMemoChange?.(content);
+    
+    // 自動保存をトリガー
+    if (onAutoSave) {
+      debouncedAutoSave(content);
+    }
   };
 
   // メモクリア
   const handleMemoClear = () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
     setMemoContent('');
     onMemoChange?.('');
+    setSaveError(null);
   };
 
-  // メモ保存
-  const handleMemoSave = () => {
-    // TODO: DBに保存する処理
-    console.log('Memo saved:', memoContent);
+  // 手動保存
+  const handleMemoSave = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    await performAutoSave(memoContent);
   };
 
   // メッセージ送信
@@ -216,6 +273,21 @@ const MemoChat: React.FC<MemoChatProps> = ({
                 <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
                   {memoTitle}
                 </Typography>
+                {isSaving && (
+                  <Typography variant="caption" sx={{ mr: 2, color: 'text.secondary' }}>
+                    保存中...
+                  </Typography>
+                )}
+                {!isSaving && lastSavedContent === memoContent && memoContent !== '' && (
+                  <Typography variant="caption" sx={{ mr: 2, color: 'success.main' }}>
+                    保存済み
+                  </Typography>
+                )}
+                {saveError && (
+                  <Typography variant="caption" sx={{ mr: 2, color: 'error.main' }}>
+                    {saveError}
+                  </Typography>
+                )}
                 <Tooltip title="メモをクリア" arrow>
                   <IconButton onClick={handleMemoClear} size="small" sx={{ mr: 1 }}>
                     <ClearIcon />
@@ -464,6 +536,21 @@ const MemoChat: React.FC<MemoChatProps> = ({
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
             {memoTitle}
           </Typography>
+          {isSaving && (
+            <Typography variant="caption" sx={{ mr: 2, color: 'text.secondary' }}>
+              保存中...
+            </Typography>
+          )}
+          {!isSaving && lastSavedContent === memoContent && memoContent !== '' && (
+            <Typography variant="caption" sx={{ mr: 2, color: 'success.main' }}>
+              保存済み
+            </Typography>
+          )}
+          {saveError && (
+            <Typography variant="caption" sx={{ mr: 2, color: 'error.main' }}>
+              {saveError}
+            </Typography>
+          )}
           <IconButton 
             onClick={() => setIsChatExpanded(!isChatExpanded)}
             size="small"

@@ -40,6 +40,7 @@ import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
 import QuestSuggestion from './QuestSuggestion';
 import QuestBoardPage from '../../pages/QuestBoardPage';
+import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 
 const drawerWidth = 280;
 const tabletDrawerWidth = 240;
@@ -70,12 +71,27 @@ const Layout: React.FC = () => {
   const { user, logout } = useAuthStore();
   const { 
     isChatOpen, 
+    isHydrated,
     toggleChat, 
     chatPageId, 
     currentMemoTitle, 
     currentMemoContent,
     currentProjectId 
   } = useChatStore();
+
+  // 現在のページに基づくチャットページIDを生成
+  const getEffectiveChatPageId = () => {
+    if (chatPageId) return chatPageId;
+    
+    // プロジェクトページの場合
+    const projectMatch = location.pathname.match(/\/projects\/(\d+)/);
+    if (projectMatch) {
+      return `project-${projectMatch[1]}`;
+    }
+    
+    // ダッシュボードやその他のページの場合
+    return `general-${location.pathname.replace(/\//g, '-')}`;
+  };
   const { startTutorialManually } = useTutorialStore();
   
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -160,7 +176,7 @@ const Layout: React.FC = () => {
   // ウィンドウリサイズ時のチャット幅調整
   useEffect(() => {
     const handleWindowResize = () => {
-      if (!isChatOpen) return;
+      if (!isHydrated || !isChatOpen) return;
       
       const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
       const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
@@ -173,7 +189,7 @@ const Layout: React.FC = () => {
 
     window.addEventListener('resize', handleWindowResize);
     return () => window.removeEventListener('resize', handleWindowResize);
-  }, [isChatOpen, sidebarOpen, chatSidebarWidth]);
+  }, [isHydrated, isChatOpen, sidebarOpen, chatSidebarWidth]);
 
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
@@ -211,7 +227,7 @@ const Layout: React.FC = () => {
         body: JSON.stringify({
           message: message,
           memo_content: contextContent,
-          page_id: chatPageId,
+          page_id: getEffectiveChatPageId(),
         }),
       });
 
@@ -250,7 +266,7 @@ const Layout: React.FC = () => {
               探Qメイト
             </Typography>
             <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
-              探究学習支援アプリ
+              あなたの学びのパートナー
             </Typography>
           </Box>
           <IconButton
@@ -318,7 +334,7 @@ const Layout: React.FC = () => {
       <Box sx={{ p: 2 }}>
         <Card 
           sx={{ 
-            bgcolor: isChatOpen ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
+            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
             borderRadius: 2,
             cursor: 'pointer',
             '&:hover': {
@@ -444,7 +460,7 @@ const Layout: React.FC = () => {
             width: '100%',
             height: 48,
             borderRadius: 2,
-            bgcolor: isChatOpen ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
+            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
             color: 'primary.main',
             '&:hover': {
               bgcolor: 'rgba(5, 155, 255, 0.2)',
@@ -542,7 +558,7 @@ const Layout: React.FC = () => {
               xs: '100%',
               sm: (() => {
                 const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-                const rightWidth = isChatOpen ? chatSidebarWidth : 0;
+                const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidth : 0;
                 return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
               })()
             },
@@ -574,7 +590,7 @@ const Layout: React.FC = () => {
 
         {/* Right Chat Sidebar */}
         <AnimatePresence>
-          {isChatOpen && (
+          {isHydrated && isChatOpen && (
             <Box
               component={motion.div}
               initial={{ width: 0 }}
@@ -648,11 +664,6 @@ const Layout: React.FC = () => {
                     <Typography variant="h6" fontWeight={600}>
                       AIアシスタント
                     </Typography>
-                    {currentMemoTitle && (
-                      <Typography variant="body2" color="text.secondary">
-                        現在のメモ: {currentMemoTitle}
-                      </Typography>
-                    )}
                   </Box>
                   <IconButton onClick={toggleChat} size="small">
                     <ChevronRight />
@@ -661,42 +672,14 @@ const Layout: React.FC = () => {
 
                 {/* Chat Content */}
                 <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  {currentProjectId && chatPageId ? (
-                    <AIChat
-                      pageId={chatPageId}
-                      title="AIアシスタント"
-                      currentMemoContent={currentMemoContent}
-                      currentMemoTitle={currentMemoTitle}
-                      persistentMode={true}
-                      loadHistoryFromDB={true}
-                      onMessageSend={handleAIMessage}
-                      initialMessage={`こんにちは！探究学習をサポートします。
-
-${currentMemoTitle ? `現在「${currentMemoTitle}」を開いています。` : 'メモを開くと、その内容を参考にしながら'}以下のようなサポートができます：
-
-• **内容の深掘り**: アイデアをさらに発展させる提案
-• **構造化のアドバイス**: 情報をより分かりやすく整理する方法  
-• **関連情報の提案**: 追加で調べると良い情報や資料
-• **探究の方向性**: 学習をより深めるためのアプローチ
-
-どのようなことでお困りですか？`}
-                    />
-                  ) : (
-                    <Box sx={{ 
-                      p: 3, 
-                      textAlign: 'center',
-                      color: 'text.secondary',
-                      mt: 4,
-                    }}>
-                      <ChatIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                      <Typography variant="body1">
-                        プロジェクトを選択してください
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        メモを開くとAIチャットが利用できます
-                      </Typography>
-                    </Box>
-                  )}
+                  <AIChat
+                    pageId={getEffectiveChatPageId()}
+                    title="AIアシスタント"
+                    persistentMode={true}
+                    loadHistoryFromDB={true}
+                    onMessageSend={handleAIMessage}
+                    initialMessage={AI_INITIAL_MESSAGE}
+                  />
                 </Box>
               </Box>
             </Box>

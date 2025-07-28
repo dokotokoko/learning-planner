@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 import { useChatStore } from '../../stores/chatStore';
+import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 
 interface Message {
   id: string;
@@ -96,33 +97,9 @@ const AIChat: React.FC<AIChatProps> = ({
   // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
   const initializationKeyRef = useRef(pageId);
 
-  // デフォルトの初期メッセージを生成する関数
+  // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
-    const currentTime = new Date().getHours();
-    let timeGreeting = '';
-    
-    if (currentTime < 12) {
-      timeGreeting = 'おはようございます！';
-    } else if (currentTime < 18) {
-      timeGreeting = 'こんにちは！';
-    } else {
-      timeGreeting = 'こんばんは！';
-    }
-
-    return `${timeGreeting} 探QメイトのAIアシスタントです！ 🚀
-
-探Qメイトの特徴
-① 🤖 AIアシスタントがあなたの探求を伴走！
-② 📝 ノートで思考を整理・保存
-
-
-探Qメイトと一緒なら...
-• 探究で立ち止まった時にAIに相談して前に進める！
-• 探究の中での思考をノートに記録しておける
-
-さあ、あなたの探究学習を始めよう！🔥
-
-あなたの興味や疑問から、素晴らしい探究の旅が始まります。どんなことでもお聞かせください！ 🌟`;
+    return AI_INITIAL_MESSAGE;
   };
 
   // スクロール位置の監視
@@ -283,14 +260,6 @@ const AIChat: React.FC<AIChatProps> = ({
         initialMessages.push({
           id: `initial-${Date.now()}`,
           role: 'assistant',
-          content: initialMessage,
-          timestamp: new Date(),
-        });
-      } else {
-        // デフォルトの初期メッセージを追加
-        initialMessages.push({
-          id: `initial-${Date.now()}`,
-          role: 'assistant',
           content: getDefaultInitialMessage(),
           timestamp: new Date(),
         });
@@ -414,7 +383,7 @@ const AIChat: React.FC<AIChatProps> = ({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: aiResponse,
-        timestamp: new Date(),
+        timestamp: new Date(),  
       };
 
       setMessages(prev => [...prev, assistantMessage]);
