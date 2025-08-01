@@ -217,7 +217,7 @@ const Layout: React.FC = () => {
       const contextContent = currentMemoContent || memoContent;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-    const response = await fetch(`${apiBaseUrl}/chat`, {
+      const response = await fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -232,7 +232,21 @@ const Layout: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // より詳細なエラー情報を取得
+        let errorDetail = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorDetail += ` - ${JSON.stringify(errorData)}`;
+        } catch (e) {
+          // JSON解析に失敗した場合はテキストで取得
+          try {
+            const errorText = await response.text();
+            errorDetail += ` - ${errorText}`;
+          } catch (e2) {
+            // 何も取得できない場合
+          }
+        }
+        throw new Error(errorDetail);
       }
 
       const data = await response.json();

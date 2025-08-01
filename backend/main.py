@@ -8,7 +8,7 @@ import sys
 import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 import uvicorn
 from supabase import create_client, Client
@@ -19,8 +19,8 @@ import time
 # .envファイルを読み込み
 load_dotenv()
 
-# メモリ管理システムをインポート
-from memory_manager import MemoryManager, MessageImportance
+# メモリ管理システムをインポート（使用しない）
+# from memory_manager import MemoryManager, MessageImportance
 
 # プロジェクトルートをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -95,6 +95,8 @@ class ChatMessage(BaseModel):
     message: str
     context: Optional[str] = None
     page: Optional[str] = "general"
+    page_id: Optional[str] = None  # フロントエンドとの互換性のため
+    memo_content: Optional[str] = None  # Layout.tsxから送られるフィールド
 
 class ChatResponse(BaseModel):
     response: str
@@ -116,7 +118,7 @@ class ConversationResponse(BaseModel):
     page_id: str
     message_count: int
     last_message: str
-    last_updated: str
+    updated_at: str  # last_updated → updated_at に変更
     created_at: str
 
 # メモ関連
@@ -236,7 +238,7 @@ class AdminUserCreate(BaseModel):
 # === グローバル変数 ===
 llm_client = None
 supabase: Client = None
-memory_manager: MemoryManager = None
+# memory_manager: MemoryManager = None  # 使用しない
 
 @app.on_event("startup")
 async def startup_event():
@@ -254,11 +256,11 @@ async def startup_event():
         supabase = create_client(supabase_url, supabase_key)
         
         # LLMクライアント初期化
-        llm_client = learning_plannner
+        llm_client = learning_plannner()
         
-        # メモリ管理システム初期化
-        global memory_manager
-        memory_manager = MemoryManager(model="gpt-4.1-nano", max_messages=100)
+        # メモリ管理システム初期化（使用しない）
+        # global memory_manager
+        # memory_manager = MemoryManager(model="gpt-4.1-nano", max_messages=100)
         
         logger.info("アプリケーション初期化完了（最適化版）")
         
@@ -334,53 +336,46 @@ def get_cached_result(table: str, user_id: int, cache_key: str):
 
 def handle_database_error(error: Exception, operation: str):
     """データベースエラーのハンドリング"""
+    error_detail = f"{operation}でエラーが発生しました: {str(error)}"
     logger.error(f"データベースエラー - {operation}: {error}")
+    print(f"Database Error - {operation}: {error}")
+    import traceback
+    print(f"Database Error Traceback: {traceback.format_exc()}")
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"{operation}でエラーが発生しました"
+        detail=error_detail
     )
 
 async def get_or_create_conversation(user_id: int, page_id: str) -> str:
-    """会話の取得または作成（非同期最適化版）"""
-    validate_supabase()
-    
+    """ページに対応するconversationを取得または作成"""
     try:
-        # 既存の会話を検索
-        result = supabase.table("chat_conversations").select("id").eq("user_id", user_id).eq("page_id", page_id).limit(1).execute()
+        # 既存のconversationを探す
+        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", page_id).execute()
         
-        if result.data:
-            return result.data[0]["id"]
-        
-        # 新しい会話を作成
-        conversation_data = {
-            "user_id": user_id,
-            "page_id": page_id,
-            "title": f"Page {page_id} Conversation",
-            "created_at": datetime.now().isoformat(),
-            "last_updated": datetime.now().isoformat()
-        }
-        
-        result = supabase.table("chat_conversations").insert(conversation_data).execute()
-        
-        if result.data:
-            return result.data[0]["id"]
+        if existing_conv.data:
+            return existing_conv.data[0]["id"]
         else:
-            raise Exception("会話の作成に失敗しました")
-            
+            # 新しいconversationを作成
+            title = f"{page_id}での相談"
+            new_conv_data = {
+                "user_id": user_id,
+                "title": title,
+                "page_id": page_id
+            }
+            new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
+            return new_conv.data[0]["id"] if new_conv.data else None
     except Exception as e:
-        handle_database_error(e, "会話の取得または作成")
+        logger.error(f"conversation取得/作成エラー: {e}")
+        raise
 
 async def update_conversation_timestamp(conversation_id: str):
-    """会話のタイムスタンプ更新（非同期最適化版）"""
-    validate_supabase()
-    
+    """conversationの最終更新時刻を更新"""
     try:
         supabase.table("chat_conversations").update({
-            "last_updated": datetime.now().isoformat()
+            "updated_at": datetime.now().isoformat()
         }).eq("id", conversation_id).execute()
-        
     except Exception as e:
-        logger.warning(f"会話タイムスタンプ更新エラー: {e}")
+        logger.error(f"conversation timestamp更新エラー: {e}")
 
 # === エンドポイント実装 ===
 
@@ -503,39 +498,33 @@ async def chat_with_ai(
             )
         
         # conversationを取得または作成
-        page_id = chat_data.page or "general"
+        # page_idが送られてきた場合はそれを使用、なければpageを使用
+        page_id = chat_data.page_id or chat_data.page or "general"
         conversation_id = await get_or_create_conversation(current_user, page_id)
         
         # 過去の対話履歴を取得（拡張：50-100メッセージ）
         history_limit = 100  # Phase 1: 履歴ウィンドウを拡張
         history_response = supabase.table("chat_logs").select("id, sender, message, created_at, context_data").eq("conversation_id", conversation_id).order("created_at").limit(history_limit).execute()
-        conversation_history = history_response.data
+        conversation_history = history_response.data if history_response.data is not None else []
+
+        if conversation_history is None:
+            # エラーログを残す
+            print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
         
-        # メモリ管理システムでコンテキストを最適化
-        if memory_manager and conversation_history:
-            # 現在のメッセージも含めて最適化
-            all_messages = conversation_history + [{
-                "id": 0,
-                "sender": "user",
-                "message": chat_data.message,
-                "created_at": datetime.now().isoformat()
-            }]
-            optimized_messages = memory_manager.optimize_context_window(all_messages)
-            
-            # システムプロンプトを追加
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.extend(optimized_messages)
-            
-            # 会話のメタデータを生成
-            context_metadata = memory_manager.get_conversation_metadata(all_messages)
-        else:
-            # フォールバック：従来の処理
-            messages = [{"role": "system", "content": system_prompt}]
+        # メッセージの準備
+        messages = [{"role": "system", "content": system_prompt}]
+        if conversation_history:  # None または空リストのチェック
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
                 messages.append({"role": role, "content": history_msg["message"]})
-            messages.append({"role": "user", "content": chat_data.message})
-            context_metadata = None
+        
+        # メモコンテンツがある場合は、ユーザーメッセージにコンテキストとして追加
+        user_message = chat_data.message
+        #if chat_data.memo_content:
+        #    user_message = f"【メモコンテンツ】\n{chat_data.memo_content}\n\n【質問】\n{chat_data.message}"
+        
+        messages.append({"role": "user", "content": user_message})
+        context_metadata = None
         
         # ユーザーメッセージをDBに保存（拡張：メタデータ付き）
         user_message_data = {
@@ -545,21 +534,16 @@ async def chat_with_ai(
             "message": chat_data.message,
             "conversation_id": conversation_id,
             "context_data": json.dumps({
-                "token_count": memory_manager.token_manager.count_tokens(chat_data.message) if memory_manager else None,
-                "timestamp": datetime.now().isoformat()
-            }) if memory_manager else None
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         }
         supabase.table("chat_logs").insert(user_message_data).execute()
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
         
-        # トークン使用量を計算
+        # トークン使用量を計算（使用しない）
         token_usage = None
-        if memory_manager:
-            input_tokens = memory_manager.token_manager.count_messages_tokens(messages)
-            output_tokens = memory_manager.token_manager.count_tokens(response)
-            token_usage = memory_manager.token_manager.estimate_cost(input_tokens, output_tokens)
         
         # AIの応答をDBに保存（拡張：メタデータ付き）
         ai_message_data = {
@@ -569,41 +553,33 @@ async def chat_with_ai(
             "message": response,
             "conversation_id": conversation_id,
             "context_data": json.dumps({
-                "token_count": output_tokens if memory_manager else None,
-                "token_usage": token_usage,
-                "timestamp": datetime.now().isoformat()
-            }) if memory_manager else None
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         }
         supabase.table("chat_logs").insert(ai_message_data).execute()
         
         # conversationの最終更新時刻を更新
-        await update_conversation_timestamp(conversation_id)
+        try:
+            await update_conversation_timestamp(conversation_id)
+        except Exception as e:
+            # タイムスタンプ更新エラーは警告ログのみ（チャット自体は正常に処理）
+            logger.warning(f"conversation timestamp update failed: {e}")
         
-        # トークン使用履歴を記録
-        if memory_manager and token_usage:
-            try:
-                usage_data = {
-                    "user_id": current_user,
-                    "conversation_id": conversation_id,
-                    "input_tokens": token_usage["input_tokens"],
-                    "output_tokens": token_usage["output_tokens"],
-                    "total_tokens": token_usage["input_tokens"] + token_usage["output_tokens"],
-                    "estimated_cost_usd": token_usage["total_cost"],
-                    "model_name": "gpt-4.1-nano"
-                }
-                supabase.table("token_usage_history").insert(usage_data).execute()
-            except Exception as e:
-                logger.warning(f"トークン使用履歴の記録に失敗: {e}")
+        # トークン使用履歴を記録（使用しない）
         
         return ChatResponse(
             response=response,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             token_usage=token_usage,
             context_metadata=context_metadata
         )
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Chat API Error: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         handle_database_error(e, "AI応答の生成")
 
 @app.get("/chat/history", response_model=List[ChatHistoryResponse])
@@ -664,7 +640,7 @@ async def get_chat_conversations(
                 page_id=conv.get("page_id", "unknown"),
                 message_count=message_count,
                 last_message=last_message,
-                last_updated=conv["updated_at"],
+                updated_at=conv["updated_at"],
                 created_at=conv["created_at"]
             ))
         
@@ -705,7 +681,7 @@ async def save_memo(
                 id=memo_id,
                 page_id=memo_data.page_id,
                 content=memo_data.content,
-                updated_at=datetime.now().isoformat()
+                updated_at=datetime.now(timezone.utc).isoformat()
             )
         else:
             raise HTTPException(status_code=500, detail="メモの保存に失敗しました")
@@ -731,7 +707,7 @@ async def get_memo(
                 id=memo["id"],
                 page_id=page_id,
                 content=memo["content"] or "",
-                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now().isoformat()
+                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
             )
         else:
             # メモが存在しない場合は空のメモを返す
@@ -739,7 +715,7 @@ async def get_memo(
                 id=0,
                 page_id=page_id,
                 content="",
-                updated_at=datetime.now().isoformat()
+                updated_at=datetime.now(timezone.utc).isoformat()
             )
     except HTTPException:
         raise
@@ -759,7 +735,7 @@ async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
                 id=memo["id"],
                 page_id=memo["page_id"],
                 content=memo["content"] or "",
-                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now().isoformat()
+                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
             )
             for memo in result.data
         ]
@@ -1180,260 +1156,12 @@ async def save_theme_selection(
         )
 
 # =============================================================================
-# メモリ管理API（Phase 1）
+# メモリ管理API（Phase 1）- 削除済み
 # =============================================================================
 
-@app.get("/memory/conversation/{conversation_id}/metadata")
-async def get_conversation_metadata(
-    conversation_id: str,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """会話のメタデータを取得"""
-    try:
-        validate_supabase()
-        
-        # 会話の所有者確認
-        conv_result = supabase.table("chat_conversations").select("user_id").eq("id", conversation_id).execute()
-        if not conv_result.data or conv_result.data[0]["user_id"] != current_user:
-            raise HTTPException(status_code=404, detail="会話が見つかりません")
-        
-        # メッセージを取得
-        messages_result = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at").execute()
-        
-        if memory_manager and messages_result.data:
-            metadata = memory_manager.get_conversation_metadata(messages_result.data)
-            return metadata
-        else:
-            return {"message": "メタデータを生成できませんでした"}
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_database_error(e, "会話メタデータの取得")
+# メモリ管理関連のエンドポイントは使用しないため削除しました
 
-@app.post("/memory/conversation/{conversation_id}/summarize")
-async def create_conversation_summary(
-    conversation_id: str,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """会話の要約を作成"""
-    try:
-        validate_supabase()
-        
-        # 会話の所有者確認
-        conv_result = supabase.table("chat_conversations").select("user_id").eq("id", conversation_id).execute()
-        if not conv_result.data or conv_result.data[0]["user_id"] != current_user:
-            raise HTTPException(status_code=404, detail="会話が見つかりません")
-        
-        # メッセージを取得
-        messages_result = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at").execute()
-        
-        if not messages_result.data:
-            raise HTTPException(status_code=400, detail="要約するメッセージがありません")
-        
-        # 重要なメッセージを抽出して要約を作成
-        if memory_manager:
-            enhanced_messages = [memory_manager.process_message(msg) for msg in messages_result.data]
-            
-            # 重要度が高いメッセージを選択
-            important_messages = [msg for msg in enhanced_messages if msg.importance.value >= MessageImportance.HIGH.value]
-            
-            if not important_messages:
-                important_messages = enhanced_messages[:10]  # 最新10件
-            
-            # 要約テキストを生成（簡易版）
-            summary_parts = []
-            keywords = set()
-            
-            for msg in important_messages[:5]:  # 最大5件
-                if msg.summary:
-                    summary_parts.append(f"- {msg.summary}")
-                else:
-                    summary_parts.append(f"- {msg.message[:100]}...")
-                keywords.update(msg.keywords)
-            
-            summary_text = "\n".join(summary_parts)
-            
-            # DBに保存
-            summary_data = {
-                "conversation_id": conversation_id,
-                "summary_type": "auto-generated",
-                "summary_text": summary_text,
-                "keywords": list(keywords)[:20],
-                "token_count": memory_manager.token_manager.count_tokens(summary_text)
-            }
-            
-            result = supabase.table("conversation_summaries").insert(summary_data).execute()
-            
-            if result.data:
-                return {
-                    "summary": summary_text,
-                    "keywords": list(keywords)[:20],
-                    "message_count": len(messages_result.data),
-                    "important_message_count": len(important_messages)
-                }
-        
-        raise HTTPException(status_code=500, detail="要約の作成に失敗しました")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_database_error(e, "会話要約の作成")
-
-@app.get("/memory/user/profile")
-async def get_user_learning_profile(
-    current_user: int = Depends(get_current_user_cached)
-):
-    """ユーザーの学習プロファイルを取得"""
-    try:
-        validate_supabase()
-        
-        # プロファイルを取得または作成
-        result = supabase.table("user_learning_profiles").select("*").eq("user_id", current_user).execute()
-        
-        if result.data:
-            return result.data[0]
-        else:
-            # 新規作成
-            new_profile = {
-                "user_id": current_user,
-                "interests": [],
-                "important_topics": [],
-                "learning_style": {},
-                "token_usage_stats": {}
-            }
-            
-            create_result = supabase.table("user_learning_profiles").insert(new_profile).execute()
-            
-            if create_result.data:
-                return create_result.data[0]
-            else:
-                raise HTTPException(status_code=500, detail="プロファイルの作成に失敗しました")
-                
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_database_error(e, "学習プロファイルの取得")
-
-@app.post("/memory/user/profile/update")
-async def update_user_learning_profile(
-    profile_data: Dict[str, Any],
-    current_user: int = Depends(get_current_user_cached)
-):
-    """ユーザーの学習プロファイルを更新"""
-    try:
-        validate_supabase()
-        
-        # 既存のプロファイルを確認
-        result = supabase.table("user_learning_profiles").select("id").eq("user_id", current_user).execute()
-        
-        if not result.data:
-            # 新規作成
-            profile_data["user_id"] = current_user
-            result = supabase.table("user_learning_profiles").insert(profile_data).execute()
-        else:
-            # 更新
-            result = supabase.table("user_learning_profiles").update(profile_data).eq("user_id", current_user).execute()
-        
-        if result.data:
-            return {"message": "プロファイルが更新されました", "profile": result.data[0]}
-        else:
-            raise HTTPException(status_code=500, detail="プロファイルの更新に失敗しました")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_database_error(e, "学習プロファイルの更新")
-
-@app.get("/memory/token-usage/stats")
-async def get_token_usage_stats(
-    days: int = 7,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """トークン使用統計を取得"""
-    try:
-        validate_supabase()
-        
-        # 指定期間のトークン使用履歴を取得
-        from_date = (datetime.now() - timedelta(days=days)).isoformat()
-        
-        result = supabase.table("token_usage_history").select("*").eq("user_id", current_user).gte("created_at", from_date).order("created_at", desc=True).execute()
-        
-        if result.data:
-            total_tokens = sum(item["total_tokens"] for item in result.data)
-            total_cost = sum(float(item["estimated_cost_usd"] or 0) for item in result.data)
-            
-            return {
-                "period_days": days,
-                "total_requests": len(result.data),
-                "total_tokens": total_tokens,
-                "total_cost_usd": round(total_cost, 4),
-                "average_tokens_per_request": round(total_tokens / len(result.data)) if result.data else 0,
-                "daily_average_tokens": round(total_tokens / days) if days > 0 else 0
-            }
-        else:
-            return {
-                "period_days": days,
-                "total_requests": 0,
-                "total_tokens": 0,
-                "total_cost_usd": 0,
-                "average_tokens_per_request": 0,
-                "daily_average_tokens": 0
-            }
-            
-    except Exception as e:
-        handle_database_error(e, "トークン使用統計の取得")
-
-@app.post("/memory/messages/mark-important")
-async def mark_message_important(
-    message_data: Dict[str, Any],
-    current_user: int = Depends(get_current_user_cached)
-):
-    """メッセージを重要としてマーク"""
-    try:
-        validate_supabase()
-        
-        message_id = message_data.get("message_id")
-        importance_level = message_data.get("importance_level", 3)
-        notes = message_data.get("notes", "")
-        
-        if not message_id:
-            raise HTTPException(status_code=400, detail="メッセージIDが必要です")
-        
-        # メッセージの所有者確認
-        msg_result = supabase.table("chat_logs").select("user_id, conversation_id, message").eq("id", message_id).execute()
-        
-        if not msg_result.data or msg_result.data[0]["user_id"] != current_user:
-            raise HTTPException(status_code=404, detail="メッセージが見つかりません")
-        
-        message = msg_result.data[0]
-        
-        # キーワード抽出
-        keywords = []
-        if memory_manager:
-            _, keywords = memory_manager.classifier.classify(message["message"])
-        
-        # 重要メッセージとして保存
-        important_msg_data = {
-            "user_id": current_user,
-            "message_id": message_id,
-            "conversation_id": message["conversation_id"],
-            "importance_level": importance_level,
-            "keywords": keywords,
-            "notes": notes
-        }
-        
-        result = supabase.table("important_messages").insert(important_msg_data).execute()
-        
-        if result.data:
-            return {"message": "メッセージが重要としてマークされました", "data": result.data[0]}
-        else:
-            raise HTTPException(status_code=500, detail="保存に失敗しました")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_database_error(e, "重要メッセージのマーク")
+# メモリ管理関連の残りのエンドポイントも使用しないため削除しました
 
 # =============================================================================
 # クエストシステムAPI
@@ -1588,7 +1316,7 @@ async def start_quest(
                 # ステータスを更新
                 update_result = supabase.table("user_quests").update({
                     "status": "in_progress",
-                    "started_at": datetime.now().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                     "progress": 0
                 }).eq("id", existing_quest["id"]).execute()
         else:
@@ -1597,7 +1325,7 @@ async def start_quest(
                 "user_id": current_user,
                 "quest_id": quest_data.quest_id,
                 "status": "in_progress",
-                "started_at": datetime.now().isoformat(),
+                "started_at": datetime.now(timezone.utc).isoformat(),
                 "progress": 0
             }).execute()
         
@@ -1689,7 +1417,7 @@ async def submit_quest(
         supabase.table("user_quests").update({
             "status": "completed",
             "progress": 100,
-            "completed_at": datetime.now().isoformat()
+            "completed_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", user_quest_id).execute()
         
         # ユーザープロファイルのポイントを更新
@@ -1700,14 +1428,14 @@ async def submit_quest(
                 current_points = profile_result.data[0]["total_points"] or 0
                 supabase.table("user_learning_profiles").update({
                     "total_points": current_points + quest_points,
-                    "last_activity": datetime.now().isoformat()
+                    "last_activity": datetime.now(timezone.utc).isoformat()
                 }).eq("user_id", current_user).execute()
             else:
                 # プロファイルを新規作成
                 supabase.table("user_learning_profiles").insert({
                     "user_id": current_user,
                     "total_points": quest_points,
-                    "last_activity": datetime.now().isoformat()
+                    "last_activity": datetime.now(timezone.utc).isoformat()
                 }).execute()
         except Exception as e:
             logger.warning(f"プロファイル更新に失敗: {e}")

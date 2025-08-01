@@ -142,7 +142,7 @@ class learning_plannner():
 
     def handle_general_inquiry(self, user_input: str, history: list = None):
         if history is None:
-            messages = [{"role": "system", "content": GENERAL_PROMPT}]
+            messages = [{"role": "system", "content": system_prompt}]
         else:
             messages = history
         
