@@ -502,9 +502,74 @@ async def chat_with_ai(
         page_id = chat_data.page_id or chat_data.page or "general"
         conversation_id = await get_or_create_conversation(current_user, page_id)
         
+        # プロジェクト情報を自動取得（長期記憶）
+        project_context = ""
+        project = None
+        project_id = None
+        
+        logger.info(f"🔍 プロジェクト情報推論開始 - page_id: {page_id}")
+        
+        # 1. pageIdからプロジェクトIDを推論する
+        if page_id.startswith('project-'):
+            try:
+                project_id = int(page_id.replace('project-', ''))
+                logger.info(f"✅ pageIdからプロジェクトIDを推論: {project_id}")
+            except ValueError:
+                logger.warning(f"⚠️ pageIdからプロジェクトIDの抽出に失敗: {page_id}")
+        else:
+            logger.info(f"🔴 pageIdがproject-で始まらない: {page_id}")
+        
+        # 2. メモコンテンツからプロジェクトIDを推論（memo_contentにプロジェクト情報が含まれている場合）
+        if not project_id and (chat_data.memo_content or chat_data.context):
+            memo_text = chat_data.memo_content or chat_data.context
+            # 最新のメモからプロジェクトIDを推論
+            try:
+                # ユーザーの最新プロジェクトを取得
+                recent_project_result = supabase.table('projects').select('id').eq('user_id', current_user).order('updated_at', desc=True).limit(1).execute()
+                if recent_project_result.data:
+                    project_id = recent_project_result.data[0]['id']
+            except Exception as e:
+                logger.warning(f"最新プロジェクトの取得に失敗: {e}")
+        
+        # 3. 過去の会話履歴からプロジェクトIDを推論
+        if not project_id and conversation_id:
+            try:
+                # 同じconversationの過去メッセージからproject_idを探す
+                context_result = supabase.table('chat_logs').select('context_data').eq('conversation_id', conversation_id).not_.is_('context_data', 'null').order('created_at', desc=True).limit(10).execute()
+                for log in context_result.data or []:
+                    try:
+                        context_data = json.loads(log['context_data'])
+                        if context_data.get('project_id'):
+                            project_id = context_data['project_id']
+                            break
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+            except Exception as e:
+                logger.warning(f"過去の会話からプロジェクトID推論に失敗: {e}")
+        
+        # プロジェクト情報を取得
+        if project_id:
+            try:
+                logger.info(f"📛 プロジェクト情報を取得中: project_id={project_id}, user_id={current_user}")
+                project_result = supabase.table('projects').select('*').eq('id', project_id).eq('user_id', current_user).execute()
+                
+                if project_result.data:
+                    project = project_result.data[0]
+                    project_context = f"""\n## 現在のプロジェクト情報
+- 探究テーマ: {project['theme']}
+- 問い: {project.get('question', '未設定')}
+- 仮説: {project.get('hypothesis', '未設定')}\n\n"""
+                    logger.info(f"✅ プロジェクト情報を自動取得成功: {project['theme']}")
+                else:
+                    logger.warning(f"⚠️ プロジェクトが見つからない: project_id={project_id}, user_id={current_user}")
+            except Exception as e:
+                logger.error(f"❌ プロジェクト情報の取得に失敗: {e}")
+        else:
+            logger.info(f"🔴 project_idが取得できなかった")
+        
         # 過去の対話履歴を取得（拡張：50-100メッセージ）
         history_limit = 100  # Phase 1: 履歴ウィンドウを拡張
-        history_response = supabase.table("chat_logs").select("id, sender, message, created_at, context_data").eq("conversation_id", conversation_id).order("created_at").limit(history_limit).execute()
+        history_response = supabase.table("chat_logs").select("id, sender, message, created_at, context_data").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
         conversation_history = history_response.data if history_response.data is not None else []
 
         if conversation_history is None:
@@ -512,7 +577,19 @@ async def chat_with_ai(
             print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
         
         # メッセージの準備
-        messages = [{"role": "system", "content": system_prompt}]
+        # システムプロンプトとメッセージを準備
+        system_prompt_with_context = system_prompt
+        
+        # プロジェクト情報を追加（長期記憶）
+        if project_context:
+            system_prompt_with_context += project_context
+            logger.info(f"✅ システムプロンプトにプロジェクト情報を追加")
+        else:
+            logger.info(f"🔴 プロジェクト情報がないため、システムプロンプトに追加しない")
+        
+        logger.info(f"📜 システムプロンプト長: {len(system_prompt_with_context)}文字")
+        
+        messages = [{"role": "system", "content": system_prompt_with_context}]
         if conversation_history:  # None または空リストのチェック
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
@@ -526,6 +603,19 @@ async def chat_with_ai(
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
         
+        # 保存用のcontext_data作成
+        context_data_dict = {"timestamp": datetime.now(timezone.utc).isoformat()}
+        if chat_data.memo_content:
+            context_data_dict["memo_content"] = chat_data.memo_content[:500]  # 最初の500文字のみ保存
+        if project_id:
+            context_data_dict["project_id"] = project_id
+        if project:
+            context_data_dict["project_info"] = {
+                "theme": project.get('theme'),
+                "question": project.get('question'),
+                "hypothesis": project.get('hypothesis')
+            }
+        
         # ユーザーメッセージをDBに保存（拡張：メタデータ付き）
         user_message_data = {
             "user_id": current_user,
@@ -533,9 +623,7 @@ async def chat_with_ai(
             "sender": "user",
             "message": chat_data.message,
             "conversation_id": conversation_id,
-            "context_data": json.dumps({
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
+            "context_data": json.dumps(context_data_dict, ensure_ascii=False)
         }
         supabase.table("chat_logs").insert(user_message_data).execute()
         
@@ -546,15 +634,20 @@ async def chat_with_ai(
         token_usage = None
         
         # AIの応答をDBに保存（拡張：メタデータ付き）
+        ai_context_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "has_project_context": bool(project_context)
+        }
+        if project_id:
+            ai_context_data["project_id"] = project_id
+        
         ai_message_data = {
             "user_id": current_user,
             "page": page_id,
             "sender": "assistant",
             "message": response,
             "conversation_id": conversation_id,
-            "context_data": json.dumps({
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
+            "context_data": json.dumps(ai_context_data, ensure_ascii=False)
         }
         supabase.table("chat_logs").insert(ai_message_data).execute()
         
@@ -648,6 +741,45 @@ async def get_chat_conversations(
         
     except Exception as e:
         handle_database_error(e, "conversation一覧の取得")
+
+@app.get("/chat/conversations/{conversation_id}/messages", response_model=List[ChatHistoryResponse])
+async def get_conversation_messages(
+    conversation_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """特定のconversationのメッセージ一覧取得"""
+    try:
+        validate_supabase()
+        
+        # conversationの所有者確認
+        conv_response = supabase.table("chat_conversations").select("*").eq("id", conversation_id).eq("user_id", current_user).execute()
+        if not conv_response.data:
+            raise HTTPException(status_code=404, detail="conversationが見つかりません")
+        
+        # メッセージを取得
+        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at", desc=False).execute()
+        messages = messages_response.data
+        
+        return [
+            ChatHistoryResponse(
+                id=msg["id"],
+                page=msg["page"],
+                sender=msg["sender"],
+                message=msg["message"],
+                context_data=msg.get("context_data"),
+                created_at=msg["created_at"]
+            )
+            for msg in messages
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"conversationメッセージ取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="conversationメッセージの取得でエラーが発生しました"
+        )
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(

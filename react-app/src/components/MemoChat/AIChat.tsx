@@ -20,6 +20,7 @@ import {
   Close as CloseIcon,
   NoteAdd as MemoIcon,
   History as HistoryIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatHistory from './ChatHistory';
@@ -201,6 +202,11 @@ const AIChat: React.FC<AIChatProps> = ({
 
           setMessages(historyMessages);
           setHistoryLoaded(true);
+          
+          // 履歴読み込み後に最下部にスクロール
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+          }, 100);
         }
       } catch (error) {
         console.error('対話履歴の読み込みエラー:', error);
@@ -363,6 +369,7 @@ const AIChat: React.FC<AIChatProps> = ({
               message: userMessage.content,
               page: pageId,
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+              memo_content: persistentMode ? currentMemoContent : undefined,
             }),
           });
 
@@ -526,6 +533,14 @@ const AIChat: React.FC<AIChatProps> = ({
             sx={{ color: 'primary.main' }}
           >
             <HistoryIcon />
+          </IconButton>
+          <IconButton 
+            onClick={handleNewChat} 
+            size="small" 
+            title="新しいチャットを開始"
+            sx={{ color: 'primary.main' }}
+          >
+            <AddIcon />
           </IconButton>
           {persistentMode && (
             <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
@@ -725,7 +740,6 @@ const AIChat: React.FC<AIChatProps> = ({
             isOpen={isHistoryOpen}
             onClose={() => setIsHistoryOpen(false)}
             onSessionSelect={handleSessionSelect}
-            onNewChat={handleNewChat}
             currentPageId={pageId}
           />
         )}

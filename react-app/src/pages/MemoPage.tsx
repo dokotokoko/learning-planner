@@ -16,6 +16,9 @@ import {
 import {
   ArrowBack as BackIcon,
   SmartToy as AIIcon,
+  CloudDone as SavedIcon,
+  CloudQueue as SavingIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
@@ -51,9 +54,12 @@ const MemoPage: React.FC = () => {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [lastSavedContent, setLastSavedContent] = useState<{ title: string; content: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // MemoChat風の状態管理
   const [memoContent, setMemoContent] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const memoRef = useRef<HTMLDivElement>(null);
   const memoPlaceholder = `メモのタイトル
 
@@ -88,6 +94,46 @@ const MemoPage: React.FC = () => {
       setMemo(data);
       setTitle(data.title);
       setContent(data.content);
+      
+      // 最後に保存したコンテンツを記録
+      setLastSavedContent({ title: data.title, content: data.content });
+      
+      // LocalStorageからバックアップを確認
+      const localBackup = loadFromLocalStorage();
+      if (localBackup) {
+        const serverContent = data.content || '';
+        const serverTimestamp = new Date(data.updated_at || 0);
+        
+        try {
+          const key = getLocalStorageKey();
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            const backup = JSON.parse(saved);
+            const backupTimestamp = new Date(backup.timestamp);
+            
+            // LocalStorageの方が新しい場合は復元を提案
+            if (backupTimestamp > serverTimestamp && localBackup !== serverContent) {
+              const shouldRestore = window.confirm(
+                '保存されていない変更が見つかりました。復元しますか？\n\n' +
+                '「OK」: ローカルの変更を復元\n' +
+                '「キャンセル」: サーバーの内容を使用'
+              );
+              
+              if (shouldRestore) {
+                setMemoContent(localBackup);
+                const lines = localBackup.split('\n');
+                const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+                const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : localBackup;
+                updateMemoContent(extractedTitle, extractedContent);
+                console.log('🔄 LocalStorageからメモを復元しました');
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('バックアップ復元エラー:', e);
+        }
+      }
     } catch (error) {
       console.error('Error fetching memo:', error);
     }
@@ -149,7 +195,16 @@ const MemoPage: React.FC = () => {
 
   // 自動保存機能
   const saveChanges = async (newTitle: string, newContent: string) => {
+    // 差分チェック：前回保存したコンテンツと同じ場合はスキップ
+    if (lastSavedContent && 
+        lastSavedContent.title === newTitle && 
+        lastSavedContent.content === newContent) {
+      console.log('⏭️ 変更なし - 保存をスキップ');
+      return;
+    }
+
     try {
+      setIsSaving(true);
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
@@ -167,15 +222,23 @@ const MemoPage: React.FC = () => {
 
       if (response.ok) {
         setLastSaved(new Date());
+        setLastSavedContent({ title: newTitle, content: newContent });
+        setHasUnsavedChanges(false);
+        
+        // 保存成功時にLocalStorageバックアップをクリア
+        clearLocalStorageBackup();
+        console.log('💾 メモを保存し、バックアップをクリアしました');
       }
     } catch (error) {
       console.error('Error saving memo:', error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // デバウンスされた自動保存（保存のみ、状態更新なし）
   const debouncedSave = useCallback(
-    debounce((newTitle: string, fullContent: string) => {
+    debounce((fullContent: string) => {
       // fullContentからタイトルと本文を分離
       const lines = fullContent.split('\n');
       const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
@@ -184,21 +247,28 @@ const MemoPage: React.FC = () => {
       
       // 保存のみ実行（状態更新は手動保存時のみ）
       saveChanges(extractedTitle, extractedContent);
-    }, 1000),
-    [memoId]
+    }, 2000), // 保存間隔を2秒
+    [memoId, lastSavedContent]
   );
 
-  // タイトル変更時の処理
-  const handleTitleChange = (newTitle: string) => {
-    setTitle(newTitle);
-    debouncedSave(newTitle, content);
-  };
+  // 即座に保存する関数（ページ離脱時用）
+  const saveImmediately = useCallback(async () => {
+    if (!memoId) return;
+    
+    try {
+      // memoContentからタイトルと本文を分離
+      const lines = memoContent.split('\n');
+      const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+      const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
+                              (lines.length === 1 && !lines[0].trim() ? '' : memoContent);
+      
+      await saveChanges(extractedTitle, extractedContent);
+      console.log('💾 緊急保存完了');
+    } catch (error) {
+      console.error('緊急保存エラー:', error);
+    }
+  }, [memoId, memoContent, saveChanges]);
 
-  // 内容変更時の処理
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent);
-    debouncedSave(title, newContent);
-  };
 
   // 動的タイトル取得（memoContentの1行目をそのまま使用）
   const getCurrentTitle = () => {
@@ -207,18 +277,76 @@ const MemoPage: React.FC = () => {
     return lines.length > 0 ? lines[0] : '';
   };
 
+  // LocalStorageキー
+  const getLocalStorageKey = () => `memo_backup_${projectId}_${memoId}`;
+
+  // LocalStorageにバックアップ保存
+  const saveToLocalStorage = useCallback((content: string) => {
+    if (!projectId || !memoId) return;
+    try {
+      const key = getLocalStorageKey();
+      const backup = {
+        content,
+        timestamp: new Date().toISOString(),
+        projectId,
+        memoId
+      };
+      localStorage.setItem(key, JSON.stringify(backup));
+    } catch (error) {
+      console.warn('LocalStorage保存エラー:', error);
+    }
+  }, [projectId, memoId]);
+
+  // LocalStorageからバックアップ復元
+  const loadFromLocalStorage = useCallback(() => {
+    if (!projectId || !memoId) return null;
+    try {
+      const key = getLocalStorageKey();
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const backup = JSON.parse(saved);
+        return backup.content;
+      }
+    } catch (error) {
+      console.warn('LocalStorage読み込みエラー:', error);
+    }
+    return null;
+  }, [projectId, memoId]);
+
+  // LocalStorageのバックアップを削除
+  const clearLocalStorageBackup = useCallback(() => {
+    if (!projectId || !memoId) return;
+    try {
+      const key = getLocalStorageKey();
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.warn('LocalStorage削除エラー:', error);
+    }
+  }, [projectId, memoId]);
+
   // メモ内容の変更処理
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = event.target.value;
     setMemoContent(newContent);
     
-    // memoContentからタイトルと本文を分離してchatStoreに送る
-    const lines = newContent.split('\n');
-    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                            (lines.length === 1 && !lines[0].trim() ? '' : newContent);
-    
-    updateMemoContent(extractedTitle, extractedContent);
+    // 内容が実際に変更された場合のみ処理
+    if (newContent !== memoContent) {
+      setHasUnsavedChanges(true);
+      
+      // LocalStorageにバックアップ保存
+      saveToLocalStorage(newContent);
+      
+      // memoContentからタイトルと本文を分離してchatStoreに送る
+      const lines = newContent.split('\n');
+      const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+      const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
+                              (lines.length === 1 && !lines[0].trim() ? '' : newContent);
+      
+      updateMemoContent(extractedTitle, extractedContent);
+      
+      // デバウンスされた自動保存を呼び出し
+      debouncedSave(newContent);
+    }
   };
 
   // キーボードショートカット
@@ -235,6 +363,39 @@ const MemoPage: React.FC = () => {
       setCurrentProject(projectId);
     }
   }, [projectId, setCurrentProject]);
+
+  // ページ離脱時・ブラウザ終了時の保存処理
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // 変更がある場合は即座に保存を試行
+      if (memoContent) {
+        saveImmediately();
+        // ブラウザに離脱の確認を表示
+        event.preventDefault();
+        //event.returnValue = 'メモの内容が保存されていない可能性があります。本当にページを離れますか？';
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // ページが非表示になった時（タブ切り替え、最小化など）に保存
+      if (document.visibilityState === 'hidden' && memoContent) {
+        saveImmediately();
+      }
+    };
+
+    // イベントリスナーを追加
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // コンポーネントのアンマウント時にも保存
+    return () => {
+      if (memoContent) {
+        saveImmediately();
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [memoContent, saveImmediately]);
 
   if (isLoading) {
     return (
@@ -291,11 +452,37 @@ const MemoPage: React.FC = () => {
               >
                 <BackIcon />
               </IconButton>
-              {lastSaved && (
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                  最終保存: {lastSaved.toLocaleTimeString()}
-                </Typography>
-              )}
+              {/* 保存状態インジケーター */}
+              <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+                {isSaving ? (
+                  <Tooltip title="保存中...">
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'info.main' }}>
+                      <SavingIcon sx={{ fontSize: 16, mr: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                      <Typography variant="caption">
+                        保存中...
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                ) : hasUnsavedChanges ? (
+                  <Tooltip title="未保存の変更があります（自動保存待機中）">
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'warning.main' }}>
+                      <SavingIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                      <Typography variant="caption">
+                        変更あり
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                ) : lastSaved ? (
+                  <Tooltip title={`最終保存: ${lastSaved.toLocaleString()}`}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
+                      <SavedIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                      <Typography variant="caption">
+                        保存済み
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                ) : null}
+              </Box>
             </Box>
           </Box>
         </Container>

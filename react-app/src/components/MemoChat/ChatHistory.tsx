@@ -23,7 +23,6 @@ import {
   Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  Chat as ChatIcon,
   Clear as ClearIcon,
   Schedule as ScheduleIcon,
 } from '@mui/icons-material';
@@ -50,7 +49,6 @@ interface ChatHistoryProps {
   isOpen: boolean;
   onClose: () => void;
   onSessionSelect: (session: ChatSession) => void;
-  onNewChat: () => void;
   currentPageId?: string;
 }
 
@@ -58,7 +56,6 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   isOpen,
   onClose,
   onSessionSelect,
-  onNewChat,
   currentPageId,
 }) => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -133,7 +130,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
             title: conv.title, // AI生成タイトルまたは初期タイトル
             lastMessage: conv.last_message || '',
             messageCount: conv.message_count || 0,
-            lastUpdated: new Date(conv.last_updated),
+            lastUpdated: new Date(conv.updated_at || conv.last_updated || new Date()),
             messages: [], // 初回は空、必要に応じて後で読み込み
           }));
 
@@ -522,17 +519,6 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
           </IconButton>
         </Box>
 
-        {/* 新しいチャットボタン */}
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<ChatIcon />}
-            onClick={onNewChat}
-          >
-            新しいチャット
-          </Button>
-        </Box>
 
         {/* 履歴リスト */}
         <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -584,15 +570,28 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                           onClick={async () => {
                             setSelectedSession(session.id);
                             
-                            // conversation詳細を取得（UUIDフォーマットの場合）
-                            if (session.messages.length === 0 && session.id.match(/^[0-9a-f-]{36}$/i)) {
+                            console.log('🖱️ セッション選択:', {
+                              sessionId: session.id,
+                              messageCount: session.messages.length,
+                              isUUID: session.id.match(/^[0-9a-f-]{36}$/i)
+                            });
+                            
+                            // conversation詳細を取得（メッセージが空の場合）
+                            if (session.messages.length === 0) {
+                              console.log('📥 メッセージ詳細取得開始...');
                               const updatedSession = await loadConversationMessages(session);
                               if (updatedSession) {
+                                console.log('✅ 更新されたセッションでonSessionSelect呼び出し:', {
+                                  messageCount: updatedSession.messages.length
+                                });
                                 onSessionSelect(updatedSession);
                                 return;
+                              } else {
+                                console.warn('⚠️ セッション更新失敗、元のセッションを使用');
                               }
                             }
                             
+                            console.log('📤 元のセッションでonSessionSelect呼び出し');
                             onSessionSelect(session);
                           }}
                           sx={{ borderRadius: 1 }}
