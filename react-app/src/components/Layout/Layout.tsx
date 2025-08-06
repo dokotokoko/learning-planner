@@ -625,6 +625,7 @@ const Layout: React.FC = () => {
                 overflow: 'hidden',
               }}
               className="chat-sidebar"
+              data-tutorial="ai-chat-panel"
             >
               {/* リサイズハンドル */}
               <Box

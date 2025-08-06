@@ -25,6 +25,7 @@ interface SimpleTutorialProps {
   onClose: () => void;
   onComplete: () => void;
   onStepChange?: (stepIndex: number) => void;
+  spotlightClicks?: boolean; // ハイライトされた要素のクリックを許可するか
 }
 
 const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
@@ -33,6 +34,7 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
   onClose,
   onComplete,
   onStepChange,
+  spotlightClicks = false,
 }) => {
   const theme = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
@@ -286,6 +288,26 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
               },
             }}
           />
+          
+          {/* クリック防止オーバーレイ（spotlightClicksがfalseの場合） */}
+          {!spotlightClicks && (
+            <Box
+              sx={{
+                position: 'fixed',
+                left: targetRect.left - 4,
+                top: targetRect.top - 4,
+                width: targetRect.width + 8,
+                height: targetRect.height + 8,
+                zIndex: 2147483647,
+                cursor: 'not-allowed',
+                backgroundColor: 'transparent',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+            />
+          )}
         </>
       )}
       

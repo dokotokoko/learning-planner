@@ -690,7 +690,7 @@ async def get_chat_history(
         if page:
             query = query.eq("page", page)
         
-        query = query.order("created_at", desc=True).limit(limit or 50)
+        query = query.order("created_at", desc=False).limit(limit or 50)
         result = query.execute()
         
         return [

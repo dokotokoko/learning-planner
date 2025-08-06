@@ -158,10 +158,10 @@ export const simpleSteps = [
     placement: 'right' as const,
   },
   {
-    target: '[data-tutorial="ai-chat-panel"]',
+    target: '[data-tutorial="ai-chat-section"]',
     title: 'AIアシスタント',
     content: 'AIアシスタントと対話して学習をサポートしてもらいましょう。質問したり、アイデアを整理したり、学習の方向性について相談できます。',
-    placement: 'left' as const,
+    placement: 'right' as const,
   },
   {
     target: '[data-tutorial="welcome-section"]',

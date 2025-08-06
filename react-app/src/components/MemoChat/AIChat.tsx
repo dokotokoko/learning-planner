@@ -160,7 +160,7 @@ const AIChat: React.FC<AIChatProps> = ({
     if (stored.length > 0 && messages.length === 0) {
       setMessages(stored);
     }
-  }, [pageId, getMessages]);
+  }, [pageId]); // getMessagesを依存配列から除外
 
   // データベースから対話履歴を読み込む
   useEffect(() => {
@@ -200,7 +200,19 @@ const AIChat: React.FC<AIChatProps> = ({
             timestamp: item.created_at ? new Date(item.created_at) : new Date(),
           }));
 
-          setMessages(historyMessages);
+          // ダッシュボード画面の場合は履歴があっても初期メッセージを先頭に追加
+          if (pageId.includes('dashboard') || pageId.includes('general-')) {
+            const initialMessage: Message = {
+              id: `initial-${Date.now()}`,
+              role: 'assistant',
+              content: getDefaultInitialMessage(),
+              timestamp: new Date(),
+            };
+            setMessages([initialMessage, ...historyMessages]);
+          } else {
+            setMessages(historyMessages);
+          }
+          
           setHistoryLoaded(true);
           
           // 履歴読み込み後に最下部にスクロール
@@ -210,17 +222,26 @@ const AIChat: React.FC<AIChatProps> = ({
         }
       } catch (error) {
         console.error('対話履歴の読み込みエラー:', error);
+        setHistoryLoaded(true); // エラーでも処理を続行
       }
     };
 
     loadChatHistory();
   }, [pageId, loadHistoryFromDB, historyLoaded]);
 
-  // 初期メッセージと初期応答の設定
+  // 初期メッセージと初期応答の設定（履歴読み込みが無効、またはダッシュボード以外のページの場合のみ）
   useEffect(() => {
     const loadInitialMessages = async () => {
-      // メッセージが既にある場合や履歴を読み込む場合はスキップ
-      if (messages.length > 0 || (loadHistoryFromDB && !historyLoaded)) return;
+      // 履歴読み込みが有効で、ダッシュボード系のページの場合は履歴読み込み処理に任せる
+      if (loadHistoryFromDB && (pageId.includes('dashboard') || pageId.includes('general-'))) {
+        return;
+      }
+      
+      // 既にメッセージがある場合はスキップ
+      if (messages.length > 0) return;
+      
+      // 履歴読み込み中の場合はスキップ
+      if (loadHistoryFromDB && !historyLoaded) return;
       
       const initialMessages: Message[] = [];
       
@@ -261,8 +282,8 @@ const AIChat: React.FC<AIChatProps> = ({
             });
           }
         }
-      } else if (initialMessage) {
-        // 他のページでは初期メッセージを使用
+      } else {
+        // デフォルトの初期メッセージを表示
         initialMessages.push({
           id: `initial-${Date.now()}`,
           role: 'assistant',
@@ -273,11 +294,13 @@ const AIChat: React.FC<AIChatProps> = ({
       
       if (initialMessages.length > 0) {
         setMessages(initialMessages);
+        // 初期化完了を記録
+        initializationKeyRef.current = pageId;
       }
     };
     
     loadInitialMessages();
-  }, [messages.length, initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded]);
+  }, [initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded, messages.length]);
 
   // メッセージリストの最下部にスクロール（新しいメッセージが追加された場合のみ）
   const previousMessageCountRef = useRef(0);
@@ -544,7 +567,6 @@ const AIChat: React.FC<AIChatProps> = ({
           </IconButton>
           {persistentMode && (
             <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-              {currentMemoTitle || '新しいメモ'}
             </Typography>
           )}
         </Box>

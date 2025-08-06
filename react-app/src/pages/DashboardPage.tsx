@@ -45,6 +45,7 @@ import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
 import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
 import { simpleSteps } from '../components/Tutorial/DashboardTutorial';
+import { createDashboardTutorial } from '../components/Tutorial/DashboardTutorial';
 
 interface Project {
   id: number;
@@ -649,6 +650,7 @@ const DashboardPage: React.FC = () => {
       <SimpleTutorial
         steps={simpleSteps}
         isOpen={showTutorial}
+        spotlightClicks={false} // チュートリアル中はハイライトされた要素のクリックを無効化
         onClose={() => {
           setShowTutorial(false);
           setTutorialShownFlag(); // チュートリアルを閉じた時もフラグを設定
