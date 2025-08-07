@@ -875,15 +875,15 @@ async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
         handle_database_error(e, "全メモの取得")
 
 # =============================================================================
-# Ver2 プロジェクト管理API（最適化版）
+# プロジェクト管理API
 # =============================================================================
 
-@app.post("/v2/projects", response_model=ProjectResponse)
-async def create_project_v2(
+@app.post("/projects", response_model=ProjectResponse)
+async def create_project(
     project_data: ProjectCreate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """プロジェクト作成（最適化版）"""
+    """プロジェクト作成"""
     try:
         validate_supabase()
         
@@ -896,7 +896,6 @@ async def create_project_v2(
         
         if result.data:
             project = result.data[0]
-            # メモ数は新規作成時は0
             return ProjectResponse(
                 id=project['id'],
                 theme=project['theme'],
@@ -913,17 +912,22 @@ async def create_project_v2(
     except Exception as e:
         handle_database_error(e, "プロジェクトの作成")
 
-@app.get("/v2/projects", response_model=List[ProjectResponse])
-async def get_projects_v2(current_user: int = Depends(get_current_user_cached)):
-    """プロジェクト一覧取得（最適化版）"""
+@app.get("/users/{user_id}/projects", response_model=List[ProjectResponse])
+async def get_user_projects(
+    user_id: int,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """ユーザーのプロジェクト一覧取得"""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="アクセス権限がありません")
+
     try:
         validate_supabase()
         
-        result = supabase.table('projects').select('*').eq('user_id', current_user).order('updated_at', desc=True).execute()
+        result = supabase.table('projects').select('*').eq('user_id', user_id).order('updated_at', desc=True).execute()
         
         projects = []
         for project in result.data:
-            # メモ数を効率的に取得
             memo_count_result = supabase.table('memos').select('id', count='exact').eq('project_id', project['id']).execute()
             memo_count = memo_count_result.count if memo_count_result.count else 0
             
@@ -941,12 +945,12 @@ async def get_projects_v2(current_user: int = Depends(get_current_user_cached)):
     except Exception as e:
         handle_database_error(e, "プロジェクト一覧の取得")
 
-@app.get("/v2/projects/{project_id}", response_model=ProjectResponse)
-async def get_project_v2(
+@app.get("/projects/{project_id}", response_model=ProjectResponse)
+async def get_project(
     project_id: int,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """特定プロジェクト取得（最適化版）"""
+    """特定プロジェクト取得"""
     try:
         validate_supabase()
         
@@ -973,23 +977,17 @@ async def get_project_v2(
     except Exception as e:
         handle_database_error(e, "プロジェクトの取得")
 
-@app.put("/v2/projects/{project_id}", response_model=ProjectResponse)
-async def update_project_v2(
+@app.put("/projects/{project_id}", response_model=ProjectResponse)
+async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """プロジェクト更新（最適化版）"""
+    """プロジェクト更新"""
     try:
         validate_supabase()
         
-        update_data = {}
-        if project_data.theme is not None:
-            update_data['theme'] = project_data.theme
-        if project_data.question is not None:
-            update_data['question'] = project_data.question
-        if project_data.hypothesis is not None:
-            update_data['hypothesis'] = project_data.hypothesis
+        update_data = project_data.dict(exclude_unset=True)
         
         if not update_data:
             raise HTTPException(status_code=400, detail="更新するフィールドがありません")
@@ -999,18 +997,18 @@ async def update_project_v2(
         if not result.data:
             raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
         
-        return await get_project_v2(project_id, current_user)
+        return await get_project(project_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
         handle_database_error(e, "プロジェクトの更新")
 
-@app.delete("/v2/projects/{project_id}")
-async def delete_project_v2(
+@app.delete("/projects/{project_id}")
+async def delete_project(
     project_id: int,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """プロジェクト削除（最適化版）"""
+    """プロジェクト削除"""
     try:
         validate_supabase()
         
@@ -1026,16 +1024,16 @@ async def delete_project_v2(
         handle_database_error(e, "プロジェクトの削除")
 
 # =============================================================================
-# Ver2 マルチメモ管理API（最適化版）
+# マルチメモ管理API
 # =============================================================================
 
-@app.post("/v2/projects/{project_id}/memos", response_model=MultiMemoResponse)
-async def create_project_memo_v2(
+@app.post("/projects/{project_id}/memos", response_model=MultiMemoResponse)
+async def create_project_memo(
     project_id: int,
     memo_data: MultiMemoCreate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """プロジェクト内メモ作成（最適化版）"""
+    """プロジェクト内メモ作成"""
     try:
         validate_supabase()
         
@@ -1052,7 +1050,7 @@ async def create_project_memo_v2(
                 id=memo['id'],
                 title=memo['title'],
                 content=memo['content'],
-                tags=[],  # α版ではタグ機能なし
+                tags=[],
                 project_id=memo['project_id'],
                 created_at=memo['created_at'],
                 updated_at=memo['updated_at']
@@ -1064,12 +1062,12 @@ async def create_project_memo_v2(
     except Exception as e:
         handle_database_error(e, "メモの作成")
 
-@app.get("/v2/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
-async def get_project_memos_v2(
+@app.get("/projects/{project_id}/memos", response_model=List[MultiMemoResponse])
+async def get_project_memos(
     project_id: int,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """プロジェクト内メモ一覧取得（最適化版）"""
+    """プロジェクト内メモ一覧取得"""
     try:
         validate_supabase()
         
@@ -1080,7 +1078,7 @@ async def get_project_memos_v2(
                 id=memo['id'],
                 title=memo['title'],
                 content=memo['content'],
-                tags=[],  # α版ではタグ機能なし
+                tags=[],
                 project_id=memo['project_id'],
                 created_at=memo['created_at'],
                 updated_at=memo['updated_at']
@@ -1090,12 +1088,12 @@ async def get_project_memos_v2(
     except Exception as e:
         handle_database_error(e, "メモ一覧の取得")
 
-@app.get("/v2/memos/{memo_id}", response_model=MultiMemoResponse)
-async def get_memo_v2(
+@app.get("/memos/{memo_id}", response_model=MultiMemoResponse)
+async def get_memo(
     memo_id: int,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """特定メモ取得（最適化版）"""
+    """特定メモ取得"""
     try:
         validate_supabase()
         
@@ -1109,7 +1107,7 @@ async def get_memo_v2(
             id=memo['id'],
             title=memo['title'],
             content=memo['content'],
-            tags=[],  # α版ではタグ機能なし
+            tags=[],
             project_id=memo['project_id'],
             created_at=memo['created_at'],
             updated_at=memo['updated_at']
@@ -1119,21 +1117,17 @@ async def get_memo_v2(
     except Exception as e:
         handle_database_error(e, "メモの取得")
 
-@app.put("/v2/memos/{memo_id}", response_model=MultiMemoResponse)
-async def update_memo_v2(
+@app.put("/memos/{memo_id}", response_model=MultiMemoResponse)
+async def update_memo(
     memo_id: int,
     memo_data: MultiMemoUpdate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモ更新（最適化版）"""
+    """メモ更新"""
     try:
         validate_supabase()
         
-        update_data = {}
-        if memo_data.title is not None:
-            update_data['title'] = memo_data.title
-        if memo_data.content is not None:
-            update_data['content'] = memo_data.content
+        update_data = memo_data.dict(exclude_unset=True)
         
         if not update_data:
             raise HTTPException(status_code=400, detail="更新するフィールドがありません")
@@ -1143,18 +1137,18 @@ async def update_memo_v2(
         if not result.data:
             raise HTTPException(status_code=404, detail="メモが見つかりません")
         
-        return await get_memo_v2(memo_id, current_user)
+        return await get_memo(memo_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
         handle_database_error(e, "メモの更新")
 
-@app.delete("/v2/memos/{memo_id}")
-async def delete_memo_v2(
+@app.delete("/memos/{memo_id}")
+async def delete_memo(
     memo_id: int,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモ削除（最適化版）"""
+    """メモ削除"""
     try:
         validate_supabase()
         
