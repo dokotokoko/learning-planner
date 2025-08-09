@@ -33,18 +33,21 @@ const MemoDetailPage: React.FC = () => {
       const memoData = await memoResponse.json();
       setMemo(memoData);
 
-      // Fetch all tags
-      const tagsResponse = await fetch(`${apiBaseUrl}/tags`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-      if (!tagsResponse.ok) {
-        throw new Error('Failed to fetch tags');
-      }
-      const tagsData = await tagsResponse.json();
-      setAllTags(tagsData);
+      // Fetch all tags - タグAPIは現在未実装のため一時的に無効化
+      // const tagsResponse = await fetch(`${apiBaseUrl}/tags`, {
+      //   headers: {
+      //     'Authorization': `Bearer ${token}`,
+      //   },
+      //   credentials: 'include',
+      // });
+      // if (!tagsResponse.ok) {
+      //   throw new Error('Failed to fetch tags');
+      // }
+      // const tagsData = await tagsResponse.json();
+      // setAllTags(tagsData);
+      
+      // タグ機能は現在未実装のため、空配列を設定
+      setAllTags([]);
 
     } catch (err) {
       setError((err as Error).message);
