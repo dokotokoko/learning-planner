@@ -238,7 +238,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         try {
           const memoId = session.page.replace('memo-', '');
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-          const memoResponse = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
+          const memoResponse = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -254,7 +254,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
             if (memoData.project_id) {
               try {
                 const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-                const projectResponse = await fetch(`${apiBaseUrl}/v2/projects/${memoData.project_id}`, {
+                const projectResponse = await fetch(`${apiBaseUrl}/projects/${memoData.project_id}`, {
                   headers: {
                     'Authorization': `Bearer ${token}`,
                   },

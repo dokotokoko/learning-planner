@@ -81,7 +81,7 @@ const MemoPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
+      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -144,7 +144,7 @@ const MemoPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
+      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -207,7 +207,7 @@ const MemoPage: React.FC = () => {
       setIsSaving(true);
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/memos/${memoId}`, {
+      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
