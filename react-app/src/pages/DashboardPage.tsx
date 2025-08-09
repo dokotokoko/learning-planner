@@ -189,7 +189,6 @@ const DashboardPage: React.FC = () => {
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects`, {
-      const response = await fetch(`${apiBaseUrl}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -228,7 +227,6 @@ const DashboardPage: React.FC = () => {
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         method: 'PUT',
         headers: {
@@ -274,7 +272,6 @@ const DashboardPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         method: 'DELETE',
         headers: {
