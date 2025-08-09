@@ -28,9 +28,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from module.llm_api import learning_plannner
 from prompt.prompt import system_prompt
 
-# ロギング設定（最適化）
+# ロギング設定（デバッグ用）
 logging.basicConfig(
-    level=logging.WARNING,  # INFO -> WARNINGに変更してログを削減
+    level=logging.INFO,  # DEBUG用にINFOレベルに変更
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -1048,12 +1048,12 @@ async def create_project_memo(
             memo = result.data[0]
             return MultiMemoResponse(
                 id=memo['id'],
-                title=memo['title'],
-                content=memo['content'],
+                title=memo.get('title') or '',
+                content=memo.get('content') or '',
                 tags=[],
-                project_id=memo['project_id'],
-                created_at=memo['created_at'],
-                updated_at=memo['updated_at']
+                project_id=memo.get('project_id', project_id),
+                created_at=memo.get('created_at') or datetime.now(timezone.utc).isoformat(),
+                updated_at=memo.get('updated_at') or datetime.now(timezone.utc).isoformat()
             )
         else:
             raise HTTPException(status_code=500, detail="メモの作成に失敗しました")
@@ -1076,12 +1076,12 @@ async def get_project_memos(
         return [
             MultiMemoResponse(
                 id=memo['id'],
-                title=memo['title'],
-                content=memo['content'],
+                title=memo.get('title') or '',
+                content=memo.get('content') or '',
                 tags=[],
-                project_id=memo['project_id'],
-                created_at=memo['created_at'],
-                updated_at=memo['updated_at']
+                project_id=memo.get('project_id', project_id),
+                created_at=memo.get('created_at') or datetime.now(timezone.utc).isoformat(),
+                updated_at=memo.get('updated_at') or datetime.now(timezone.utc).isoformat()
             )
             for memo in result.data
         ]
@@ -1097,24 +1097,54 @@ async def get_memo(
     try:
         validate_supabase()
         
+        logger.info(f"メモ取得開始: memo_id={memo_id}, user_id={current_user}")
+        
         result = supabase.table('memos').select('*').eq('id', memo_id).eq('user_id', current_user).execute()
         
+        logger.info(f"データベースクエリ結果: count={result.count if result.count else 0}, data_length={len(result.data) if result.data else 0}")
+        
         if not result.data:
+            logger.warning(f"メモが見つかりません: memo_id={memo_id}, user_id={current_user}")
             raise HTTPException(status_code=404, detail="メモが見つかりません")
         
         memo = result.data[0]
-        return MultiMemoResponse(
+        
+        # フィールドの存在確認とデフォルト値の設定
+        logger.info(f"メモデータ取得: keys={list(memo.keys())}, values={memo}")
+        
+        # 必須フィールドの存在確認
+        if 'id' not in memo:
+            logger.error(f"メモIDが存在しません: {memo.keys()}")
+            raise HTTPException(status_code=500, detail="メモデータの構造エラー")
+        
+        response = MultiMemoResponse(
             id=memo['id'],
-            title=memo['title'],
-            content=memo['content'],
+            title=memo.get('title') or '',
+            content=memo.get('content') or '',
             tags=[],
-            project_id=memo['project_id'],
-            created_at=memo['created_at'],
-            updated_at=memo['updated_at']
+            project_id=memo.get('project_id'),
+            created_at=memo.get('created_at') or datetime.now(timezone.utc).isoformat(),
+            updated_at=memo.get('updated_at') or datetime.now(timezone.utc).isoformat()
         )
+        
+        logger.info(f"レスポンス作成成功: memo_id={memo['id']}")
+        return response
     except HTTPException:
         raise
+    except KeyError as e:
+        logger.error(f"メモフィールドエラー: {e}, メモデータキー: {memo.keys() if 'memo' in locals() else 'N/A'}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモのデータ構造エラー: 必要なフィールド '{e}' が見つかりません"
+        )
+    except ValueError as e:
+        logger.error(f"メモバリデーションエラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メモのデータ検証エラー: {str(e)}"
+        )
     except Exception as e:
+        logger.error(f"予期しないエラー (メモ取得): {type(e).__name__}: {str(e)}")
         handle_database_error(e, "メモの取得")
 
 @app.put("/memos/{memo_id}", response_model=MultiMemoResponse)
