@@ -147,7 +147,7 @@ const DashboardPage: React.FC = () => {
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/projects`, {
+      const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -188,7 +188,7 @@ const DashboardPage: React.FC = () => {
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
-      const response = await fetch(`${apiBaseUrl}/v2/projects`, {
+      const response = await fetch(`${apiBaseUrl}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,7 +227,7 @@ const DashboardPage: React.FC = () => {
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
+      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -272,7 +272,7 @@ const DashboardPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth-token');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/v2/projects/${projectId}`, {
+      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
