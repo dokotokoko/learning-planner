@@ -15,7 +15,7 @@ import ProjectPage from './pages/ProjectPage';
 import MemoPage from './pages/MemoPage';
 import MultiMemoPage from './pages/MultiMemoPage';
 import FrameworkGamesPage from './pages/FrameworkGamesPage';
-import QuestBoardPage from './pages/QuestBoardPage';
+// import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 import FiveWhysGame from './components/FrameworkGames/FiveWhysGame';
 import LogicTreeGame from './components/FrameworkGames/LogicTreeGame';
 import HMWGame from './components/FrameworkGames/HMWGame';
@@ -167,7 +167,7 @@ function App() {
                 <Route path="inquiry" element={<GeneralInquiryPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="framework-games" element={<FrameworkGamesPage />} />
-                <Route path="quests" element={<QuestBoardPage />} />
+                {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
                 <Route path="framework-games/theme-deep-dive" element={<ThemeDeepDiveGame />} />
                 <Route path="framework-games/5-whys" element={<FiveWhysGame />} />
                 <Route path="framework-games/logic-tree" element={<LogicTreeGame />} />

@@ -38,8 +38,8 @@ import { useChatStore } from '../../stores/chatStore';
 import { useTutorialStore } from '../../stores/tutorialStore';
 import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
-import QuestSuggestion from './QuestSuggestion';
-import QuestBoardPage from '../../pages/QuestBoardPage';
+// import QuestSuggestion from './QuestSuggestion'; // 一時的に非表示
+// import QuestBoardPage from '../../pages/QuestBoardPage'; // 一時的に非表示
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 
 const drawerWidth = 280;
@@ -267,7 +267,7 @@ const Layout: React.FC = () => {
   const mainListItems: MenuItem[] = [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
-    { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'}
+    // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
   ];
 
   // 展開状態のサイドバー
@@ -339,8 +339,8 @@ const Layout: React.FC = () => {
 
       <Divider />
 
-      {/* クエスト提案 */}
-      <QuestSuggestion />
+      {/* クエスト提案 - 一時的に非表示 */}
+      {/* <QuestSuggestion /> */}
 
       <Divider />
 

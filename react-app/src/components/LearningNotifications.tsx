@@ -56,7 +56,8 @@ const LearningNotifications: React.FC<LearningNotificationsProps> = ({
 
   const handleQuestBoardAction = (id: string) => {
     onDismiss(id);
-    navigate('/quests');
+    // navigate('/quests'); // 一時的に非表示
+    console.log('クエスト機能は一時的に利用できません');
   };
 
   const handleReflectionAction = (id: string) => {
