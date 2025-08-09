@@ -786,63 +786,54 @@ async def save_memo(
     memo_data: MemoSave,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモの保存（最適化版）"""
+    """メモの保存（page_memosテーブル非対応のため無効化）"""
     try:
         validate_supabase()
         
-        # 既存のページメモを確認（最適化：必要最小限のクエリ）
-        existing_result = supabase.table("page_memos").select("id").eq("user_id", current_user).eq("page_id", memo_data.page_id).execute()
+        # page_memosテーブルが存在しないため、エラーを返す
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="page_memosベースのメモ保存は現在利用できません。プロジェクトベースのメモ機能をご利用ください。"
+        )
         
-        if existing_result.data:
-            # 既存のメモを更新
-            result = supabase.table("page_memos").update({
-                "content": memo_data.content
-            }).eq("user_id", current_user).eq("page_id", memo_data.page_id).execute()
-            memo_id = existing_result.data[0]["id"]
-        else:
-            # 新しいメモを作成
-            result = supabase.table("page_memos").insert({
-                "user_id": current_user,
-                "page_id": memo_data.page_id,
-                "content": memo_data.content
-            }).execute()
-            memo_id = result.data[0]["id"] if result.data else None
-        
-        if memo_id:
-            return MemoResponse(
-                id=memo_id,
-                page_id=memo_data.page_id,
-                content=memo_data.content,
-                updated_at=datetime.now(timezone.utc).isoformat()
-            )
-        else:
-            raise HTTPException(status_code=500, detail="メモの保存に失敗しました")
     except HTTPException:
         raise
     except Exception as e:
         handle_database_error(e, "メモの保存")
 
 @app.get("/memos/{page_id}", response_model=MemoResponse)
-async def get_memo(
+async def get_memo_by_page_id(
     page_id: str,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモの取得（最適化版）"""
+    """ページIDベースのメモ取得（レガシー対応）"""
     try:
         validate_supabase()
         
-        result = supabase.table("page_memos").select("id, content, updated_at, created_at").eq("user_id", current_user).eq("page_id", page_id).execute()
-        
-        if result.data:
-            memo = result.data[0]
-            return MemoResponse(
-                id=memo["id"],
-                page_id=page_id,
-                content=memo["content"] or "",
-                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
-            )
-        else:
-            # メモが存在しない場合は空のメモを返す
+        # page_memosテーブルが存在しないため、memosテーブルからpage_id相当のものを検索
+        # page_idが数値の場合はmemo_idとして扱う
+        try:
+            memo_id = int(page_id)
+            result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("id", memo_id).eq("user_id", current_user).execute()
+            
+            if result.data:
+                memo = result.data[0]
+                return MemoResponse(
+                    id=memo["id"],
+                    page_id=page_id,
+                    content=memo.get("content") or "",
+                    updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
+                )
+            else:
+                # メモが存在しない場合は空のメモを返す
+                return MemoResponse(
+                    id=0,
+                    page_id=page_id,
+                    content="",
+                    updated_at=datetime.now(timezone.utc).isoformat()
+                )
+        except ValueError:
+            # page_idが数値でない場合は空のメモを返す
             return MemoResponse(
                 id=0,
                 page_id=page_id,
@@ -856,16 +847,17 @@ async def get_memo(
 
 @app.get("/memos", response_model=List[MemoResponse])
 async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
-    """ユーザーの全メモ取得（最適化版）"""
+    """ユーザーの全メモ取得（memosテーブルから取得）"""
     try:
         validate_supabase()
         
-        result = supabase.table("page_memos").select("id, page_id, content, updated_at, created_at").eq("user_id", current_user).order("updated_at", desc=True).execute()
+        # memosテーブルから全メモを取得
+        result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("user_id", current_user).order("updated_at", desc=True).execute()
         
         return [
             MemoResponse(
                 id=memo["id"],
-                page_id=memo["page_id"],
+                page_id=str(memo["id"]),  # memo_idをpage_idとして使用
                 content=memo["content"] or "",
                 updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
             )
