@@ -1,5 +1,5 @@
 // react-app/src/components/LoadingScreen.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
 
@@ -69,4 +69,4 @@ const LoadingScreen: React.FC = () => {
   );
 };
 
-export default LoadingScreen;
+export default memo(LoadingScreen);

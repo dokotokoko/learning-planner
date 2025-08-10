@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -199,14 +199,29 @@ const MemoPage: React.FC = () => {
     if (lastSavedContent && 
         lastSavedContent.title === newTitle && 
         lastSavedContent.content === newContent) {
-      console.log('⏭️ 変更なし - 保存をスキップ');
+      // console.log('⏭️ 変更なし - 保存をスキップ'); // ログ削減
       return;
     }
 
     try {
       setIsSaving(true);
       const token = localStorage.getItem('auth-token');
+      
+      if (!token) {
+        console.error('認証トークンが見つかりません');
+        return;
+      }
+
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      
+      // MultiMemoUpdateモデルに対応したリクエストボディ
+      const requestBody = {
+        title: newTitle || '',
+        content: newContent || ''
+      };
+
+      // console.log('💾 メモ保存開始:', { memoId, title: newTitle, contentLength: newContent?.length || 0 }); // ログ削減
+
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
         headers: {
@@ -214,23 +229,34 @@ const MemoPage: React.FC = () => {
           'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
-        body: JSON.stringify({
-          title: newTitle,
-          content: newContent,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      // console.log('💾 レスポンス:', { status: response.status, ok: response.ok }); // ログ削減
+
       if (response.ok) {
+        const result = await response.json();
+        // console.log('💾 保存成功:', result); // ログ削減
+        
         setLastSaved(new Date());
         setLastSavedContent({ title: newTitle, content: newContent });
         setHasUnsavedChanges(false);
         
         // 保存成功時にLocalStorageバックアップをクリア
         clearLocalStorageBackup();
-        console.log('💾 メモを保存し、バックアップをクリアしました');
+        // console.log('💾 メモを保存し、バックアップをクリアしました'); // ログ削減
+      } else {
+        const errorText = await response.text();
+        console.error('💾 保存失敗:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`保存に失敗しました (${response.status}): ${errorText}`);
       }
     } catch (error) {
-      console.error('Error saving memo:', error);
+      console.error('💾 保存エラー:', error);
+      
+      // エラーの詳細をユーザーに表示（オプション）
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('ネットワークエラー: サーバーに接続できません');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -247,7 +273,7 @@ const MemoPage: React.FC = () => {
       
       // 保存のみ実行（状態更新は手動保存時のみ）
       saveChanges(extractedTitle, extractedContent);
-    }, 2000), // 保存間隔を2秒
+    }, 10000), // 保存間隔を10秒に延長（負荷軽減）
     [memoId, lastSavedContent]
   );
 
@@ -263,7 +289,7 @@ const MemoPage: React.FC = () => {
                               (lines.length === 1 && !lines[0].trim() ? '' : memoContent);
       
       await saveChanges(extractedTitle, extractedContent);
-      console.log('💾 緊急保存完了');
+      // console.log('💾 緊急保存完了'); // ログ削減
     } catch (error) {
       console.error('緊急保存エラー:', error);
     }
@@ -324,6 +350,14 @@ const MemoPage: React.FC = () => {
     }
   }, [projectId, memoId]);
 
+  // LocalStorageバックアップのデバウンス（1秒）
+  const debouncedLocalSave = useCallback(
+    debounce((content: string) => {
+      saveToLocalStorage(content);
+    }, 1000),
+    [saveToLocalStorage]
+  );
+
   // メモ内容の変更処理
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = event.target.value;
@@ -333,8 +367,8 @@ const MemoPage: React.FC = () => {
     if (newContent !== memoContent) {
       setHasUnsavedChanges(true);
       
-      // LocalStorageにバックアップ保存
-      saveToLocalStorage(newContent);
+      // LocalStorageバックアップ（デバウンス）
+      debouncedLocalSave(newContent);
       
       // memoContentからタイトルと本文を分離してchatStoreに送る
       const lines = newContent.split('\n');
@@ -531,4 +565,4 @@ const MemoPage: React.FC = () => {
   );
 };
 
-export default MemoPage; 
+export default memo(MemoPage); 

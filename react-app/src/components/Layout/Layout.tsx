@@ -1,5 +1,5 @@
 // react-app/src/components/Layout/Layout.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -264,11 +264,11 @@ const Layout: React.FC = () => {
     action?: () => void;
   }
 
-  const mainListItems: MenuItem[] = [
+  const mainListItems: MenuItem[] = useMemo(() => [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
     // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
-  ];
+  ], []);
 
   // 展開状態のサイドバー
   const fullDrawer = (
@@ -725,4 +725,4 @@ const Layout: React.FC = () => {
   );
 };
 
-export default Layout;
+export default memo(Layout);
