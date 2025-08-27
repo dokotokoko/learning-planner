@@ -406,7 +406,7 @@ async def login(user_data: UserLogin):
         
         user = result.data[0]
         
-        # パスワード確認
+        # アクセスコード（パスワード）確認
         # 注意: 本番環境では必ずパスワードをハッシュ化して比較してください
         result_password = supabase.table("users").select("password").eq("id", user["id"]).execute()
         if not result_password.data or result_password.data[0]["password"] != user_data.access_code:
