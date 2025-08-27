@@ -112,14 +112,7 @@ class ChatHistoryResponse(BaseModel):
     context_data: Optional[str]
     created_at: str
 
-class ConversationResponse(BaseModel):
-    id: str
-    title: str
-    page_id: str
-    message_count: int
-    last_message: str
-    updated_at: str  # last_updated → updated_at に変更
-    created_at: str
+# ConversationResponse は削除（chat_conversationsテーブルを使用しないため）
 
 # メモ関連
 class MemoSave(BaseModel):
@@ -707,79 +700,9 @@ async def get_chat_history(
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
 
-@app.get("/chat/conversations", response_model=List[ConversationResponse])
-async def get_chat_conversations(
-    limit: Optional[int] = 20,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """conversation一覧取得（最適化版）"""
-    try:
-        validate_supabase()
-        
-        conversations_response = supabase.table("chat_conversations").select("*").eq("user_id", current_user).order("updated_at", desc=True).limit(limit or 20).execute()
-        conversations = conversations_response.data
-        
-        result = []
-        for conv in conversations:
-            # メッセージ数と最新メッセージを効率的に取得
-            logs_response = supabase.table("chat_logs").select("message", count='exact').eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()
-            
-            last_message = logs_response.data[0]["message"][:100] if logs_response.data else "メッセージなし"
-            message_count = logs_response.count if logs_response.count else 0
-            
-            result.append(ConversationResponse(
-                id=conv["id"],
-                title=conv["title"],
-                page_id=conv.get("page_id", "unknown"),
-                message_count=message_count,
-                last_message=last_message,
-                updated_at=conv["updated_at"],
-                created_at=conv["created_at"]
-            ))
-        
-        return result
-        
-    except Exception as e:
-        handle_database_error(e, "conversation一覧の取得")
+# /chat/conversations エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
-@app.get("/chat/conversations/{conversation_id}/messages", response_model=List[ChatHistoryResponse])
-async def get_conversation_messages(
-    conversation_id: str,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """特定のconversationのメッセージ一覧取得"""
-    try:
-        validate_supabase()
-        
-        # conversationの所有者確認
-        conv_response = supabase.table("chat_conversations").select("*").eq("id", conversation_id).eq("user_id", current_user).execute()
-        if not conv_response.data:
-            raise HTTPException(status_code=404, detail="conversationが見つかりません")
-        
-        # メッセージを取得
-        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at", desc=False).execute()
-        messages = messages_response.data
-        
-        return [
-            ChatHistoryResponse(
-                id=msg["id"],
-                page=msg["page"],
-                sender=msg["sender"],
-                message=msg["message"],
-                context_data=msg.get("context_data"),
-                created_at=msg["created_at"]
-            )
-            for msg in messages
-        ]
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"conversationメッセージ取得エラー: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="conversationメッセージの取得でエラーが発生しました"
-        )
+# /chat/conversations/{conversation_id}/messages エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
