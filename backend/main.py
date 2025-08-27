@@ -33,9 +33,19 @@ logging.basicConfig(
     level=logging.INFO,  # DEBUG用にINFOレベルに変更
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-
 logger = logging.getLogger(__name__)
+
+# Phase 1: AI対話エージェント機能のインポート
+try:
+    from conversation_agent import ConversationOrchestrator
+    CONVERSATION_AGENT_AVAILABLE = True
+    logger.info("対話エージェント機能が利用可能です")
+except ImportError as e:
+    CONVERSATION_AGENT_AVAILABLE = False
+    logger.warning(f"対話エージェント機能が利用できません: {e}")
+
+# 機能フラグ（環境変数で制御）
+ENABLE_CONVERSATION_AGENT = os.environ.get("ENABLE_CONVERSATION_AGENT", "false").lower() == "true"
 
 # 認証キャッシュ
 auth_cache = {}
@@ -240,10 +250,13 @@ llm_client = None
 supabase: Client = None
 # memory_manager: MemoryManager = None  # 使用しない
 
+# Phase 1: 対話エージェント
+conversation_orchestrator = None
+
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化（最適化版）"""
-    global llm_client, supabase
+    global llm_client, supabase, conversation_orchestrator
     
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
@@ -257,6 +270,20 @@ async def startup_event():
         
         # LLMクライアント初期化
         llm_client = learning_plannner()
+        
+        # Phase 1: 対話エージェント初期化
+        if ENABLE_CONVERSATION_AGENT and CONVERSATION_AGENT_AVAILABLE:
+            try:
+                conversation_orchestrator = ConversationOrchestrator(
+                    llm_client=llm_client,
+                    use_mock=True  # Phase 1ではモックモード
+                )
+                logger.info("✅ 対話エージェント初期化完了（モックモード）")
+            except Exception as e:
+                logger.error(f"❌ 対話エージェント初期化エラー: {e}")
+                conversation_orchestrator = None
+        else:
+            logger.info("⚠️ 対話エージェント機能は無効です")
         
         # メモリ管理システム初期化（使用しない）
         # global memory_manager
@@ -627,18 +654,80 @@ async def chat_with_ai(
         }
         supabase.table("chat_logs").insert(user_message_data).execute()
         
-        # LLMから応答を取得
-        response = llm_client.generate_response_with_history(messages)
+        # ===== Phase 1: 対話エージェント機能統合 =====
+        if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
+            try:
+                # 会話履歴を対話エージェント用フォーマットに変換
+                agent_history = []
+                for history_msg in conversation_history:
+                    sender = "user" if history_msg["sender"] == "user" else "assistant"
+                    agent_history.append({
+                        "sender": sender,
+                        "message": history_msg["message"]
+                    })
+                
+                # プロジェクト情報を対話エージェント用に変換
+                agent_project_context = None
+                if project:
+                    agent_project_context = {
+                        "theme": project.get('theme'),
+                        "question": project.get('question'),
+                        "hypothesis": project.get('hypothesis'),
+                        "id": project_id
+                    }
+                
+                # 対話エージェントで処理
+                agent_result = conversation_orchestrator.process_turn(
+                    user_message=chat_data.message,
+                    conversation_history=agent_history,
+                    project_context=agent_project_context,
+                    user_id=current_user,
+                    conversation_id=conversation_id
+                )
+                
+                # 対話エージェントの応答を使用
+                response = agent_result["response"]
+                
+                # メタデータを保存用context_dataに追加
+                ai_context_data = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "has_project_context": bool(project_context),
+                    "conversation_agent": True,
+                    "support_type": agent_result.get("support_type"),
+                    "selected_acts": agent_result.get("selected_acts"),
+                    "state_snapshot": agent_result.get("state_snapshot", {}),
+                    "decision_metadata": agent_result.get("decision_metadata", {})
+                }
+                
+                # followupsがある場合はresponseに追加
+                if agent_result.get("followups"):
+                    followup_text = "\n\n**次にできること:**\n" + "\n".join([f"• {f}" for f in agent_result["followups"][:3]])
+                    response += followup_text
+                
+                logger.info(f"✅ 対話エージェント処理完了: {agent_result['support_type']} | {agent_result['selected_acts']}")
+                
+            except Exception as e:
+                logger.error(f"❌ 対話エージェント処理エラー、従来処理にフォールバック: {e}")
+                # エラー時は従来の処理にフォールバック
+                response = llm_client.generate_response_with_history(messages)
+                ai_context_data = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "has_project_context": bool(project_context),
+                    "conversation_agent_error": str(e)
+                }
+        else:
+            # 従来の処理
+            response = llm_client.generate_response_with_history(messages)
+            ai_context_data = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "has_project_context": bool(project_context)
+            }
         
         # トークン使用量を計算（使用しない）
         token_usage = None
         
-        # AIの応答をDBに保存（拡張：メタデータ付き）
-        ai_context_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "has_project_context": bool(project_context)
-        }
-        if project_id:
+        # プロジェクトIDを追加（対話エージェントで設定されていない場合）
+        if project_id and "project_id" not in ai_context_data:
             ai_context_data["project_id"] = project_id
         
         ai_message_data = {
