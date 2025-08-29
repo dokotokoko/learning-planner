@@ -52,20 +52,23 @@ app = FastAPI(
 # パフォーマンス最適化ミドルウェア
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # レスポンス圧縮
 
-# CORS設定（ngrok対応）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "http://127.0.0.1:8080",
-        "http://localhost:8080",
-        "https://demo.tanqmates.org"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS設定
+# 開発環境でNginxリバースプロキシを使用する場合は不要
+# 本番環境や直接アクセスが必要な場合はコメントを外してください
+if os.environ.get("ENABLE_CORS", "false").lower() == "true":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173", 
+            "http://localhost:3000",
+            "http://127.0.0.1:8080",
+            "http://localhost:8080",
+            "https://demo.tanqmates.org"
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # セキュリティスキーム
 security = HTTPBearer()
@@ -310,10 +313,20 @@ def get_current_user_cached(credentials: HTTPAuthorizationCredentials = Depends(
             detail="無効なトークン形式です"
         )
     except Exception as e:
-        logger.error(f"認証エラー: {e}")
+        import traceback
+        error_detail = f"認証エラー詳細: {type(e).__name__}: {str(e)}"
+        logger.error(f"{error_detail}\nTraceback: {traceback.format_exc()}")
+        
+        # Supabase接続エラーの場合は詳細を返す
+        if "connection" in str(e).lower() or "timeout" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"データベース接続エラー: {str(e)}"
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="認証処理でエラーが発生しました"
+            detail=f"認証処理でエラーが発生しました: {str(e)}"
         )
 
 def validate_supabase():
@@ -622,6 +635,9 @@ async def chat_with_ai(
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
+
+        # LLMから応答を取得（web_search_preview)
+        #response = llm_client.generate_response_with_WebSearch(messages)
         
         # トークン使用量を計算（使用しない）
         token_usage = None
@@ -1068,7 +1084,7 @@ async def update_memo(
     memo_data: MultiMemoUpdate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモ更新"""
+    """メモ更新（最適化版）"""
     try:
         validate_supabase()
         
@@ -1077,7 +1093,22 @@ async def update_memo(
         if not update_data:
             raise HTTPException(status_code=400, detail="更新するフィールドがありません")
         
-        result = supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+        # タイムスタンプを追加
+        from datetime import datetime, timezone
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # タイムアウト対策: execute()を分離
+        import asyncio
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+                ),
+                timeout=30.0  # 30秒のタイムアウト
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"メモ更新タイムアウト: memo_id={memo_id}, user_id={current_user}")
+            raise HTTPException(status_code=504, detail="データベース更新がタイムアウトしました")
         
         if not result.data:
             raise HTTPException(status_code=404, detail="メモが見つかりません")
