@@ -1,5 +1,6 @@
 .venv
 .env
+.env.development
 venv310
 
 #DBファイルを無視
@@ -133,3 +134,16 @@ Thumbs.db
 .streamlit/
 
 .claude
+
+# TLS / certs
+*.key
+*-key.pem
+*.crt
+*.pem
+*.p12
+*.pfx
+*.der
+*.cer
+*.srl
+
+certs/**
