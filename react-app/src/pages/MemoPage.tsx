@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo} from 'react';
 import {
   Box,
   Container,
@@ -11,7 +11,6 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
-  Divider,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -208,32 +207,31 @@ const MemoPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  // データ初期化関数（イベント駆動）
+  const initializeData = useCallback(async () => {
     if (projectId && memoId) {
-      fetchMemo();
-      fetchProject();
+      await Promise.all([fetchMemo(), fetchProject()]);
     }
   }, [projectId, memoId]);
 
-  // メモの初期化時のみmemoContentを設定
-  useEffect(() => {
+  // メモ初期化関数（イベント駆動）
+  const initializeMemoContent = useCallback(() => {
     if (memo && !memoContent) {
       const combinedContent = title ? `${title}\n\n${content}` : content;
       setMemoContent(combinedContent);
+      
+      // メモ初期化時にストア更新も実行
+      if (projectId && memoId) {
+        const lines = combinedContent.split('\n');
+        const currentTitle = lines.length > 0 ? lines[0] : '';
+        setCurrentMemo(projectId, memoId, currentTitle, combinedContent);
+      }
     }
-  }, [memo, title, content, memoContent]);
+  }, [memo, title, content, memoContent, projectId, memoId, setCurrentMemo]);
 
-  // グローバルチャットストアにメモ情報を更新
-  useEffect(() => {
-    if (projectId && memoId && memoContent) {
-      const lines = memoContent.split('\n');
-      const currentTitle = lines.length > 0 ? lines[0] : '';
-      setCurrentMemo(projectId, memoId, currentTitle, memoContent);
-    }
-  }, [projectId, memoId, memoContent, setCurrentMemo]);
 
-  // AIチャットをデフォルトで開く
-  useEffect(() => {
+  // チャット自動オープン関数（イベント駆動）
+  const openChatIfNeeded = useCallback(() => {
     if (user && !isChatOpen) {
       setTimeout(() => setChatOpen(true), 500);
     }
@@ -529,7 +527,11 @@ const MemoPage: React.FC = () => {
       const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
                               (lines.length === 1 && !lines[0].trim() ? '' : newContent);
       
+      // ストア更新（即座同期）
       updateMemoContent(extractedTitle, extractedContent);
+      if (projectId && memoId) {
+        setCurrentMemo(projectId, memoId, extractedTitle, newContent);
+      }
       
       // 自動保存をスケジュール（イベント駆動）
       scheduleSave(newContent);
@@ -649,7 +651,10 @@ const MemoPage: React.FC = () => {
     };
   }, [memoContent, saveImmediately]);
 
+  // 初期ローディング時の処理
   if (isLoading) {
+    // 初期データ取得を実行
+    initializeData();
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Typography>読み込み中...</Typography>
@@ -664,6 +669,10 @@ const MemoPage: React.FC = () => {
       </Container>
     );
   }
+
+  // メモが読み込まれたら初期化とチャットオープンを実行
+  initializeMemoContent();
+  openChatIfNeeded();
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>

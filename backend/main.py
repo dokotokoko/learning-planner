@@ -600,11 +600,8 @@ async def chat_with_ai(
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
                 messages.append({"role": role, "content": history_msg["message"]})
-        
-        # メモコンテンツがある場合は、ユーザーメッセージにコンテキストとして追加
+
         user_message = chat_data.message
-        #if chat_data.memo_content:
-        #    user_message = f"【メモコンテンツ】\n{chat_data.memo_content}\n\n【質問】\n{chat_data.message}"
         
         messages.append({"role": "user", "content": user_message})
         context_metadata = None

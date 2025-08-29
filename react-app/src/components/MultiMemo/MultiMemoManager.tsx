@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -89,6 +89,12 @@ type ViewMode = 'grid' | 'list';
 type SortBy = 'updated_at' | 'created_at' | 'title';
 type SortOrder = 'asc' | 'desc';
 
+// Fuse設定を定数として定義（再計算回避）
+const FUSE_OPTIONS = {
+  keys: ['title', 'content', 'tags'],
+  threshold: 0.3,
+};
+
 const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   userId,
   projectId,
@@ -175,37 +181,35 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
     }
   }, []);
 
-  // 初期化
-  useEffect(() => {
-    fetchMemos();
-    fetchProjects();
+  // 遅延初期化関数（イベント駆動）
+  const initializeData = useCallback(async () => {
+    await Promise.all([fetchMemos(), fetchProjects()]);
   }, [fetchMemos, fetchProjects]);
 
-  // 検索とフィルタリング
-  const fuseOptions = {
-    keys: ['title', 'content', 'tags'],
-    threshold: 0.3,
-  };
-  
-  const fuse = useMemo(() => new Fuse(memos, fuseOptions), [memos]);
+  // 検索インデックス（最適化されたメモ化）
+  const fuse = useMemo(() => {
+    return memos.length > 0 ? new Fuse(memos, FUSE_OPTIONS) : null;
+  }, [memos]);
 
+  // 検索結果のメモ化（検索クエリとメモの組み合わせでのみ再計算）
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim() || !fuse) return memos;
+    const results = fuse.search(searchQuery);
+    return results.map(item => item.item);
+  }, [memos, searchQuery, fuse]);
+
+  // タグフィルター結果のメモ化（タグの変更時のみ再計算）
+  const tagFilteredMemos = useMemo(() => {
+    if (selectedTags.length === 0) return searchResults;
+    return searchResults.filter(memo =>
+      selectedTags.every(tag => memo.tags.includes(tag))
+    );
+  }, [searchResults, selectedTags]);
+
+  // 最終的なソート済み結果（ソート設定の変更時のみ再計算）
   const filteredAndSortedMemos = useMemo(() => {
-    let result = [...memos];
-
-    // 検索フィルタ
-    if (searchQuery.trim()) {
-      const searchResults = fuse.search(searchQuery);
-      result = searchResults.map(item => item.item);
-    }
-
-    // タグフィルタ
-    if (selectedTags.length > 0) {
-      result = result.filter(memo =>
-        selectedTags.every(tag => memo.tags.includes(tag))
-      );
-    }
-
-    // ソート
+    const result = [...tagFilteredMemos];
+    
     result.sort((a, b) => {
       const aValue = a[sortBy];
       const bValue = b[sortBy];
@@ -224,22 +228,30 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
     });
 
     return result;
-  }, [memos, searchQuery, selectedTags, sortBy, sortOrder, fuse]);
+  }, [tagFilteredMemos, sortBy, sortOrder]);
 
-  // 全タグの取得
+  // 全タグの取得（メモ数に応じて最適化）
   const allTags = useMemo(() => {
+    if (memos.length === 0) return [];
+    
     const tagSet = new Set<string>();
-    memos.forEach(memo => {
-      memo.tags.forEach(tag => tagSet.add(tag));
-    });
+    for (const memo of memos) {
+      for (const tag of memo.tags) {
+        tagSet.add(tag);
+      }
+    }
     return Array.from(tagSet).sort();
   }, [memos]);
 
-  // デバウンスされた検索
-  const debouncedSearch = useMemo(
-    () => debounce((query: string) => setSearchQuery(query), 300),
-    []
-  );
+  // デバウンス検索の最適化（useCallbackで安定化）
+  const debouncedSearchRef = useRef<ReturnType<typeof debounce>>();
+  
+  const handleSearchChange = useCallback((query: string) => {
+    if (!debouncedSearchRef.current) {
+      debouncedSearchRef.current = debounce((q: string) => setSearchQuery(q), 300);
+    }
+    debouncedSearchRef.current(query);
+  }, []);
 
   // メモ作成
   const handleCreateMemo = async (memoData: Partial<MultiMemo>) => {
@@ -333,6 +345,11 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
     }
   };
 
+  // 遅延初期化を実行
+  if (memos.length === 0 && projects.length === 0 && !isLoading) {
+    initializeData();
+  }
+
   return (
     <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* ヘッダー */}
@@ -363,7 +380,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
         <TextField
           fullWidth
           placeholder="メモを検索..."
-          onChange={(e) => debouncedSearch(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
