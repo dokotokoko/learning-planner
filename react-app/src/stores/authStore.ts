@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>()(
         
         try {
           // バックエンドAPIを使用してログイン
-          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
           const response = await fetch(`${apiBaseUrl}/auth/login`, {
             method: 'POST',
             headers: {
@@ -127,7 +127,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           // バックエンドAPIにユーザー登録リクエストを送信
-          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
           
           const response = await fetch(`${apiBaseUrl}/auth/register`, {
             method: 'POST',

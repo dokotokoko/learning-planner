@@ -1,4 +1,5 @@
 import os
+from typing import List, Dict, Any
 from openai import OpenAI
 from dotenv import load_dotenv
 from prompt.prompt import system_prompt
@@ -6,7 +7,7 @@ from prompt.prompt import system_prompt
 class learning_plannner():
     def __init__(self):
         load_dotenv()
-        self.model = "gpt-4.1-nano"
+        self.model = "gpt-4.1"
         
         # 環境変数からAPIキーを取得
         api_key = os.getenv("OPENAI_API_KEY")
@@ -166,3 +167,36 @@ class learning_plannner():
         )
         return response.choices[0].message.content
 
+    def _to_input_items(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Chat Completionsの messages([{role, content:str|list}]) を
+        Responses APIの input(items: role + content-parts) に変換
+        """
+        items = []
+        for m in messages:
+            c = m.get("content", "")
+            # 文字列のみ想定（必要ならlist対応を拡張）
+            if isinstance(c, list):
+                # 既にparts想定の形式ならそのまま使う
+                parts = c
+            else:
+                parts = [{"type": "input_text", "text": str(c)}]
+            items.append({"role": m["role"], "content": parts})
+        return items
+
+    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
+        """
+        DBから復元した会話履歴（system→過去→今回user）をそのまま渡す版。
+        例: [{"role":"system","content":"..."},
+             {"role":"user","content":"..."},
+             {"role":"assistant","content":"..."},
+             {"role":"user","content":"..."}]
+        """
+        input_items = self._to_input_items(messages)
+        resp = self.client.responses.create(
+            model=self.model,
+            input=input_items,
+            tools=[{"type": "web_search_preview"}],  # "web_search" → "web_search_preview"に修正
+            store=True,
+        )
+        return resp.output_text

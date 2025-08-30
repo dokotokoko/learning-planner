@@ -62,20 +62,23 @@ app = FastAPI(
 # パフォーマンス最適化ミドルウェア
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # レスポンス圧縮
 
-# CORS設定（ngrok対応）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "http://127.0.0.1:8080",
-        "http://localhost:8080",
-        "https://demo.tanqmates.org"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS設定
+# 開発環境でNginxリバースプロキシを使用する場合は不要
+# 本番環境や直接アクセスが必要な場合はコメントを外してください
+if os.environ.get("ENABLE_CORS", "false").lower() == "true":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173", 
+            "http://localhost:3000",
+            "http://127.0.0.1:8080",
+            "http://localhost:8080",
+            "https://demo.tanqmates.org"
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # セキュリティスキーム
 security = HTTPBearer()
@@ -122,14 +125,7 @@ class ChatHistoryResponse(BaseModel):
     context_data: Optional[str]
     created_at: str
 
-class ConversationResponse(BaseModel):
-    id: str
-    title: str
-    page_id: str
-    message_count: int
-    last_message: str
-    updated_at: str  # last_updated → updated_at に変更
-    created_at: str
+# ConversationResponse は削除（chat_conversationsテーブルを使用しないため）
 
 # メモ関連
 class MemoSave(BaseModel):
@@ -344,10 +340,20 @@ def get_current_user_cached(credentials: HTTPAuthorizationCredentials = Depends(
             detail="無効なトークン形式です"
         )
     except Exception as e:
-        logger.error(f"認証エラー: {e}")
+        import traceback
+        error_detail = f"認証エラー詳細: {type(e).__name__}: {str(e)}"
+        logger.error(f"{error_detail}\nTraceback: {traceback.format_exc()}")
+        
+        # Supabase接続エラーの場合は詳細を返す
+        if "connection" in str(e).lower() or "timeout" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"データベース接続エラー: {str(e)}"
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="認証処理でエラーが発生しました"
+            detail=f"認証処理でエラーが発生しました: {str(e)}"
         )
 
 def validate_supabase():
@@ -534,45 +540,31 @@ async def chat_with_ai(
         project = None
         project_id = None
         
-        logger.info(f"🔍 プロジェクト情報推論開始 - page_id: {page_id}")
+        logger.info(f"🔍 プロジェクト情報取得開始 - page_id: {page_id}")
         
-        # 1. pageIdからプロジェクトIDを推論する
+        # 1. pageIdがproject-形式の場合（既存ロジック維持）
         if page_id.startswith('project-'):
             try:
                 project_id = int(page_id.replace('project-', ''))
-                logger.info(f"✅ pageIdからプロジェクトIDを推論: {project_id}")
+                logger.info(f"✅ project-形式からプロジェクトIDを取得: {project_id}")
             except ValueError:
-                logger.warning(f"⚠️ pageIdからプロジェクトIDの抽出に失敗: {page_id}")
+                logger.warning(f"⚠️ project-形式の解析に失敗: {page_id}")
+        
+        # 2. pageIdが数値（memo_id）の場合、memosテーブルから直接project_idを取得
+        elif page_id.isdigit():
+            try:
+                memo_result = supabase.table('memos').select('project_id').eq('id', int(page_id)).eq('user_id', current_user).execute()
+                if memo_result.data and memo_result.data[0].get('project_id'):
+                    project_id = memo_result.data[0]['project_id']
+                    logger.info(f"✅ memo_id:{page_id}からプロジェクトIDを直接取得: {project_id}")
+                else:
+                    logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
+            except Exception as e:
+                logger.warning(f"⚠️ memo_id:{page_id}からのproject_id取得に失敗: {e}")
+        
         else:
-            logger.info(f"🔴 pageIdがproject-で始まらない: {page_id}")
-        
-        # 2. メモコンテンツからプロジェクトIDを推論（memo_contentにプロジェクト情報が含まれている場合）
-        if not project_id and (chat_data.memo_content or chat_data.context):
-            memo_text = chat_data.memo_content or chat_data.context
-            # 最新のメモからプロジェクトIDを推論
-            try:
-                # ユーザーの最新プロジェクトを取得
-                recent_project_result = supabase.table('projects').select('id').eq('user_id', current_user).order('updated_at', desc=True).limit(1).execute()
-                if recent_project_result.data:
-                    project_id = recent_project_result.data[0]['id']
-            except Exception as e:
-                logger.warning(f"最新プロジェクトの取得に失敗: {e}")
-        
-        # 3. 過去の会話履歴からプロジェクトIDを推論
-        if not project_id and conversation_id:
-            try:
-                # 同じconversationの過去メッセージからproject_idを探す
-                context_result = supabase.table('chat_logs').select('context_data').eq('conversation_id', conversation_id).not_.is_('context_data', 'null').order('created_at', desc=True).limit(10).execute()
-                for log in context_result.data or []:
-                    try:
-                        context_data = json.loads(log['context_data'])
-                        if context_data.get('project_id'):
-                            project_id = context_data['project_id']
-                            break
-                    except (json.JSONDecodeError, KeyError):
-                        continue
-            except Exception as e:
-                logger.warning(f"過去の会話からプロジェクトID推論に失敗: {e}")
+            logger.info(f"🔴 page_id形式が未対応: {page_id}")
+            # その他の形式の場合はproject_idをNoneのまま継続
         
         # プロジェクト情報を取得
         if project_id:
@@ -582,11 +574,12 @@ async def chat_with_ai(
                 
                 if project_result.data:
                     project = project_result.data[0]
-                    project_context = f"""\n## 現在のプロジェクト情報
-- 探究テーマ: {project['theme']}
-- 問い: {project.get('question', '未設定')}
-- 仮説: {project.get('hypothesis', '未設定')}\n\n"""
-                    logger.info(f"✅ プロジェクト情報を自動取得成功: {project['theme']}")
+                    # プロジェクト情報を軽量フォーマットで統合（トークン削減）
+                    theme_short = (project['theme'] or '')[:30]
+                    question_short = (project.get('question') or 'NA')[:25]
+                    hypothesis_short = (project.get('hypothesis') or 'NA')[:25]
+                    project_context = f"[テーマ:{theme_short}|問い:{question_short}|仮説:{hypothesis_short}]"
+                    logger.info(f"✅ プロジェクト情報を軽量フォーマットで取得成功: {project['theme']}")
                 else:
                     logger.warning(f"⚠️ プロジェクトが見つからない: project_id={project_id}, user_id={current_user}")
             except Exception as e:
@@ -621,11 +614,8 @@ async def chat_with_ai(
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
                 messages.append({"role": role, "content": history_msg["message"]})
-        
-        # メモコンテンツがある場合は、ユーザーメッセージにコンテキストとして追加
+
         user_message = chat_data.message
-        #if chat_data.memo_content:
-        #    user_message = f"【メモコンテンツ】\n{chat_data.memo_content}\n\n【質問】\n{chat_data.message}"
         
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
@@ -796,79 +786,9 @@ async def get_chat_history(
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
 
-@app.get("/chat/conversations", response_model=List[ConversationResponse])
-async def get_chat_conversations(
-    limit: Optional[int] = 20,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """conversation一覧取得（最適化版）"""
-    try:
-        validate_supabase()
-        
-        conversations_response = supabase.table("chat_conversations").select("*").eq("user_id", current_user).order("updated_at", desc=True).limit(limit or 20).execute()
-        conversations = conversations_response.data
-        
-        result = []
-        for conv in conversations:
-            # メッセージ数と最新メッセージを効率的に取得
-            logs_response = supabase.table("chat_logs").select("message", count='exact').eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()
-            
-            last_message = logs_response.data[0]["message"][:100] if logs_response.data else "メッセージなし"
-            message_count = logs_response.count if logs_response.count else 0
-            
-            result.append(ConversationResponse(
-                id=conv["id"],
-                title=conv["title"],
-                page_id=conv.get("page_id", "unknown"),
-                message_count=message_count,
-                last_message=last_message,
-                updated_at=conv["updated_at"],
-                created_at=conv["created_at"]
-            ))
-        
-        return result
-        
-    except Exception as e:
-        handle_database_error(e, "conversation一覧の取得")
+# /chat/conversations エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
-@app.get("/chat/conversations/{conversation_id}/messages", response_model=List[ChatHistoryResponse])
-async def get_conversation_messages(
-    conversation_id: str,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """特定のconversationのメッセージ一覧取得"""
-    try:
-        validate_supabase()
-        
-        # conversationの所有者確認
-        conv_response = supabase.table("chat_conversations").select("*").eq("id", conversation_id).eq("user_id", current_user).execute()
-        if not conv_response.data:
-            raise HTTPException(status_code=404, detail="conversationが見つかりません")
-        
-        # メッセージを取得
-        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at", desc=False).execute()
-        messages = messages_response.data
-        
-        return [
-            ChatHistoryResponse(
-                id=msg["id"],
-                page=msg["page"],
-                sender=msg["sender"],
-                message=msg["message"],
-                context_data=msg.get("context_data"),
-                created_at=msg["created_at"]
-            )
-            for msg in messages
-        ]
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"conversationメッセージ取得エラー: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="conversationメッセージの取得でエラーが発生しました"
-        )
+# /chat/conversations/{conversation_id}/messages エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
@@ -1234,7 +1154,7 @@ async def update_memo(
     memo_data: MultiMemoUpdate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモ更新"""
+    """メモ更新（最適化版）"""
     try:
         validate_supabase()
         
@@ -1243,7 +1163,22 @@ async def update_memo(
         if not update_data:
             raise HTTPException(status_code=400, detail="更新するフィールドがありません")
         
-        result = supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+        # タイムスタンプを追加
+        from datetime import datetime, timezone
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # タイムアウト対策: execute()を分離
+        import asyncio
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+                ),
+                timeout=30.0  # 30秒のタイムアウト
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"メモ更新タイムアウト: memo_id={memo_id}, user_id={current_user}")
+            raise HTTPException(status_code=504, detail="データベース更新がタイムアウトしました")
         
         if not result.data:
             raise HTTPException(status_code=404, detail="メモが見つかりません")

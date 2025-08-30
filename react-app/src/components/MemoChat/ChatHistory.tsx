@@ -65,7 +65,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   const [sessionToClear, setSessionToClear] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
 
-  // チャット履歴を取得（conversation版）
+  // チャット履歴を取得
   const fetchChatHistory = async () => {
     setLoading(true);
     try {
@@ -105,51 +105,8 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         return;
       }
 
-      // 新しいconversation APIを試行
-      try {
-        console.log('📡 conversation API呼び出し...');
-        const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-        const conversationResponse = await fetch(`${apiBaseUrl}/chat/conversations?limit=50`, {
-          headers: {
-            'Authorization': `Bearer ${userId}`,
-          },
-          credentials: 'include',
-        });
-
-        if (conversationResponse.ok) {
-          const conversations = await conversationResponse.json();
-          console.log(`conversation一覧取得成功:`, {
-            total: conversations.length,
-            conversations: conversations.map((c: any) => ({ id: c.id, title: c.title, page_id: c.page_id }))
-          });
-          
-          // conversationをChatSession形式に変換
-          const convertedSessions: ChatSession[] = conversations.map((conv: any) => ({
-            id: conv.id,
-            page: conv.page_id,
-            title: conv.title, // AI生成タイトルまたは初期タイトル
-            lastMessage: conv.last_message || '',
-            messageCount: conv.message_count || 0,
-            lastUpdated: new Date(conv.updated_at || conv.last_updated || new Date()),
-            messages: [], // 初回は空、必要に応じて後で読み込み
-          }));
-
-          console.log(`conversation変換後:`, {
-            sessionCount: convertedSessions.length,
-            titles: convertedSessions.map(s => s.title).slice(0, 10),
-          });
-
-          setSessions(convertedSessions);
-          return; // 成功したらここで終了
-        } else {
-          console.warn('conversation API利用不可、レガシーAPIにフォールバック');
-        }
-      } catch (convError) {
-        console.warn('conversation API失敗、レガシーAPIにフォールバック:', convError);
-      }
-
-      // フォールバック: 従来のchat/history API
-      console.log('📡 レガシーchat/history API呼び出し...');
+      // chat/history APIから直接取得
+      console.log('📡 chat/history API呼び出し...');
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?limit=200`, {
         headers: {
@@ -160,13 +117,13 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
       if (response.ok) {
         const history = await response.json();
-        console.log(`レガシー履歴取得:`, {
+        console.log(`履歴取得成功:`, {
           total: history.length,
           memoCount: history.filter((item: any) => item.page?.startsWith('memo-')).length,
           samplePages: [...new Set(history.slice(0, 10).map((item: any) => item.page))],
         });
         
-        // ページごとにセッションをグループ化（従来の方法）
+        // ページごとにセッションをグループ化
         const sessionMap = new Map<string, ChatSession>();
         
         history.forEach((item: any) => {
@@ -210,7 +167,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
           b.lastUpdated.getTime() - a.lastUpdated.getTime()
         );
 
-        console.log(`レガシーセッション作成後:`, {
+        console.log(`セッション作成後:`, {
           sessionCount: sortedSessions.length,
           memoSessions: sortedSessions.filter(s => s.page.startsWith('memo-')).length,
           pages: sortedSessions.map(s => s.page).slice(0, 10),
@@ -220,6 +177,8 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         await fetchMemoTitles(sortedSessions, userId);
 
         setSessions(sortedSessions);
+      } else {
+        console.error('履歴取得エラー:', response.status);
       }
     } catch (error) {
       console.error('履歴取得エラー:', error);
@@ -372,67 +331,6 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
     setExpandedPages(newExpanded);
   };
 
-  // conversation詳細メッセージを取得
-  const loadConversationMessages = async (session: ChatSession): Promise<ChatSession | null> => {
-    try {
-      // ユーザーIDを取得
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
-      const authToken = localStorage.getItem('auth-token');
-      
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-      
-      if (!userId && authToken) {
-        userId = authToken;
-      }
-
-      if (!userId) {
-        console.error('ユーザーIDが見つかりません');
-        return null;
-      }
-
-      console.log(`📡 conversation ${session.id} の詳細メッセージ取得...`);
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-    const response = await fetch(`${apiBaseUrl}/chat/conversations/${session.id}/messages`, {
-        headers: {
-          'Authorization': `Bearer ${userId}`,
-        },
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const messages = await response.json();
-        console.log(`conversation ${session.id} のメッセージ取得成功: ${messages.length}件`);
-        
-        // 更新されたセッションを作成
-        const updatedSession = { ...session, messages };
-        
-        // セッションのメッセージを更新
-        const updatedSessions = sessions.map(s => 
-          s.id === session.id ? updatedSession : s
-        );
-        setSessions(updatedSessions);
-        
-        // 更新されたセッションを返す
-        return updatedSession;
-      } else {
-        console.warn(`conversation ${session.id} のメッセージ取得失敗: ${response.status}`);
-        return null;
-      }
-    } catch (error) {
-      console.error(`conversation ${session.id} のメッセージ取得エラー:`, error);
-      return null;
-    }
-  };
 
   // 時間フォーマット
   const formatTime = (date: Date) => {
@@ -567,31 +465,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                         }}
                       >
                         <ListItemButton
-                          onClick={async () => {
+                          onClick={() => {
                             setSelectedSession(session.id);
-                            
                             console.log('🖱️ セッション選択:', {
                               sessionId: session.id,
-                              messageCount: session.messages.length,
-                              isUUID: session.id.match(/^[0-9a-f-]{36}$/i)
+                              messageCount: session.messages.length
                             });
-                            
-                            // conversation詳細を取得（メッセージが空の場合）
-                            if (session.messages.length === 0) {
-                              console.log('📥 メッセージ詳細取得開始...');
-                              const updatedSession = await loadConversationMessages(session);
-                              if (updatedSession) {
-                                console.log('✅ 更新されたセッションでonSessionSelect呼び出し:', {
-                                  messageCount: updatedSession.messages.length
-                                });
-                                onSessionSelect(updatedSession);
-                                return;
-                              } else {
-                                console.warn('⚠️ セッション更新失敗、元のセッションを使用');
-                              }
-                            }
-                            
-                            console.log('📤 元のセッションでonSessionSelect呼び出し');
                             onSessionSelect(session);
                           }}
                           sx={{ borderRadius: 1 }}

@@ -1,6 +1,5 @@
 # 🎓 探Qメイト - AI-Powered Inquiry Learning Platform
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3.3-blue.svg)](https://www.typescriptlang.org/)
@@ -8,7 +7,7 @@
 
 > **探究学習を革新する AI 対話型学習支援プラットフォーム**
 
-探Qメイトは、学生の探究学習を支援するためのオープンソースプラットフォームです。AI との対話を通じて、テーマ設定から目標達成まで、段階的で効果的な学習体験を提供します。
+探Qメイトは、学生の探究学習を伴走するAIパートナーです。
 
 ## ✨ なぜ探Qメイトなのか？
 
@@ -20,115 +19,87 @@
 
 ### 💡 私たちのソリューション
 - **AI メンター**：24時間利用可能な対話型学習支援
-- **段階的ガイド**：4つのステップで確実な学習進行
+- **プロジェクトベース学習**：複数のメモとプロジェクトの統合管理
 - **可視化ツール**：思考フレームワークとマインドマップ
-- **継続的サポート**：スマート通知による最適な学習リズム
+- **クエストシステム**：ゲーミフィケーションによる学習動機向上
 
 ## 🚀 主要機能
 
-### 🔄 探究学習の4ステップガイド
-```
-1. テーマ設定    →  2. 目標設定    →  3. アイディエーション  →  4. まとめ・振り返り
-   興味の発見        具体的な目標      活動計画の立案         成果の整理
-```
-
 ### 🤖 AI 対話機能
 - **リアルタイム支援**：学習中の疑問を即座に解決
-- **個別最適化**：学習者のペースと理解度に合わせた対話
-- **創発的対話**：質問によって新たな発見を促進
+- **プロジェクト文脈理解**：メモとプロジェクト情報を考慮した対話
+- **軽量化最適化**：高速レスポンスのための最適化実装
 
 ### 📝 統合メモシステム
-- **分割パネル UI**：メモとチャットを同時活用
-- **Markdown 対応**：構造化された美しいノート
+- **プロジェクト連携**：メモを特定のプロジェクトに関連付け
+- **マルチメモ管理**：複数のメモを同時に管理・編集
 - **自動保存**：作業の中断を気にせず集中
+- **Markdown 対応**：構造化された美しいノート
 
 ### 🎮 思考フレームワークツール
-- **ロジックツリー**：問題を体系的に分解
+- **テーマ深掘りツール**：段階的にテーマを具体化
 - **マインドマップ**：アイデアの視覚的整理  
-- **5-Whys分析**：根本原因の深掘り
-- **インパクト・実現可能性マトリックス**：アイデア評価
+- **インタラクティブ探索**：AIサポートによる思考の拡張
 
-## 🛠️ 技術スタック
+### 🏆 クエストシステム
+- **学習クエスト**：段階的な学習目標の設定
+- **実績システム**：成果の可視化とポイント獲得
+- **振り返り機能**：学習プロセスの内省サポート
 
-### Frontend
-- **React 18** + **TypeScript**
-- **Vite** - 高速開発環境
-- **Material-UI v5** - UIコンポーネントライブラリ
-- **Zustand** - 状態管理
-- **React Router** - ルーティング
-- **Framer Motion** - アニメーション
 
-### Backend
-- **FastAPI** - 高性能 Python Web フレームワーク
-- **Uvicorn** - ASGIサーバー
-- **Supabase** - BaaS (PostgreSQL)
-- **OpenAI API** - AI対話機能
+## 🚀 開発クイックスタート
 
-### DevOps & Tools
-- **Docker** - コンテナ化
-- **ESLint + Prettier** - コード品質管理
-- **GitHub Actions** - CI/CD
+セットアップ手順は [DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md) を参照してください。
 
-## 🚀 クイックスタート (開発環境)
+## 🐳 Docker環境
 
-### 📋 前提条件
-- **Node.js** (v18以上)
-- **Python** (v3.9以上)
-- **OpenAI API キー**
-- **Supabase プロジェクト**
+### 開発環境
+```bash
+# 起動
+docker-compose -f docker-compose.dev.yml up --build
 
-### ⚡ 起動手順
+# バックグラウンド実行
+docker-compose -f docker-compose.dev.yml up -d --build
 
-1. **リポジトリをクローン**
-   ```bash
-   git clone https://github.com/your-username/learning-assistant.git
-   cd learning-assistant
-   ```
+# 停止
+docker-compose -f docker-compose.dev.yml down
 
-2. **環境変数を設定**
-   - `backend/` と `react-app/` の中に `.env.example` ファイルがあります。
-   - これらをコピーして `.env` ファイルを作成し、APIキーやSupabaseの情報を設定してください。
+# ログ確認
+docker-compose -f docker-compose.dev.yml logs -f [backend|frontend|nginx]
+```
 
-3. **依存関係をインストール**
-   ```bash
-   # Backend
-   cd backend
-   pip install -r requirements.txt
-   cd ..
+### 本番環境
+```bash
+# 起動
+docker-compose up --build -d
 
-   # Frontend
-   cd react-app
-   npm install
-   cd ..
-   ```
+# 停止
+docker-compose down
+```
 
-4. **開発サーバーを起動**
-   - 以下のスクリプトを実行すると、フロントエンドとバックエンドが同時に起動します。
-   ```bash
-   # Windowsの場合
-   start_dev.bat
+## 📚 プロジェクト構造
 
-   # macOS / Linuxの場合
-   ./start_dev.sh
-   ```
-   
-   - **フロントエンド**: `http://localhost:5173`
-   - **バックエンド**: `http://localhost:8000`
-
-## 🐳 Dockerでの実行
-
-本番環境に近い形で動作させたい場合は、Dockerを利用します。
-
-1. **DockerとDocker Composeをインストール**
-
-2. **環境変数を設定**
-   - `backend/.env` と `react-app/.env` をクイックスタートの手順に従って設定します。
-
-3. **Dockerコンテナをビルドして起動**
-   ```bash
-   docker-compose up --build
-   ```
-   - **統合アクセス**: `http://localhost:8080` (Nginxリバースプロキシ経由)
+```
+learning-assistant/
+├── backend/               # FastAPI バックエンド
+│   ├── main.py           # API サーバー
+│   ├── module/           # LLM API モジュール
+│   ├── prompt/           # プロンプトテンプレート
+│   └── requirements.txt  # Python依存関係
+├── react-app/            # React フロントエンド
+│   ├── src/
+│   │   ├── components/   # UIコンポーネント
+│   │   ├── pages/       # ページコンポーネント
+│   │   ├── services/    # APIクライアント
+│   │   └── styles/      # スタイルシート
+│   └── package.json     # Node.js依存関係
+├── nginx/               # Nginx設定
+│   ├── nginx.conf      # リバースプロキシ設定
+│   └── certs/          # SSL証明書（中身は各自）
+├── docker-compose.yml        # 本番用Docker設定
+├── docker-compose.dev.yml    # 開発用Docker設定
+└── DEVELOPMENT_SETUP.md      # 開発用セットアップ
+```
 
 ## 🤝 コントリビューション
 
@@ -139,29 +110,56 @@
 
 ### 開発参加の流れ
 
-1. このリポジトリをフォークします。
-2. 機能ブランチを作成します (`git checkout -b feature/amazing-feature`)。
-3. 変更をコミットします (`git commit -m 'Add some amazing feature'`)。
-4. ブランチにプッシュします (`git push origin feature/amazing-feature`)。
-5. プルリクエストを作成します。
+1. このリポジトリをフォークします
+2. 機能ブランチを作成します (`git checkout -b feature/amazing-feature`)
+3. 変更をコミットします (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュします (`git push origin feature/amazing-feature`)
+5. プルリクエストを作成します
 
-## 🗺️ ロードマップ
+## 🛠️ 技術スタック
 
-- [ ] **PWA対応** - オフライン利用とアプリ化
-- [ ] **エクスポート機能** - PDF/Word 出力
-- [ ] **チーム機能** - グループでの協働学習
-- [ ] **高度な分析** - 学習パターン分析・レポート
-- [ ] **モバイルアプリ対応**
+### Frontend
+- **React 18** + **TypeScript**
+- **Vite** - 高速開発環境
+- **Material-UI v5** - UIコンポーネントライブラリ
+- **Zustand** - 状態管理
+- **React Router v6** - ルーティング
+- **React Markdown** - Markdownレンダリング
 
-## 📜 ライセンス
+### Backend
+- **FastAPI** - 高性能 Python Web フレームワーク
+- **Uvicorn** - ASGIサーバー
+- **Supabase** - BaaS (PostgreSQL)
+- **OpenAI API** - AI対話機能
+- **Pydantic** - データバリデーション
 
-このプロジェクトは [MIT License](LICENSE) の下で公開されています。
+### DevOps & Infrastructure
+- **Docker & Docker Compose** - コンテナ化
+- **Nginx** - リバースプロキシ
+- **mkcert** - ローカルSSL証明書
+- **GitHub Actions** - CI/CD
+
 
 ## 🙏 謝辞
 
 このプロジェクトは、多くの優れたオープンソースソフトウェアのおかげで成り立っています。
+
 - [React](https://reactjs.org/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [OpenAI](https://openai.com/)
 - [Material-UI](https://mui.com/)
 - [Supabase](https://supabase.com/)
+- [Docker](https://www.docker.com/)
+- [Vite](https://vitejs.dev/)
+
+## 📞 サポート
+
+- **Issues**: [GitHub Issues](https://github.com/your-username/learning-assistant/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/learning-assistant/discussions)
+- **Email**: koutakado9@gmail.com
+
+---
+
+<div align="center">
+  Made with ❤️ by the TanQMates Community
+</div>
