@@ -513,45 +513,31 @@ async def chat_with_ai(
         project = None
         project_id = None
         
-        logger.info(f"🔍 プロジェクト情報推論開始 - page_id: {page_id}")
+        logger.info(f"🔍 プロジェクト情報取得開始 - page_id: {page_id}")
         
-        # 1. pageIdからプロジェクトIDを推論する
+        # 1. pageIdがproject-形式の場合（既存ロジック維持）
         if page_id.startswith('project-'):
             try:
                 project_id = int(page_id.replace('project-', ''))
-                logger.info(f"✅ pageIdからプロジェクトIDを推論: {project_id}")
+                logger.info(f"✅ project-形式からプロジェクトIDを取得: {project_id}")
             except ValueError:
-                logger.warning(f"⚠️ pageIdからプロジェクトIDの抽出に失敗: {page_id}")
+                logger.warning(f"⚠️ project-形式の解析に失敗: {page_id}")
+        
+        # 2. pageIdが数値（memo_id）の場合、memosテーブルから直接project_idを取得
+        elif page_id.isdigit():
+            try:
+                memo_result = supabase.table('memos').select('project_id').eq('id', int(page_id)).eq('user_id', current_user).execute()
+                if memo_result.data and memo_result.data[0].get('project_id'):
+                    project_id = memo_result.data[0]['project_id']
+                    logger.info(f"✅ memo_id:{page_id}からプロジェクトIDを直接取得: {project_id}")
+                else:
+                    logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
+            except Exception as e:
+                logger.warning(f"⚠️ memo_id:{page_id}からのproject_id取得に失敗: {e}")
+        
         else:
-            logger.info(f"🔴 pageIdがproject-で始まらない: {page_id}")
-        
-        # 2. メモコンテンツからプロジェクトIDを推論（memo_contentにプロジェクト情報が含まれている場合）
-        if not project_id and (chat_data.memo_content or chat_data.context):
-            memo_text = chat_data.memo_content or chat_data.context
-            # 最新のメモからプロジェクトIDを推論
-            try:
-                # ユーザーの最新プロジェクトを取得
-                recent_project_result = supabase.table('projects').select('id').eq('user_id', current_user).order('updated_at', desc=True).limit(1).execute()
-                if recent_project_result.data:
-                    project_id = recent_project_result.data[0]['id']
-            except Exception as e:
-                logger.warning(f"最新プロジェクトの取得に失敗: {e}")
-        
-        # 3. 過去の会話履歴からプロジェクトIDを推論
-        if not project_id and conversation_id:
-            try:
-                # 同じconversationの過去メッセージからproject_idを探す
-                context_result = supabase.table('chat_logs').select('context_data').eq('conversation_id', conversation_id).not_.is_('context_data', 'null').order('created_at', desc=True).limit(10).execute()
-                for log in context_result.data or []:
-                    try:
-                        context_data = json.loads(log['context_data'])
-                        if context_data.get('project_id'):
-                            project_id = context_data['project_id']
-                            break
-                    except (json.JSONDecodeError, KeyError):
-                        continue
-            except Exception as e:
-                logger.warning(f"過去の会話からプロジェクトID推論に失敗: {e}")
+            logger.info(f"🔴 page_id形式が未対応: {page_id}")
+            # その他の形式の場合はproject_idをNoneのまま継続
         
         # プロジェクト情報を取得
         if project_id:
@@ -561,11 +547,12 @@ async def chat_with_ai(
                 
                 if project_result.data:
                     project = project_result.data[0]
-                    project_context = f"""\n## 現在のプロジェクト情報
-- 探究テーマ: {project['theme']}
-- 問い: {project.get('question', '未設定')}
-- 仮説: {project.get('hypothesis', '未設定')}\n\n"""
-                    logger.info(f"✅ プロジェクト情報を自動取得成功: {project['theme']}")
+                    # プロジェクト情報を軽量フォーマットで統合（トークン削減）
+                    theme_short = (project['theme'] or '')[:30]
+                    question_short = (project.get('question') or 'NA')[:25]
+                    hypothesis_short = (project.get('hypothesis') or 'NA')[:25]
+                    project_context = f"[テーマ:{theme_short}|問い:{question_short}|仮説:{hypothesis_short}]"
+                    logger.info(f"✅ プロジェクト情報を軽量フォーマットで取得成功: {project['theme']}")
                 else:
                     logger.warning(f"⚠️ プロジェクトが見つからない: project_id={project_id}, user_id={current_user}")
             except Exception as e:
