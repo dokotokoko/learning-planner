@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # 依存関係をインストール
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --timeout 300 --no-cache-dir -r requirements.txt
 
 # アプリケーションコードをコピー
 COPY . .
@@ -21,5 +21,5 @@ COPY . .
 # ポート8000を公開
 EXPOSE 8000
 
-# アプリケーションの起動
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# アプリケーションの起動（タイムアウト設定を追加）
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120", "--limit-concurrency", "100"] 

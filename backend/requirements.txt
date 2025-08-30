@@ -8,7 +8,7 @@ mysql-connector-python==9.2.0
 psycopg2-binary==2.9.10
 
 # AI関連
-openai==1.61.1
+openai==1.102.0
 tiktoken==0.8.0
 
 # ユーティリティ

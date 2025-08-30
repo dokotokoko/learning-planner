@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   TextField,
@@ -115,20 +115,22 @@ const AIChat: React.FC<AIChatProps> = ({
     setShouldAutoScroll(scrollPercentage > 0.9);
   };
 
-  // スクロールイベントのハンドリング
-  useEffect(() => {
-    const container = messageListRef.current;
-    if (!container) return;
+  // スクロールイベントハンドラ（イベント駆動）
+  const scrollTimeoutRef = useRef<number>();
 
-    let scrollTimeout: number;
+  const setupScrollHandling = useCallback(() => {
+    const container = messageListRef.current;
+    if (!container) return null;
 
     const handleScroll = () => {
       setIsUserScrolling(true);
       checkScrollPosition();
       
       // スクロール停止後、少し待ってからユーザースクロールフラグをリセット
-      clearTimeout(scrollTimeout);
-      scrollTimeout = window.setTimeout(() => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      scrollTimeoutRef.current = window.setTimeout(() => {
         setIsUserScrolling(false);
       }, 150);
     };
@@ -137,174 +139,170 @@ const AIChat: React.FC<AIChatProps> = ({
     
     return () => {
       container.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollTimeout);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
     };
   }, []);
 
-  // forceRefreshまたはpageId変更でメッセージをクリア（継続モードの場合は除外）
-  useEffect(() => {
+  // メッセージクリア関数（イベント駆動）
+  const clearMessagesIfNeeded = useCallback(() => {
     if (forceRefresh || (!persistentMode && initializationKeyRef.current !== pageId)) {
-      // chatStoreのメッセージをクリア
       clearMessages(pageId);
       setMessages([]);
       setHistoryLoaded(false);
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
       initializationKeyRef.current = pageId;
+      return true; // クリアが実行されたことを示す
     }
+    return false;
   }, [forceRefresh, pageId, persistentMode, clearMessages]);
 
-  // chatStoreからメッセージを同期
-  useEffect(() => {
+  // ストア同期関数（イベント駆動）
+  const syncMessagesFromStore = useCallback(() => {
     const stored = getMessages(pageId);
     if (stored.length > 0 && messages.length === 0) {
       setMessages(stored);
     }
-  }, [pageId]); // getMessagesを依存配列から除外
+  }, [pageId, messages.length, getMessages]);
 
-  // データベースから対話履歴を読み込む
-  useEffect(() => {
-    const loadChatHistory = async () => {
-      if (!loadHistoryFromDB || historyLoaded) return;
+  // 対話履歴読み込み関数（イベント駆動）
+  const loadChatHistory = useCallback(async () => {
+    if (!loadHistoryFromDB || historyLoaded) return;
 
-      try {
-        // ユーザーIDを取得
-        let userId = null;
-        const authData = localStorage.getItem('auth-storage');
-        if (authData) {
-          try {
-            const parsed = JSON.parse(authData);
-            if (parsed.state?.user?.id) {
-              userId = parsed.state.user.id;
-            }
-          } catch (e) {
-            console.error('認証データの解析に失敗:', e);
+    try {
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
           }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
         }
-        if (!userId) return;
-
-        const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
-          headers: {
-            'Authorization': `Bearer ${userId}`,
-          },
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          const history = await response.json();
-          const historyMessages: Message[] = history.map((item: any) => ({
-            id: item.id.toString(),
-            role: item.sender === 'user' ? 'user' : 'assistant',
-            content: item.message,
-            timestamp: item.created_at ? new Date(item.created_at) : new Date(),
-          }));
-
-          // ダッシュボード画面の場合は履歴があっても初期メッセージを先頭に追加
-          if (pageId.includes('dashboard') || pageId.includes('general-')) {
-            const initialMessage: Message = {
-              id: `initial-${Date.now()}`,
-              role: 'assistant',
-              content: getDefaultInitialMessage(),
-              timestamp: new Date(),
-            };
-            setMessages([initialMessage, ...historyMessages]);
-          } else {
-            setMessages(historyMessages);
-          }
-          
-          setHistoryLoaded(true);
-          
-          // 履歴読み込み後に最下部にスクロール
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-          }, 100);
-        }
-      } catch (error) {
-        console.error('対話履歴の読み込みエラー:', error);
-        setHistoryLoaded(true); // エラーでも処理を続行
       }
-    };
+      if (!userId) return;
 
-    loadChatHistory();
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
+        headers: {
+          'Authorization': `Bearer ${userId}`,
+        },
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const history = await response.json();
+        const historyMessages: Message[] = history.map((item: any) => ({
+          id: item.id.toString(),
+          role: item.sender === 'user' ? 'user' : 'assistant',
+          content: item.message,
+          timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+        }));
+
+        // ダッシュボード画面の場合は履歴があっても初期メッセージを先頭に追加
+        if (pageId.includes('dashboard') || pageId.includes('general-')) {
+          const initialMessage: Message = {
+            id: `initial-${Date.now()}`,
+            role: 'assistant',
+            content: getDefaultInitialMessage(),
+            timestamp: new Date(),
+          };
+          setMessages([initialMessage, ...historyMessages]);
+        } else {
+          setMessages(historyMessages);
+        }
+        
+        setHistoryLoaded(true);
+        
+        // 履歴読み込み後に最下部にスクロール
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('対話履歴の読み込みエラー:', error);
+      setHistoryLoaded(true); // エラーでも処理を続行
+    }
   }, [pageId, loadHistoryFromDB, historyLoaded]);
 
-  // 初期メッセージと初期応答の設定（履歴読み込みが無効、またはダッシュボード以外のページの場合のみ）
-  useEffect(() => {
-    const loadInitialMessages = async () => {
-      // 履歴読み込みが有効で、ダッシュボード系のページの場合は履歴読み込み処理に任せる
-      if (loadHistoryFromDB && (pageId.includes('dashboard') || pageId.includes('general-'))) {
-        return;
-      }
-      
-      // 既にメッセージがある場合はスキップ
-      if (messages.length > 0) return;
-      
-      // 履歴読み込み中の場合はスキップ
-      if (loadHistoryFromDB && !historyLoaded) return;
-      
-      const initialMessages: Message[] = [];
-      
-      // Step2以降の場合、LocalStorageから初期AI応答を取得（ユーザー固有）
-      if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
-        const stepNumber = pageId.replace('step-', '');
-        
-        // ユーザーIDを取得
-        let userId = null;
-        const authData = localStorage.getItem('auth-storage');
-        if (authData) {
-          try {
-            const parsed = JSON.parse(authData);
-            if (parsed.state?.user?.id) {
-              userId = parsed.state.user.id;
-            }
-          } catch (e) {
-            console.error('認証データの解析に失敗:', e);
-          }
-        }
-
-        if (userId) {
-          const savedInitialResponse = localStorage.getItem(`user-${userId}-step${stepNumber}-initial-ai-response`);
-          if (savedInitialResponse) {
-            initialMessages.push({
-              id: `initial-response-${Date.now()}`,
-              role: 'assistant',
-              content: savedInitialResponse,
-              timestamp: new Date(),
-            });
-          } else if (initialAIResponse) {
-            // LocalStorageにない場合は、propsから設定
-            initialMessages.push({
-              id: `initial-response-${Date.now()}`,
-              role: 'assistant',
-              content: initialAIResponse,
-              timestamp: new Date(),
-            });
-          }
-        }
-      } else {
-        // デフォルトの初期メッセージを表示
-        initialMessages.push({
-          id: `initial-${Date.now()}`,
-          role: 'assistant',
-          content: getDefaultInitialMessage(),
-          timestamp: new Date(),
-        });
-      }
-      
-      if (initialMessages.length > 0) {
-        setMessages(initialMessages);
-        // 初期化完了を記録
-        initializationKeyRef.current = pageId;
-      }
-    };
+  // 初期メッセージ設定関数（イベント駆動）
+  const loadInitialMessages = useCallback(async () => {
+    // 履歴読み込みが有効で、ダッシュボード系のページの場合は履歴読み込み処理に任せる
+    if (loadHistoryFromDB && (pageId.includes('dashboard') || pageId.includes('general-'))) {
+      return;
+    }
     
-    loadInitialMessages();
-  }, [initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded, messages.length]);
+    // 既にメッセージがある場合はスキップ
+    if (messages.length > 0) return;
+    
+    // 履歴読み込み中の場合はスキップ
+    if (loadHistoryFromDB && !historyLoaded) return;
+    
+    const initialMessages: Message[] = [];
+    
+    // Step2以降の場合、LocalStorageから初期AI応答を取得（ユーザー固有）
+    if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
+      const stepNumber = pageId.replace('step-', '');
+      
+      // ユーザーIDを取得
+      let userId = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
 
-  // メッセージリストの最下部にスクロール（新しいメッセージが追加された場合のみ）
+      if (userId) {
+        const savedInitialResponse = localStorage.getItem(`user-${userId}-step${stepNumber}-initial-ai-response`);
+        if (savedInitialResponse) {
+          initialMessages.push({
+            id: `initial-response-${Date.now()}`,
+            role: 'assistant',
+            content: savedInitialResponse,
+            timestamp: new Date(),
+          });
+        } else if (initialAIResponse) {
+          // LocalStorageにない場合は、propsから設定
+          initialMessages.push({
+            id: `initial-response-${Date.now()}`,
+            role: 'assistant',
+            content: initialAIResponse,
+            timestamp: new Date(),
+          });
+        }
+      }
+    } else {
+      // デフォルトの初期メッセージを表示
+      initialMessages.push({
+        id: `initial-${Date.now()}`,
+        role: 'assistant',
+        content: getDefaultInitialMessage(),
+        timestamp: new Date(),
+      });
+    }
+    
+    if (initialMessages.length > 0) {
+      setMessages(initialMessages);
+      // 初期化完了を記録
+      initializationKeyRef.current = pageId;
+    }
+  }, [initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded, messages.length, autoStart]);
+
+  // 自動スクロール処理（イベント駆動）
   const previousMessageCountRef = useRef(0);
-  useEffect(() => {
+  
+  const scrollToBottomIfNeeded = useCallback(() => {
     // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
     if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
       setTimeout(() => {
@@ -314,21 +312,7 @@ const AIChat: React.FC<AIChatProps> = ({
     previousMessageCountRef.current = messages.length;
   }, [messages, isUserScrolling, shouldAutoScroll]);
 
-  // 新しいメッセージが追加された際の処理
-  const scrollToBottomIfNeeded = () => {
-    const container = messageListRef.current;
-    if (!container) return;
 
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-    
-    // ユーザーが最下部近く（90%以上）にいる場合のみ自動スクロール
-    if (scrollPercentage > 0.9) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-  };
 
   // メッセージ送信処理
   const handleSendMessage = async () => {
@@ -532,6 +516,24 @@ const AIChat: React.FC<AIChatProps> = ({
     };
     setMessages([initialMsg]);
   };
+
+  // 初期化処理を実行（イベント駆動）
+  const wasCleared = clearMessagesIfNeeded();
+  if (!wasCleared) {
+    syncMessagesFromStore();
+    if (!historyLoaded && loadHistoryFromDB) {
+      loadChatHistory();
+    } else if (!loadHistoryFromDB || historyLoaded) {
+      loadInitialMessages();
+    }
+  }
+
+  // スクロール処理の設定
+  const cleanupScrollHandling = setupScrollHandling();
+  if (messages.length > previousMessageCountRef.current) {
+    scrollToBottomIfNeeded();
+    previousMessageCountRef.current = messages.length;
+  }
 
   return (
     <Box sx={{ 

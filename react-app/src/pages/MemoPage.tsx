@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo} from 'react';
 import {
   Box,
   Container,
@@ -11,7 +11,6 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
-  Divider,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -19,11 +18,11 @@ import {
   CloudDone as SavedIcon,
   CloudQueue as SavingIcon,
   Error as ErrorIcon,
+  WifiOff as OfflineIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
-import { debounce } from 'lodash';
 
 interface Memo {
   id: number;
@@ -31,6 +30,7 @@ interface Memo {
   content: string;
   created_at: string;
   updated_at: string;
+  version?: number;  // 楽観的ロック用
 }
 
 interface Project {
@@ -39,6 +39,17 @@ interface Project {
   question?: string;
   hypothesis?: string;
 }
+
+// 保存リクエストの状態管理用
+interface SaveRequest {
+  title: string;
+  content: string;
+  requestId: string;
+  seq: number;
+}
+
+// 保存ステータス
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
 
 const MemoPage: React.FC = () => {
   const theme = useTheme();
@@ -55,12 +66,25 @@ const MemoPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [lastSavedContent, setLastSavedContent] = useState<{ title: string; content: string } | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<number>(0);
 
   // MemoChat風の状態管理
   const [memoContent, setMemoContent] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const memoRef = useRef<HTMLDivElement>(null);
+  
+  // Single-flight保存管理用のRef
+  const inflightRef = useRef<Promise<void> | null>(null);
+  const pendingRef = useRef<SaveRequest | null>(null);
+  const seqRef = useRef(0);
+  const latestSeqRef = useRef(0);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const lastSavedHashRef = useRef<string>('');
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const memoPlaceholder = `メモのタイトル
 
 ここにメモの内容を自由に書いてください。
@@ -76,11 +100,25 @@ const MemoPage: React.FC = () => {
 
 1行目がメモのタイトルとして扱われます。`;
 
+  // ハッシュ計算用のヘルパー関数
+  const calculateHash = async (text: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // ランダムなrequestIdを生成
+  const generateRequestId = (): string => {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   // メモの取得
   const fetchMemo = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -95,8 +133,15 @@ const MemoPage: React.FC = () => {
       setTitle(data.title);
       setContent(data.content);
       
+      // バージョン情報を保存
+      setCurrentVersion(data.version || 0);
+      
       // 最後に保存したコンテンツを記録
       setLastSavedContent({ title: data.title, content: data.content });
+      
+      // ハッシュ値を計算して保存
+      const contentHash = await calculateHash(`${data.title}\n${data.content}`);
+      lastSavedHashRef.current = contentHash;
       
       // LocalStorageからバックアップを確認
       const localBackup = loadFromLocalStorage();
@@ -143,7 +188,7 @@ const MemoPage: React.FC = () => {
   const fetchProject = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -162,138 +207,243 @@ const MemoPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  // データ初期化関数（イベント駆動）
+  const initializeData = useCallback(async () => {
     if (projectId && memoId) {
-      fetchMemo();
-      fetchProject();
+      await Promise.all([fetchMemo(), fetchProject()]);
     }
   }, [projectId, memoId]);
 
-  // メモの初期化時のみmemoContentを設定
-  useEffect(() => {
+  // メモ初期化関数（イベント駆動）
+  const initializeMemoContent = useCallback(() => {
     if (memo && !memoContent) {
       const combinedContent = title ? `${title}\n\n${content}` : content;
       setMemoContent(combinedContent);
+      
+      // メモ初期化時にストア更新も実行
+      if (projectId && memoId) {
+        const lines = combinedContent.split('\n');
+        const currentTitle = lines.length > 0 ? lines[0] : '';
+        setCurrentMemo(projectId, memoId, currentTitle, combinedContent);
+      }
     }
-  }, [memo, title, content, memoContent]);
+  }, [memo, title, content, memoContent, projectId, memoId, setCurrentMemo]);
 
-  // グローバルチャットストアにメモ情報を更新
-  useEffect(() => {
-    if (projectId && memoId && memoContent) {
-      const lines = memoContent.split('\n');
-      const currentTitle = lines.length > 0 ? lines[0] : '';
-      setCurrentMemo(projectId, memoId, currentTitle, memoContent);
-    }
-  }, [projectId, memoId, memoContent, setCurrentMemo]);
 
-  // AIチャットをデフォルトで開く
-  useEffect(() => {
+  // チャット自動オープン関数（イベント駆動）
+  const openChatIfNeeded = useCallback(() => {
     if (user && !isChatOpen) {
       setTimeout(() => setChatOpen(true), 500);
     }
   }, [user, isChatOpen, setChatOpen]);
 
-  // 自動保存機能
-  const saveChanges = async (newTitle: string, newContent: string) => {
-    // 差分チェック：前回保存したコンテンツと同じ場合はスキップ
-    if (lastSavedContent && 
-        lastSavedContent.title === newTitle && 
-        lastSavedContent.content === newContent) {
-      // console.log('⏭️ 変更なし - 保存をスキップ'); // ログ削減
+  // Single-flight保存処理
+  const performSave = async (request: SaveRequest): Promise<void> => {
+    // ハッシュチェック - 変更がなければ保存しない
+    const currentHash = await calculateHash(`${request.title}\n${request.content}`);
+    if (currentHash === lastSavedHashRef.current) {
       return;
     }
 
+    const token = localStorage.getItem('auth-token');
+    if (!token) {
+      throw new Error('認証トークンが見つかりません');
+    }
+
+    const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
+    
+    // 15秒タイムアウト設定
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    
     try {
-      setIsSaving(true);
-      const token = localStorage.getItem('auth-token');
-      
-      if (!token) {
-        console.error('認証トークンが見つかりません');
-        return;
-      }
-
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      
-      // MultiMemoUpdateモデルに対応したリクエストボディ
       const requestBody = {
-        title: newTitle || '',
-        content: newContent || ''
+        title: request.title || '',
+        content: request.content || '',
+        version: currentVersion, // 楽観的ロック用
+        requestId: request.requestId,
+        seq: request.seq,
       };
-
-      // console.log('💾 メモ保存開始:', { memoId, title: newTitle, contentLength: newContent?.length || 0 }); // ログ削減
 
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          'If-Match': currentVersion.toString(), // ETag代わりにバージョンを使用
         },
         credentials: 'include',
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
 
-      // console.log('💾 レスポンス:', { status: response.status, ok: response.ok }); // ログ削減
+      clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const result = await response.json();
-        // console.log('💾 保存成功:', result); // ログ削減
-        
-        setLastSaved(new Date());
-        setLastSavedContent({ title: newTitle, content: newContent });
-        setHasUnsavedChanges(false);
-        
-        // 保存成功時にLocalStorageバックアップをクリア
-        clearLocalStorageBackup();
-        // console.log('💾 メモを保存し、バックアップをクリアしました'); // ログ削減
-      } else {
-        const errorText = await response.text();
-        console.error('💾 保存失敗:', { status: response.status, statusText: response.statusText, body: errorText });
-        throw new Error(`保存に失敗しました (${response.status}): ${errorText}`);
+      if (!response.ok) {
+        if (response.status === 409) {
+          // 楽観的ロックエラー: 最新を取得してマージが必要
+          console.warn('競合が発生しました。最新データを取得します');
+          await fetchMemo();
+          throw new Error('conflict');
+        }
+        throw new Error(`保存に失敗しました (${response.status})`);
       }
-    } catch (error) {
-      console.error('💾 保存エラー:', error);
+
+      const result = await response.json();
       
-      // エラーの詳細をユーザーに表示（オプション）
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.error('ネットワークエラー: サーバーに接続できません');
+      // レスポンスのseqをチェック（古いレスポンスは無視）
+      if (result.seq && result.seq < latestSeqRef.current) {
+        console.log('古いレスポンスを無視');
+        return;
       }
-    } finally {
-      setIsSaving(false);
+      
+      // 保存成功
+      setSaveStatus('saved');
+      setLastSaved(new Date());
+      setLastSavedContent({ title: request.title, content: request.content });
+      setHasUnsavedChanges(false);
+      setCurrentVersion(result.version || currentVersion + 1);
+      lastSavedHashRef.current = currentHash;
+      latestSeqRef.current = request.seq;
+      
+      // LocalStorageバックアップをクリア
+      clearLocalStorageBackup();
+      
+      // リトライカウントをリセット
+      retryCountRef.current = 0;
+      
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      throw error;
     }
   };
 
-  // デバウンスされた自動保存（保存のみ、状態更新なし）
-  const debouncedSave = useCallback(
-    debounce((fullContent: string) => {
-      // fullContentからタイトルと本文を分離
-      const lines = fullContent.split('\n');
-      const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-      const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                              (lines.length === 1 && !lines[0].trim() ? '' : fullContent);
-      
-      // 保存のみ実行（状態更新は手動保存時のみ）
-      saveChanges(extractedTitle, extractedContent);
-    }, 10000), // 保存間隔を10秒に延長（負荷軽減）
-    [memoId, lastSavedContent]
-  );
+  // 保存キューの処理
+  const processSaveQueue = async (): Promise<void> => {
+    // 既に処理中の場合は何もしない
+    if (inflightRef.current) {
+      return;
+    }
+
+    // 保存待ちがない場合は終了
+    if (!pendingRef.current) {
+      return;
+    }
+
+    // オフラインの場合はスキップ
+    if (!navigator.onLine) {
+      setSaveStatus('offline');
+      return;
+    }
+
+    const saveRequest = pendingRef.current;
+    pendingRef.current = null;
+    setSaveStatus('saving');
+
+    // 保存処理を実行
+    inflightRef.current = (async () => {
+      const maxRetries = 2;
+      const retryDelays = [1000, 2000]; // 指数バックオフ
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          await performSave(saveRequest);
+          return; // 成功
+        } catch (error: any) {
+          if (error.message === 'conflict') {
+            // 競合の場合はリトライしない
+            setSaveStatus('error');
+            setSaveError('他のタブからの変更と競合しました');
+            return;
+          }
+
+          if (attempt < maxRetries) {
+            // リトライ
+            console.log(`保存リトライ (${attempt + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+          } else {
+            // 最終的に失敗
+            setSaveStatus('error');
+            setSaveError(error.message);
+            console.error('保存に失敗しました:', error);
+          }
+        }
+      }
+    })();
+
+    await inflightRef.current;
+    inflightRef.current = null;
+
+    // 次の保存待ちがあれば処理
+    if (pendingRef.current) {
+      await processSaveQueue();
+    }
+  };
+
+  // 保存リクエストをキューに追加（trailing save対応）
+  const enqueueSave = useCallback((newTitle: string, newContent: string) => {
+    const seq = ++seqRef.current;
+    
+    // 最新のスナップショットで上書き（trailing save）
+    pendingRef.current = {
+      title: newTitle,
+      content: newContent,
+      requestId: generateRequestId(),
+      seq,
+    };
+    
+    // 保存処理中でなければ即座に開始
+    if (!inflightRef.current) {
+      processSaveQueue();
+    }
+    // 保存処理中の場合は、完了後に自動的に処理される（trailing save）
+  }, []);
+
+  // デバウンス保存スケジューラー（イベント駆動）
+  const scheduleSave = useCallback((content: string) => {
+    if (!memoId) return;
+
+    // タイトルと本文を分離
+    const lines = content.split('\n');
+    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
+                            (lines.length === 1 && !lines[0].trim() ? '' : content);
+
+    // 既存のタイマーをクリア
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // 2秒後に保存をスケジュール
+    saveTimeoutRef.current = setTimeout(() => {
+      enqueueSave(extractedTitle, extractedContent);
+      saveTimeoutRef.current = null;
+    }, 2000); // 2秒間入力がなければ保存
+  }, [memoId, enqueueSave]);
 
   // 即座に保存する関数（ページ離脱時用）
-  const saveImmediately = useCallback(async () => {
-    if (!memoId) return;
+  const saveImmediately = useCallback(() => {
+    if (!memoId || !memoContent) return;
     
-    try {
-      // memoContentからタイトルと本文を分離
-      const lines = memoContent.split('\n');
-      const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-      const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                              (lines.length === 1 && !lines[0].trim() ? '' : memoContent);
-      
-      await saveChanges(extractedTitle, extractedContent);
-      // console.log('💾 緊急保存完了'); // ログ削減
-    } catch (error) {
-      console.error('緊急保存エラー:', error);
+    // 全てのタイマーをクリア
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
     }
-  }, [memoId, memoContent, saveChanges]);
+    if (localSaveTimeoutRef.current) {
+      clearTimeout(localSaveTimeoutRef.current);
+      localSaveTimeoutRef.current = null;
+    }
+    
+    // memoContentからタイトルと本文を分離
+    const lines = memoContent.split('\n');
+    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
+    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
+                            (lines.length === 1 && !lines[0].trim() ? '' : memoContent);
+    
+    // 即座にキューに追加
+    enqueueSave(extractedTitle, extractedContent);
+  }, [memoId, memoContent]);
 
 
   // 動的タイトル取得（memoContentの1行目をそのまま使用）
@@ -350,15 +500,10 @@ const MemoPage: React.FC = () => {
     }
   }, [projectId, memoId]);
 
-  // LocalStorageバックアップのデバウンス（1秒）
-  const debouncedLocalSave = useCallback(
-    debounce((content: string) => {
-      saveToLocalStorage(content);
-    }, 1000),
-    [saveToLocalStorage]
-  );
+  // LocalStorageバックアップ用のRef
+  const localSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // メモ内容の変更処理
+  // メモ内容の変更処理（イベント駆動）
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = event.target.value;
     setMemoContent(newContent);
@@ -368,7 +513,13 @@ const MemoPage: React.FC = () => {
       setHasUnsavedChanges(true);
       
       // LocalStorageバックアップ（デバウンス）
-      debouncedLocalSave(newContent);
+      if (localSaveTimeoutRef.current) {
+        clearTimeout(localSaveTimeoutRef.current);
+      }
+      localSaveTimeoutRef.current = setTimeout(() => {
+        saveToLocalStorage(newContent);
+        localSaveTimeoutRef.current = null;
+      }, 1000);
       
       // memoContentからタイトルと本文を分離してchatStoreに送る
       const lines = newContent.split('\n');
@@ -376,10 +527,14 @@ const MemoPage: React.FC = () => {
       const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
                               (lines.length === 1 && !lines[0].trim() ? '' : newContent);
       
+      // ストア更新（即座同期）
       updateMemoContent(extractedTitle, extractedContent);
+      if (projectId && memoId) {
+        setCurrentMemo(projectId, memoId, extractedTitle, newContent);
+      }
       
-      // デバウンスされた自動保存を呼び出し
-      debouncedSave(newContent);
+      // 自動保存をスケジュール（イベント駆動）
+      scheduleSave(newContent);
     }
   };
 
@@ -397,6 +552,71 @@ const MemoPage: React.FC = () => {
       setCurrentProject(projectId);
     }
   }, [projectId, setCurrentProject]);
+
+  // オフライン検出
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSaveStatus('idle');
+      // オンライン復帰時に保存待ちがあれば処理
+      if (pendingRef.current) {
+        processSaveQueue();
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSaveStatus('offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // BroadcastChannelでタブ間同期
+  useEffect(() => {
+    if (!memoId) return;
+
+    try {
+      const channel = new BroadcastChannel(`memo-${memoId}`);
+      broadcastChannelRef.current = channel;
+
+      channel.onmessage = (event) => {
+        if (event.data.type === 'editing') {
+          // 他のタブが編集中
+          if (event.data.tabId !== window.name) {
+            console.warn('他のタブでこのメモが編集されています');
+          }
+        } else if (event.data.type === 'saved') {
+          // 他のタブが保存した
+          if (event.data.version > currentVersion) {
+            setCurrentVersion(event.data.version);
+            // 必要に応じて最新データを取得
+            fetchMemo();
+          }
+        }
+      };
+
+      // 編集開始を通知
+      if (!window.name) {
+        window.name = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+      channel.postMessage({ type: 'editing', tabId: window.name });
+
+      return () => {
+        channel.close();
+        broadcastChannelRef.current = null;
+      };
+    } catch (error) {
+      // BroadcastChannelがサポートされていない環境
+      console.warn('BroadcastChannel is not supported');
+    }
+  }, [memoId, currentVersion]);
 
   // ページ離脱時・ブラウザ終了時の保存処理
   useEffect(() => {
@@ -431,7 +651,10 @@ const MemoPage: React.FC = () => {
     };
   }, [memoContent, saveImmediately]);
 
+  // 初期ローディング時の処理
   if (isLoading) {
+    // 初期データ取得を実行
+    initializeData();
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Typography>読み込み中...</Typography>
@@ -446,6 +669,10 @@ const MemoPage: React.FC = () => {
       </Container>
     );
   }
+
+  // メモが読み込まれたら初期化とチャットオープンを実行
+  initializeMemoContent();
+  openChatIfNeeded();
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -488,12 +715,30 @@ const MemoPage: React.FC = () => {
               </IconButton>
               {/* 保存状態インジケーター */}
               <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-                {isSaving ? (
+                {saveStatus === 'offline' ? (
+                  <Tooltip title="オフラインです">
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
+                      <OfflineIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                      <Typography variant="caption">
+                        オフライン
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                ) : saveStatus === 'saving' ? (
                   <Tooltip title="保存中...">
                     <Box sx={{ display: 'flex', alignItems: 'center', color: 'info.main' }}>
                       <SavingIcon sx={{ fontSize: 16, mr: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }} />
                       <Typography variant="caption">
                         保存中...
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                ) : saveStatus === 'error' ? (
+                  <Tooltip title={saveError || '保存エラー'}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
+                      <ErrorIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                      <Typography variant="caption">
+                        エラー
                       </Typography>
                     </Box>
                   </Tooltip>

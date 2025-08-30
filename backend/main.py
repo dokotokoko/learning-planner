@@ -52,20 +52,23 @@ app = FastAPI(
 # パフォーマンス最適化ミドルウェア
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # レスポンス圧縮
 
-# CORS設定（ngrok対応）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "http://127.0.0.1:8080",
-        "http://localhost:8080",
-        "https://demo.tanqmates.org"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS設定
+# 開発環境でNginxリバースプロキシを使用する場合は不要
+# 本番環境や直接アクセスが必要な場合はコメントを外してください
+if os.environ.get("ENABLE_CORS", "false").lower() == "true":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173", 
+            "http://localhost:3000",
+            "http://127.0.0.1:8080",
+            "http://localhost:8080",
+            "https://demo.tanqmates.org"
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # セキュリティスキーム
 security = HTTPBearer()
@@ -112,14 +115,7 @@ class ChatHistoryResponse(BaseModel):
     context_data: Optional[str]
     created_at: str
 
-class ConversationResponse(BaseModel):
-    id: str
-    title: str
-    page_id: str
-    message_count: int
-    last_message: str
-    updated_at: str  # last_updated → updated_at に変更
-    created_at: str
+# ConversationResponse は削除（chat_conversationsテーブルを使用しないため）
 
 # メモ関連
 class MemoSave(BaseModel):
@@ -317,10 +313,20 @@ def get_current_user_cached(credentials: HTTPAuthorizationCredentials = Depends(
             detail="無効なトークン形式です"
         )
     except Exception as e:
-        logger.error(f"認証エラー: {e}")
+        import traceback
+        error_detail = f"認証エラー詳細: {type(e).__name__}: {str(e)}"
+        logger.error(f"{error_detail}\nTraceback: {traceback.format_exc()}")
+        
+        # Supabase接続エラーの場合は詳細を返す
+        if "connection" in str(e).lower() or "timeout" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"データベース接続エラー: {str(e)}"
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="認証処理でエラーが発生しました"
+            detail=f"認証処理でエラーが発生しました: {str(e)}"
         )
 
 def validate_supabase():
@@ -594,11 +600,8 @@ async def chat_with_ai(
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
                 messages.append({"role": role, "content": history_msg["message"]})
-        
-        # メモコンテンツがある場合は、ユーザーメッセージにコンテキストとして追加
+
         user_message = chat_data.message
-        #if chat_data.memo_content:
-        #    user_message = f"【メモコンテンツ】\n{chat_data.memo_content}\n\n【質問】\n{chat_data.message}"
         
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
@@ -629,6 +632,9 @@ async def chat_with_ai(
         
         # LLMから応答を取得
         response = llm_client.generate_response_with_history(messages)
+
+        # LLMから応答を取得（web_search_preview)
+        #response = llm_client.generate_response_with_WebSearch(messages)
         
         # トークン使用量を計算（使用しない）
         token_usage = None
@@ -707,79 +713,9 @@ async def get_chat_history(
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
 
-@app.get("/chat/conversations", response_model=List[ConversationResponse])
-async def get_chat_conversations(
-    limit: Optional[int] = 20,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """conversation一覧取得（最適化版）"""
-    try:
-        validate_supabase()
-        
-        conversations_response = supabase.table("chat_conversations").select("*").eq("user_id", current_user).order("updated_at", desc=True).limit(limit or 20).execute()
-        conversations = conversations_response.data
-        
-        result = []
-        for conv in conversations:
-            # メッセージ数と最新メッセージを効率的に取得
-            logs_response = supabase.table("chat_logs").select("message", count='exact').eq("conversation_id", conv["id"]).order("created_at", desc=True).limit(1).execute()
-            
-            last_message = logs_response.data[0]["message"][:100] if logs_response.data else "メッセージなし"
-            message_count = logs_response.count if logs_response.count else 0
-            
-            result.append(ConversationResponse(
-                id=conv["id"],
-                title=conv["title"],
-                page_id=conv.get("page_id", "unknown"),
-                message_count=message_count,
-                last_message=last_message,
-                updated_at=conv["updated_at"],
-                created_at=conv["created_at"]
-            ))
-        
-        return result
-        
-    except Exception as e:
-        handle_database_error(e, "conversation一覧の取得")
+# /chat/conversations エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
-@app.get("/chat/conversations/{conversation_id}/messages", response_model=List[ChatHistoryResponse])
-async def get_conversation_messages(
-    conversation_id: str,
-    current_user: int = Depends(get_current_user_cached)
-):
-    """特定のconversationのメッセージ一覧取得"""
-    try:
-        validate_supabase()
-        
-        # conversationの所有者確認
-        conv_response = supabase.table("chat_conversations").select("*").eq("id", conversation_id).eq("user_id", current_user).execute()
-        if not conv_response.data:
-            raise HTTPException(status_code=404, detail="conversationが見つかりません")
-        
-        # メッセージを取得
-        messages_response = supabase.table("chat_logs").select("*").eq("conversation_id", conversation_id).order("created_at", desc=False).execute()
-        messages = messages_response.data
-        
-        return [
-            ChatHistoryResponse(
-                id=msg["id"],
-                page=msg["page"],
-                sender=msg["sender"],
-                message=msg["message"],
-                context_data=msg.get("context_data"),
-                created_at=msg["created_at"]
-            )
-            for msg in messages
-        ]
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"conversationメッセージ取得エラー: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="conversationメッセージの取得でエラーが発生しました"
-        )
+# /chat/conversations/{conversation_id}/messages エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
@@ -1145,7 +1081,7 @@ async def update_memo(
     memo_data: MultiMemoUpdate,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """メモ更新"""
+    """メモ更新（最適化版）"""
     try:
         validate_supabase()
         
@@ -1154,7 +1090,22 @@ async def update_memo(
         if not update_data:
             raise HTTPException(status_code=400, detail="更新するフィールドがありません")
         
-        result = supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+        # タイムスタンプを追加
+        from datetime import datetime, timezone
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # タイムアウト対策: execute()を分離
+        import asyncio
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table('memos').update(update_data).eq('id', memo_id).eq('user_id', current_user).execute()
+                ),
+                timeout=30.0  # 30秒のタイムアウト
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"メモ更新タイムアウト: memo_id={memo_id}, user_id={current_user}")
+            raise HTTPException(status_code=504, detail="データベース更新がタイムアウトしました")
         
         if not result.data:
             raise HTTPException(status_code=404, detail="メモが見つかりません")
