@@ -444,13 +444,11 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                       },
                     }}
                   >
-                    <ListItemText
-                      primary={
-                        <Typography variant="subtitle2" fontWeight="bold">
-                          {pageGroup} ({groupSessions.length})
-                        </Typography>
-                      }
-                    />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight="bold">
+                        {pageGroup} ({groupSessions.length})
+                      </Typography>
+                    </Box>
                     {expandedPages.has(pageGroup) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                   </ListItemButton>
 
@@ -475,57 +473,53 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                           }}
                           sx={{ borderRadius: 1 }}
                         >
-                          <ListItemText
-                            primary={
-                              <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                                <Box sx={{ flex: 1 }}>
-                                  <Typography variant="body2" fontWeight="medium">
-                                    {session.memoTitle || session.title}
-                                  </Typography>
-                                  {session.page.startsWith('memo-') && session.projectName && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                      📁 {session.projectName}
-                                    </Typography>
-                                  )}
-                                </Box>
-                                <Chip
-                                  label={session.messageCount}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ fontSize: '0.7rem', height: '20px' }}
-                                />
-                              </Box>
-                            }
-                            secondary={
-                              <Box>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden',
-                                    lineHeight: 1.2,
-                                    mb: 0.5,
-                                  }}
-                                >
-                                  {session.lastMessage}
+                          <Box sx={{ flex: 1, pr: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {session.memoTitle || session.title}
                                 </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                                  <ScheduleIcon sx={{ fontSize: '0.8rem', mr: 0.5, color: 'text.disabled' }} />
-                                  <Typography variant="caption" color="text.disabled">
-                                    {formatTime(session.lastUpdated)}
+                                {session.page.startsWith('memo-') && session.projectName && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                    📁 {session.projectName}
                                   </Typography>
-                                  {session.page.startsWith('memo-') && (
-                                    <Typography variant="caption" color="text.disabled" sx={{ ml: 1 }}>
-                                      • メモ {session.page.replace('memo-', '')}
-                                    </Typography>
-                                  )}
-                                </Box>
+                                )}
                               </Box>
-                            }
-                          />
+                              <Chip
+                                label={session.messageCount}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontSize: '0.7rem', height: '20px' }}
+                              />
+                            </Box>
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  lineHeight: 1.2,
+                                  mb: 0.5,
+                                }}
+                              >
+                                {session.lastMessage}
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                <ScheduleIcon sx={{ fontSize: '0.8rem', mr: 0.5, color: 'text.disabled' }} />
+                                <Typography variant="caption" color="text.disabled">
+                                  {formatTime(session.lastUpdated)}
+                                </Typography>
+                                {session.page.startsWith('memo-') && (
+                                  <Typography variant="caption" color="text.disabled" sx={{ ml: 1 }}>
+                                    • メモ {session.page.replace('memo-', '')}
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Box>
+                          </Box>
                         </ListItemButton>
                         <Tooltip title="この履歴を削除">
                           <IconButton
