@@ -37,12 +37,19 @@ logger = logging.getLogger(__name__)
 
 # Phase 1: AI対話エージェント機能のインポート
 try:
-    from conversation_agent import ConversationOrchestrator
+    # 同じディレクトリ内のconversation_agentモジュールからインポート
+    from backend.conversation_agent import ConversationOrchestrator
     CONVERSATION_AGENT_AVAILABLE = True
     logger.info("対話エージェント機能が利用可能です")
-except ImportError as e:
-    CONVERSATION_AGENT_AVAILABLE = False
-    logger.warning(f"対話エージェント機能が利用できません: {e}")
+except ImportError:
+    try:
+        # 代替パス（main.pyを直接実行する場合）
+        from conversation_agent import ConversationOrchestrator
+        CONVERSATION_AGENT_AVAILABLE = True
+        logger.info("対話エージェント機能が利用可能です（代替パス）")
+    except ImportError as e:
+        CONVERSATION_AGENT_AVAILABLE = False
+        logger.warning(f"対話エージェント機能が利用できません: {e}")
 
 # 機能フラグ（環境変数で制御）
 ENABLE_CONVERSATION_AGENT = os.environ.get("ENABLE_CONVERSATION_AGENT", "false").lower() == "true"
@@ -277,9 +284,14 @@ async def startup_event():
                 logger.info("✅ 対話エージェント初期化完了（モックモード）")
             except Exception as e:
                 logger.error(f"❌ 対話エージェント初期化エラー: {e}")
+                import traceback
+                logger.error(f"詳細エラー: {traceback.format_exc()}")
                 conversation_orchestrator = None
         else:
-            logger.info("⚠️ 対話エージェント機能は無効です")
+            if not ENABLE_CONVERSATION_AGENT:
+                logger.info("⚠️ 対話エージェント機能は無効です（環境変数ENABLE_CONVERSATION_AGENT=false）")
+            if not CONVERSATION_AGENT_AVAILABLE:
+                logger.info("⚠️ 対話エージェントモジュールが利用不可です")
         
         # メモリ管理システム初期化（使用しない）
         # global memory_manager
@@ -686,7 +698,8 @@ async def chat_with_ai(
                     "support_type": agent_result.get("support_type"),
                     "selected_acts": agent_result.get("selected_acts"),
                     "state_snapshot": agent_result.get("state_snapshot", {}),
-                    "decision_metadata": agent_result.get("decision_metadata", {})
+                    "decision_metadata": agent_result.get("decision_metadata", {}),
+                    "project_plan": agent_result.get("project_plan")  # プロジェクト計画を追加
                 }
                 
                 # followupsがある場合はresponseに追加

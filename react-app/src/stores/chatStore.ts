@@ -57,9 +57,22 @@ export const useChatStore = create<ChatState>()(
       
       toggleChat: () => set((state) => ({ isChatOpen: !state.isChatOpen })),
 
-      // 現在のメモ設定
+      // 現在のメモ設定（冪等化）
       setCurrentMemo: (projectId: string, memoId: string | null, title: string, content: string) => {
+        const state = get();
         const chatPageId = `project-${projectId}`;
+        
+        // 等価チェック：同じ値なら更新しない
+        if (
+          state.currentProjectId === projectId &&
+          state.currentMemoId === memoId &&
+          state.currentMemoTitle === title &&
+          state.currentMemoContent === content &&
+          state.chatPageId === chatPageId
+        ) {
+          return; // 変更なしの場合は何もしない
+        }
+        
         set({
           currentProjectId: projectId,
           currentMemoId: memoId,
@@ -69,8 +82,18 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
-      // メモ内容のみ更新
+      // メモ内容のみ更新（冪等化）
       updateMemoContent: (title: string, content: string) => {
+        const state = get();
+        
+        // 等価チェック：同じ値なら更新しない
+        if (
+          state.currentMemoTitle === title &&
+          state.currentMemoContent === content
+        ) {
+          return; // 変更なしの場合は何もしない
+        }
+        
         set({
           currentMemoTitle: title,
           currentMemoContent: content,
@@ -86,10 +109,19 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
-      // プロジェクト設定（メモ一覧ページ用）
+      // プロジェクト設定（メモ一覧ページ用・冪等化）
       setCurrentProject: (projectId: string) => {
         const state = get();
         const chatPageId = `project-${projectId}`;
+        
+        // 等価チェック：同じ値なら更新しない
+        if (
+          state.currentProjectId === projectId &&
+          state.chatPageId === chatPageId
+        ) {
+          return; // 変更なしの場合は何もしない
+        }
+        
         set({
           currentProjectId: projectId,
           chatPageId,
