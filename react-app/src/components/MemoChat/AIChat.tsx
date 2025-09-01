@@ -1,17 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   Box,
   TextField,
   Button,
   Typography,
-  Paper,
   List,
   ListItem,
   Avatar,
   Stack,
   CircularProgress,
   IconButton,
-  Divider,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -59,7 +57,6 @@ interface AIChatProps {
 
 const AIChat: React.FC<AIChatProps> = ({
   pageId,
-  title,
   initialMessage,
   initialAIResponse,
   memoContent = '',

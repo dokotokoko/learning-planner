@@ -34,6 +34,7 @@ const GalleryWalkGame = lazy(() => import('./components/FrameworkGames/GalleryWa
 const MindMapGame = lazy(() => import('./components/FrameworkGames/MindMapGame'));
 const IkigaiGame = lazy(() => import('./components/FrameworkGames/IkigaiGame'));
 const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
+const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTestPage'));
 
 // import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 
@@ -191,6 +192,7 @@ function App() {
                 <Route path="framework-games/gallery-walk" element={<LazyWrapper><GalleryWalkGame /></LazyWrapper>} />
                 <Route path="framework-games/mind-map" element={<LazyWrapper><MindMapGame /></LazyWrapper>} />
                 <Route path="framework-games/ikigai" element={<LazyWrapper><IkigaiGame /></LazyWrapper>} />
+                <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
                 <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
               </Route>
               
