@@ -1,0 +1,729 @@
+﻿// react-app/src/components/Layout/Layout.tsx
+import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemButton,
+  Divider,
+  Avatar,
+  Button,
+  useTheme,
+  useMediaQuery,
+  Card,
+  CardContent,
+  Menu,
+  MenuItem,
+} from '@mui/material';
+import {
+  Menu as MenuIcon,
+  TipsAndUpdates,
+  Psychology,
+  Chat as ChatIcon,
+  ChevronLeft,
+  ChevronRight,
+  Logout,
+  ExpandMore,
+  Explore,
+} from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAuthStore } from '../../stores/authStore';
+import { useChatStore } from '../../stores/chatStore';
+import { useTutorialStore } from '../../stores/tutorialStore';
+import { Link } from 'react-router-dom';
+import AIChat from '../MemoChat/AIChat';
+// import QuestSuggestion from './QuestSuggestion'; // 荳譎ら噪縺ｫ髱櫁｡ｨ遉ｺ
+// import QuestBoardPage from '../../pages/QuestBoardPage'; // 荳譎ら噪縺ｫ髱櫁｡ｨ遉ｺ
+import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
+
+const drawerWidth = 280;
+const tabletDrawerWidth = 240;
+const collapsedDrawerWidth = 64;
+const defaultChatSidebarWidth = 400;
+const tabletChatSidebarWidth = 350;
+const minChatSidebarWidth = 300;
+const minMainContentWidth = 400; // 繝｡繧､繝ｳ繧ｳ繝ｳ繝・Φ繝・・譛蟆丞ｹ・
+
+interface LayoutContextType {
+  sidebarOpen: boolean;
+  onSidebarToggle: () => void;
+}
+
+export const LayoutContext = React.createContext<LayoutContextType>({
+  sidebarOpen: true,
+  onSidebarToggle: () => {},
+});
+
+const Layout: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  
+  const { user, logout } = useAuthStore();
+  const { 
+    isChatOpen, 
+    isHydrated,
+    toggleChat, 
+    chatPageId, 
+    currentMemoTitle, 
+    currentMemoContent,
+    currentProjectId 
+  } = useChatStore();
+
+  // 迴ｾ蝨ｨ縺ｮ繝壹・繧ｸ縺ｫ蝓ｺ縺･縺上メ繝｣繝・ヨ繝壹・繧ｸID繧堤函謌・
+  const getEffectiveChatPageId = () => {
+    if (chatPageId) return chatPageId;
+    
+    // 繝励Ο繧ｸ繧ｧ繧ｯ繝医・繝ｼ繧ｸ縺ｮ蝣ｴ蜷・
+    const projectMatch = location.pathname.match(/\/projects\/(\d+)/);
+    if (projectMatch) {
+      return `project-${projectMatch[1]}`;
+    }
+    
+    // 繝繝・す繝･繝懊・繝峨ｄ縺昴・莉悶・繝壹・繧ｸ縺ｮ蝣ｴ蜷・
+    return `general-${location.pathname.replace(/\//g, '-')}`;
+  };
+  const { startTutorialManually } = useTutorialStore();
+  
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(isTablet ? tabletChatSidebarWidth : defaultChatSidebarWidth);
+  const [isResizing, setIsResizing] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    setUserMenuAnchor(null);
+  };
+
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setUserMenuAnchor(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setUserMenuAnchor(null);
+  };
+
+  // 繝√Ε繝・ヨ繧ｵ繧､繝峨ヰ繝ｼ縺ｮ繝ｪ繧ｵ繧､繧ｺ讖溯・
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const handleResize = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    const newWidth = window.innerWidth - e.clientX;
+    
+    // 迴ｾ蝨ｨ縺ｮ蟾ｦ繧ｵ繧､繝峨ヰ繝ｼ縺ｮ蟷・ｒ蜿門ｾ・
+    const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
+    
+    // 蜍慕噪縺ｪ譛螟ｧ蟷・ｒ險育ｮ暦ｼ医Γ繧､繝ｳ繧ｳ繝ｳ繝・Φ繝・・譛蟆丞ｹ・ｒ遒ｺ菫晢ｼ・
+    const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
+    
+    const clampedWidth = Math.max(
+      minChatSidebarWidth,
+      Math.min(dynamicMaxWidth, newWidth)
+    );
+    
+    setChatSidebarWidth(clampedWidth);
+  }, [isResizing, sidebarOpen]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // 繝槭え繧ｹ繧､繝吶Φ繝医Μ繧ｹ繝翫・縺ｮ邂｡逅・
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResize);
+      document.addEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, handleResize, handleResizeEnd]);
+
+  // 繧ｦ繧｣繝ｳ繝峨え繝ｪ繧ｵ繧､繧ｺ譎ゅ・繝√Ε繝・ヨ蟷・ｪｿ謨ｴ
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (!isHydrated || !isChatOpen) return;
+      
+      const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
+      const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
+      
+      // 繝√Ε繝・ヨ蟷・′譁ｰ縺励＞譛螟ｧ蟷・ｒ雜・∴縺ｦ縺・ｋ蝣ｴ蜷医・隱ｿ謨ｴ
+      if (chatSidebarWidth > dynamicMaxWidth) {
+        setChatSidebarWidth(Math.max(minChatSidebarWidth, dynamicMaxWidth));
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [isHydrated, isChatOpen, sidebarOpen, chatSidebarWidth]);
+
+  // AI蠢懃ｭ斐・蜃ｦ逅・
+  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
+    try {
+      // 繝ｦ繝ｼ繧ｶ繝ｼID繧貞叙蠕・
+      let userId = null;
+      
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('隱崎ｨｼ繝・・繧ｿ縺ｮ隗｣譫舌↓螟ｱ謨・', e);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('繝ｦ繝ｼ繧ｶ繝ｼID縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ縲ょ・繝ｭ繧ｰ繧､繝ｳ縺励※縺上□縺輔＞縲・);
+      }
+
+      // 迴ｾ蝨ｨ縺ｮ繝｡繝｢繧ｳ繝ｳ繝・Φ繝・ｒ菴ｿ逕ｨ
+      const contextContent = currentMemoContent || memoContent;
+
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userId}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          message: message,
+          memo_content: contextContent,
+          page_id: getEffectiveChatPageId(),
+        }),
+      });
+
+      if (!response.ok) {
+        // 繧医ｊ隧ｳ邏ｰ縺ｪ繧ｨ繝ｩ繝ｼ諠・ｱ繧貞叙蠕・
+        let errorDetail = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorDetail += ` - ${JSON.stringify(errorData)}`;
+        } catch (e) {
+          // JSON隗｣譫舌↓螟ｱ謨励＠縺溷ｴ蜷医・繝・く繧ｹ繝医〒蜿門ｾ・
+          try {
+            const errorText = await response.text();
+            errorDetail += ` - ${errorText}`;
+          } catch (e2) {
+            // 菴輔ｂ蜿門ｾ励〒縺阪↑縺・ｴ蜷・
+          }
+        }
+        throw new Error(errorDetail);
+      }
+
+      const data = await response.json();
+      return data.response;
+    } catch (error) {
+      console.error('AI蠢懃ｭ斐・蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆:', error);
+      throw error;
+    }
+  };
+
+  interface MenuItem {
+    text: string;
+    icon: React.ReactNode;
+    path: string;
+    action?: () => void;
+  }
+
+  const mainListItems: MenuItem[] = useMemo(() => [
+    { text: '繝繝・す繝･繝懊・繝・, icon: <TipsAndUpdates />, path: '/dashboard' },
+    { text: '謗｢遨ｶ繝・・繝槭ｒ隕九▽縺代ｋ繝ｻ謗｢縺・, icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    // { text: '蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝域､懆ｨｼ', icon: <Psychology />, path: '/conversation-agent-test' },
+    // { text: '謗｢遨ｶ繧ｯ繧ｨ繧ｹ繝域軸遉ｺ譚ｿ!', icon: <Explore />, path: '/quests'} // 荳譎ら噪縺ｫ髱櫁｡ｨ遉ｺ
+  ], []);
+
+  // 螻暮幕迥ｶ諷九・繧ｵ繧､繝峨ヰ繝ｼ
+  const fullDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+              謗｢Q繝｡繧､繝・
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
+              縺ゅ↑縺溘・蟄ｦ縺ｳ縺ｮ繝代・繝医リ繝ｼ
+            </Typography>
+          </Box>
+          <IconButton
+            onClick={handleSidebarToggle}
+            sx={{
+              color: 'white',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              },
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      <List sx={{ flex: 1, px: 1 }} data-tutorial="navigation-menu">
+        {mainListItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => {
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                navigate(item.path);
+                }
+                if (isMobile) setMobileOpen(false);
+              }}
+              sx={{
+                borderRadius: 2,
+                '&.Mui-selected': {
+                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  color: 'white',
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  background: 'rgba(5, 155, 255, 0.1)',
+                },
+              }}
+            >
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{
+                  fontSize: '0.9rem',
+                  fontWeight: location.pathname === item.path ? 600 : 400,
+                }}
+              />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+
+      {/* 繧ｯ繧ｨ繧ｹ繝域署譯・- 荳譎ら噪縺ｫ髱櫁｡ｨ遉ｺ */}
+      {/* <QuestSuggestion /> */}
+
+      <Divider />
+
+      {/* AI繝√Ε繝・ヨ髢句ｧ九・繧ｿ繝ｳ */}
+      <Box sx={{ p: 2 }}>
+        <Card 
+          sx={{ 
+            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
+            borderRadius: 2,
+            cursor: 'pointer',
+            '&:hover': {
+              bgcolor: 'rgba(5, 155, 255, 0.2)',
+            },
+          }}
+          onClick={toggleChat}
+        >
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Psychology color="primary" />
+              <Typography variant="body2" fontWeight={600}>
+                AI繧｢繧ｷ繧ｹ繧ｿ繝ｳ繝・
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              謗｢遨ｶ蟄ｦ鄙偵ｒ繧ｵ繝昴・繝・
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Divider />
+      
+      <Box sx={{ p: 2 }}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 2, 
+            mb: 2,
+            cursor: 'pointer',
+            p: 1,
+            borderRadius: 1,
+            '&:hover': {
+              bgcolor: 'rgba(5, 155, 255, 0.1)',
+            },
+          }}
+          onClick={handleUserMenuOpen}
+        >
+          <Avatar sx={{ bgcolor: 'primary.main' }}>
+            {user?.username?.charAt(0).toUpperCase()}
+          </Avatar>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={600}>
+              {user?.username}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              繝ｭ繧ｰ繧､繝ｳ荳ｭ
+            </Typography>
+          </Box>
+          <ExpandMore sx={{ color: 'text.secondary' }} />
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  // 邵ｮ蟆冗憾諷九・繧ｵ繧､繝峨ヰ繝ｼ
+  const collapsedDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ 
+        p: 1.5, 
+        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        display: 'flex',
+        justifyContent: 'center',
+      }}>
+        <IconButton
+          onClick={handleSidebarToggle}
+          sx={{
+            color: 'white',
+            '&:hover': {
+              backgroundColor: 'rgba(255,255,255,0.1)',
+            },
+          }}
+        >
+          <MenuIcon />
+        </IconButton>
+      </Box>
+
+      <List sx={{ flex: 1, px: 0.5 }}>
+        {mainListItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => {
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                  navigate(item.path);
+                }
+              }}
+              sx={{
+                borderRadius: 2,
+                justifyContent: 'center',
+                minHeight: 48,
+                '&.Mui-selected': {
+                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  color: 'white',
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  background: 'rgba(5, 155, 255, 0.1)',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 'auto', justifyContent: 'center' }}>
+                {item.icon}
+              </ListItemIcon>
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+
+      {/* AI繝√Ε繝・ヨ髢句ｧ九・繧ｿ繝ｳ・育ｸｮ蟆冗沿・・*/}
+      <Box sx={{ p: 1 }}>
+        <IconButton
+          onClick={toggleChat}
+          sx={{
+            width: '100%',
+            height: 48,
+            borderRadius: 2,
+            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
+            color: 'primary.main',
+            '&:hover': {
+              bgcolor: 'rgba(5, 155, 255, 0.2)',
+            },
+          }}
+        >
+          <Psychology />
+        </IconButton>
+      </Box>
+
+      <Divider />
+      
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <IconButton
+          onClick={handleUserMenuOpen}
+          sx={{
+            width: '100%',
+            height: 48,
+            borderRadius: 1,
+            color: 'primary.main',
+            '&:hover': {
+              bgcolor: 'rgba(5, 155, 255, 0.1)',
+            },
+          }}
+        >
+          <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+            {user?.username?.charAt(0).toUpperCase()}
+          </Avatar>
+        </IconButton>
+      </Box>
+    </Box>
+  );
+
+  return (
+    <LayoutContext.Provider value={{ sidebarOpen, onSidebarToggle: handleSidebarToggle }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Drawer */}
+        <Box
+          component="nav"
+          sx={{ 
+            width: { 
+              xs: 0,
+              sm: isTablet ? (sidebarOpen ? tabletDrawerWidth : collapsedDrawerWidth) : 0,
+              md: sidebarOpen ? drawerWidth : collapsedDrawerWidth
+            },
+            flexShrink: { sm: 0 },
+            transition: 'width 0.3s ease',
+          }}
+        >
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={handleDrawerToggle}
+            ModalProps={{
+              keepMounted: true, // Better open performance on mobile.
+            }}
+            sx={{
+              display: { xs: 'block', sm: 'none' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
+                width: drawerWidth,
+                border: 'none',
+                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+              },
+            }}
+          >
+            {fullDrawer}
+          </Drawer>
+          
+          <Drawer
+            variant="permanent"
+            sx={{
+              display: { xs: 'none', sm: 'block' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
+                width: sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth,
+                border: 'none',
+                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+                transition: 'width 0.3s ease',
+                overflowX: 'hidden',
+              },
+            }}
+            open
+          >
+            {sidebarOpen ? fullDrawer : collapsedDrawer}
+          </Drawer>
+        </Box>
+
+        {/* Main content */}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            width: { 
+              xs: '100%',
+              sm: (() => {
+                const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
+                const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidth : 0;
+                return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
+              })()
+            },
+            minHeight: '100vh',
+            transition: 'width 0.3s ease',
+          }}
+        >
+          {/* 繝｢繝舌う繝ｫ逕ｨ縺ｮ繝｡繝九Η繝ｼ繝懊ち繝ｳ */}
+          <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1 }}>
+            <IconButton
+              color="primary"
+              onClick={handleDrawerToggle}
+              sx={{ mb: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          </Box>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{ height: '100%' }}
+          >
+            <Outlet />
+          </motion.div>
+        </Box>
+
+        {/* Right Chat Sidebar */}
+        <AnimatePresence>
+          {isHydrated && isChatOpen && (
+            <Box
+              component={motion.div}
+              initial={{ width: 0 }}
+              animate={{ width: chatSidebarWidth }}
+              exit={{ width: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              sx={{
+                width: chatSidebarWidth,
+                minHeight: '100vh',
+                backgroundColor: 'background.paper',
+                borderLeft: 1,
+                borderColor: 'divider',
+                boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
+                position: isMobile ? 'fixed' : 'relative',
+                right: isMobile ? 0 : 'auto',
+                top: isMobile ? 0 : 'auto',
+                zIndex: isMobile ? 1200 : 'auto',
+                overflow: 'hidden',
+              }}
+              className="chat-sidebar"
+              data-tutorial="ai-chat-panel"
+            >
+              {/* 繝ｪ繧ｵ繧､繧ｺ繝上Φ繝峨Ν */}
+              <Box
+                onMouseDown={handleResizeStart}
+                sx={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: '8px',
+                  height: '100%',
+                  cursor: 'ew-resize',
+                  backgroundColor: 'transparent',
+                  borderRight: 1,
+                  borderColor: 'divider',
+                  '&:hover': {
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                  },
+                  zIndex: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '3px',
+                    height: '40px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '2px',
+                  }}
+                />
+              </Box>
+              
+              <Box sx={{ 
+                height: '100vh', 
+                display: 'flex', 
+                flexDirection: 'column',
+                pl: '8px', // 繝ｪ繧ｵ繧､繧ｺ繝上Φ繝峨Ν蛻・・繝代ョ繧｣繝ｳ繧ｰ
+              }}>
+                {/* Chat Header */}
+                <Box sx={{ 
+                  p: 2, 
+                  borderBottom: 1, 
+                  borderColor: 'divider',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <Box>
+                    <Typography variant="h6" fontWeight={600}>
+                      AI繧｢繧ｷ繧ｹ繧ｿ繝ｳ繝・
+                    </Typography>
+                  </Box>
+                  <IconButton onClick={toggleChat} size="small">
+                    <ChevronRight />
+                  </IconButton>
+                </Box>
+
+                {/* Chat Content */}
+                <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                  <AIChat
+                    pageId={getEffectiveChatPageId()}
+                    title="AI繧｢繧ｷ繧ｹ繧ｿ繝ｳ繝・
+                    persistentMode={true}
+                    loadHistoryFromDB={true}
+                    onMessageSend={handleAIMessage}
+                    initialMessage={AI_INITIAL_MESSAGE}
+                  />
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </AnimatePresence>
+
+        {/* 繝ｦ繝ｼ繧ｶ繝ｼ繝｡繝九Η繝ｼ */}
+        <Menu
+          anchorEl={userMenuAnchor}
+          open={Boolean(userMenuAnchor)}
+          onClose={handleUserMenuClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'center',
+          }}
+        >
+          <MenuItem onClick={handleLogout}>
+            <Logout sx={{ mr: 1 }} />
+            繝ｭ繧ｰ繧｢繧ｦ繝・
+          </MenuItem>
+        </Menu>
+      </Box>
+    </LayoutContext.Provider>
+  );
+};
+
+export default memo(Layout);

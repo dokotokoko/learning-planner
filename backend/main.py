@@ -176,6 +176,13 @@ class ChatResponse(BaseModel):
     timestamp: str
     token_usage: Optional[Dict[str, Any]] = None
     context_metadata: Optional[Dict[str, Any]] = None
+    # Conversation agent metadata (optional)
+    support_type: Optional[str] = None
+    selected_acts: Optional[List[str]] = None
+    state_snapshot: Optional[Dict[str, Any]] = None
+    project_plan: Optional[Dict[str, Any]] = None
+    decision_metadata: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
 
 class ChatHistoryResponse(BaseModel):
     id: int
@@ -716,6 +723,7 @@ async def chat_with_ai(
         await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
         
         # ===== Phase 1: 対話エージェント機能統合 =====
+        agent_payload: Dict[str, Any] = {}
         if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
             try:
                 # 会話履歴を対話エージェント用フォーマットに変換
@@ -748,6 +756,15 @@ async def chat_with_ai(
                 
                 # 対話エージェントの応答を使用
                 response = agent_result["response"]
+                # capture for response
+                agent_payload = {
+                    "support_type": agent_result.get("support_type"),
+                    "selected_acts": agent_result.get("selected_acts"),
+                    "state_snapshot": agent_result.get("state_snapshot"),
+                    "project_plan": agent_result.get("project_plan"),
+                    "decision_metadata": agent_result.get("decision_metadata"),
+                    "metrics": agent_result.get("metrics"),
+                }
                 
                 # メタデータを保存用context_dataに追加
                 ai_context_data = {
@@ -815,7 +832,8 @@ async def chat_with_ai(
             response=response,
             timestamp=datetime.now(timezone.utc).isoformat(),
             token_usage=token_usage,
-            context_metadata=context_metadata
+            context_metadata=context_metadata,
+            **agent_payload
         )
     except HTTPException:
         raise

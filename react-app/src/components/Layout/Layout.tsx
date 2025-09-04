@@ -1,5 +1,5 @@
 // react-app/src/components/Layout/Layout.tsx
-import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
+import React, { useState, useMemo, memo, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -13,7 +13,6 @@ import {
   ListItemButton,
   Divider,
   Avatar,
-  Button,
   useTheme,
   useMediaQuery,
   Card,
@@ -25,30 +24,20 @@ import {
   Menu as MenuIcon,
   TipsAndUpdates,
   Psychology,
-  Chat as ChatIcon,
-  ChevronLeft,
   ChevronRight,
-  Logout,
   ExpandMore,
   Explore,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useTutorialStore } from '../../stores/tutorialStore';
-import { Link } from 'react-router-dom';
 import AIChat from '../MemoChat/AIChat';
-// import QuestSuggestion from './QuestSuggestion'; // 一時的に非表示
-// import QuestBoardPage from '../../pages/QuestBoardPage'; // 一時的に非表示
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 
 const drawerWidth = 280;
 const tabletDrawerWidth = 240;
 const collapsedDrawerWidth = 64;
-const defaultChatSidebarWidth = 400;
-const tabletChatSidebarWidth = 350;
-const minChatSidebarWidth = 300;
-const minMainContentWidth = 400; // メインコンテンツの最小幅
+const chatSidebarWidthDefault = 400;
 
 interface LayoutContextType {
   sidebarOpen: boolean;
@@ -66,47 +55,33 @@ const Layout: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  
+
   const { user, logout } = useAuthStore();
-  const { 
-    isChatOpen, 
+  const {
+    isChatOpen,
     isHydrated,
-    toggleChat, 
-    chatPageId, 
-    currentMemoTitle, 
+    toggleChat,
+    chatPageId,
     currentMemoContent,
-    currentProjectId 
   } = useChatStore();
 
   // 現在のページに基づくチャットページIDを生成
-  const getEffectiveChatPageId = () => {
+  const getEffectiveChatPageId = useCallback(() => {
     if (chatPageId) return chatPageId;
-    
-    // プロジェクトページの場合
+
     const projectMatch = location.pathname.match(/\/projects\/(\d+)/);
     if (projectMatch) {
       return `project-${projectMatch[1]}`;
     }
-    
-    // ダッシュボードやその他のページの場合
     return `general-${location.pathname.replace(/\//g, '-')}`;
-  };
-  const { startTutorialManually } = useTutorialStore();
-  
+  }, [chatPageId, location.pathname]);
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-  const [chatSidebarWidth, setChatSidebarWidth] = useState(isTablet ? tabletChatSidebarWidth : defaultChatSidebarWidth);
-  const [isResizing, setIsResizing] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  const handleSidebarToggle = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
+  const handleSidebarToggle = () => setSidebarOpen(!sidebarOpen);
 
   const handleLogout = () => {
     logout();
@@ -117,158 +92,74 @@ const Layout: React.FC = () => {
   const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setUserMenuAnchor(event.currentTarget);
   };
+  const handleUserMenuClose = () => setUserMenuAnchor(null);
 
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
-
-  // チャットサイドバーのリサイズ機能
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  };
-
-  const handleResize = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    const newWidth = window.innerWidth - e.clientX;
-    
-    // 現在の左サイドバーの幅を取得
-    const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-    
-    // 動的な最大幅を計算（メインコンテンツの最小幅を確保）
-    const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
-    
-    const clampedWidth = Math.max(
-      minChatSidebarWidth,
-      Math.min(dynamicMaxWidth, newWidth)
-    );
-    
-    setChatSidebarWidth(clampedWidth);
-  }, [isResizing, sidebarOpen]);
-
-  const handleResizeEnd = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  // マウスイベントリスナーの管理
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleResize);
-      document.addEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = 'ew-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.removeEventListener('mousemove', handleResize);
-      document.removeEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleResize);
-      document.removeEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, handleResize, handleResizeEnd]);
-
-  // ウィンドウリサイズ時のチャット幅調整
-  useEffect(() => {
-    const handleWindowResize = () => {
-      if (!isHydrated || !isChatOpen) return;
-      
-      const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-      const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
-      
-      // チャット幅が新しい最大幅を超えている場合は調整
-      if (chatSidebarWidth > dynamicMaxWidth) {
-        setChatSidebarWidth(Math.max(minChatSidebarWidth, dynamicMaxWidth));
-      }
-    };
-
-    window.addEventListener('resize', handleWindowResize);
-    return () => window.removeEventListener('resize', handleWindowResize);
-  }, [isHydrated, isChatOpen, sidebarOpen, chatSidebarWidth]);
-
-  // AI応答の処理
+  // AI応答の送信処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
-    try {
-      // ユーザーIDを取得
-      let userId = null;
-      
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
+    // ユーザーIDをローカルストレージから取得
+    let userId: string | null = null;
+    const authData = localStorage.getItem('auth-storage');
+    if (authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        if (parsed.state?.user?.id) {
+          userId = parsed.state.user.id;
         }
+      } catch (e) {
+        console.error('認証データの解析に失敗しました', e);
       }
-
-      if (!userId) {
-        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
-      }
-
-      // 現在のメモコンテンツを使用
-      const contextContent = currentMemoContent || memoContent;
-
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          message: message,
-          memo_content: contextContent,
-          page_id: getEffectiveChatPageId(),
-        }),
-      });
-
-      if (!response.ok) {
-        // より詳細なエラー情報を取得
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorDetail += ` - ${JSON.stringify(errorData)}`;
-        } catch (e) {
-          // JSON解析に失敗した場合はテキストで取得
-          try {
-            const errorText = await response.text();
-            errorDetail += ` - ${errorText}`;
-          } catch (e2) {
-            // 何も取得できない場合
-          }
-        }
-        throw new Error(errorDetail);
-      }
-
-      const data = await response.json();
-      return data.response;
-    } catch (error) {
-      console.error('AI応答の取得に失敗しました:', error);
-      throw error;
     }
+
+    if (!userId) {
+      throw new Error('ユーザーIDが見つかりません。ログインしてください');
+    }
+
+    const contextContent = currentMemoContent || memoContent || '';
+    const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+
+    const response = await fetch(`${apiBaseUrl}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userId}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        message,
+        memo_content: contextContent,
+        page_id: getEffectiveChatPageId(),
+      }),
+    });
+
+    if (!response.ok) {
+      let errorDetail = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorDetail += ` - ${JSON.stringify(errorData)}`;
+      } catch {
+        try {
+          const errorText = await response.text();
+          errorDetail += ` - ${errorText}`;
+        } catch {}
+      }
+      throw new Error(errorDetail);
+    }
+
+    const data = await response.json();
+    return data.response;
   };
 
-  interface MenuItem {
+  interface NavItem {
     text: string;
     icon: React.ReactNode;
     path: string;
     action?: () => void;
   }
 
-  const mainListItems: MenuItem[] = useMemo(() => [
+  const mainListItems: NavItem[] = useMemo(() => [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
-    { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
-    // { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
-    // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
+    { text: '探究テーマを見つける・探る', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
   ], []);
 
   // 展開状態のサイドバー
@@ -284,31 +175,19 @@ const Layout: React.FC = () => {
               あなたの学びのパートナー
             </Typography>
           </Box>
-          <IconButton
-            onClick={handleSidebarToggle}
-            sx={{
-              color: 'white',
-              '&:hover': {
-                backgroundColor: 'rgba(255,255,255,0.1)',
-              },
-            }}
-          >
+          <IconButton onClick={handleSidebarToggle} sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
             <MenuIcon />
           </IconButton>
         </Box>
       </Box>
 
-      <List sx={{ flex: 1, px: 1 }} data-tutorial="navigation-menu">
+      <List sx={{ flex: 1, px: 1 }}>
         {mainListItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
               onClick={() => {
-                if (item.action) {
-                  item.action();
-                } else if (item.path !== '#') {
-                navigate(item.path);
-                }
+                if (item.action) item.action(); else if (item.path !== '#') navigate(item.path);
                 if (isMobile) setMobileOpen(false);
               }}
               sx={{
@@ -316,23 +195,13 @@ const Layout: React.FC = () => {
                 '&.Mui-selected': {
                   background: 'linear-gradient(45deg, #059BFF, #006EB8)',
                   color: 'white',
-                  '& .MuiListItemIcon-root': {
-                    color: 'white',
-                  },
+                  '& .MuiListItemIcon-root': { color: 'white' },
                 },
-                '&:hover': {
-                  background: 'rgba(5, 155, 255, 0.1)',
-                },
+                '&:hover': { background: 'rgba(5, 155, 255, 0.1)' },
               }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText 
-                primary={item.text} 
-                primaryTypographyProps={{
-                  fontSize: '0.9rem',
-                  fontWeight: location.pathname === item.path ? 600 : 400,
-                }}
-              />
+              <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: location.pathname === item.path ? 600 : 400 }} />
             </ListItemButton>
           </ListItem>
         ))}
@@ -340,66 +209,28 @@ const Layout: React.FC = () => {
 
       <Divider />
 
-      {/* クエスト提案 - 一時的に非表示 */}
-      {/* <QuestSuggestion /> */}
-
-      <Divider />
-
-      {/* AIチャット開始ボタン */}
+      {/* AIチャット開始カード */}
       <Box sx={{ p: 2 }}>
-        <Card 
-          sx={{ 
-            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
-            borderRadius: 2,
-            cursor: 'pointer',
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.2)',
-            },
-          }}
-          onClick={toggleChat}
-        >
+        <Card sx={{ bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)', borderRadius: 2, cursor: 'pointer', '&:hover': { bgcolor: 'rgba(5, 155, 255, 0.2)' } }} onClick={toggleChat}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Psychology color="primary" />
-              <Typography variant="body2" fontWeight={600}>
-                AIアシスタント
-              </Typography>
+              <Typography variant="body2" fontWeight={600}>AIアシスタント</Typography>
             </Box>
-            <Typography variant="caption" color="text.secondary">
-              探究学習をサポート
-            </Typography>
+            <Typography variant="caption" color="text.secondary">探究学習をサポート</Typography>
           </CardContent>
         </Card>
       </Box>
 
       <Divider />
-      
+
+      {/* ユーザーエリア */}
       <Box sx={{ p: 2 }}>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 2, 
-            mb: 2,
-            cursor: 'pointer',
-            p: 1,
-            borderRadius: 1,
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.1)',
-            },
-          }}
-          onClick={handleUserMenuOpen}
-        >
-          <Avatar sx={{ bgcolor: 'primary.main' }}>
-            {user?.username?.charAt(0).toUpperCase()}
-          </Avatar>
+        <Box onClick={handleUserMenuOpen} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, cursor: 'pointer', p: 1, borderRadius: 1, '&:hover': { bgcolor: 'rgba(5, 155, 255, 0.1)' } }}>
+          <Avatar sx={{ bgcolor: 'primary.main' }}>{user?.username?.charAt(0).toUpperCase()}</Avatar>
           <Box sx={{ flex: 1 }}>
-            <Typography variant="body2" fontWeight={600}>
-              {user?.username}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              ログイン中
-            </Typography>
+            <Typography variant="body2" fontWeight={600}>{user?.username}</Typography>
+            <Typography variant="caption" color="text.secondary">ログイン中</Typography>
           </Box>
           <ExpandMore sx={{ color: 'text.secondary' }} />
         </Box>
@@ -410,21 +241,8 @@ const Layout: React.FC = () => {
   // 縮小状態のサイドバー
   const collapsedDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ 
-        p: 1.5, 
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
-        display: 'flex',
-        justifyContent: 'center',
-      }}>
-        <IconButton
-          onClick={handleSidebarToggle}
-          sx={{
-            color: 'white',
-            '&:hover': {
-              backgroundColor: 'rgba(255,255,255,0.1)',
-            },
-          }}
-        >
+      <Box sx={{ p: 1.5, background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)', display: 'flex', justifyContent: 'center' }}>
+        <IconButton onClick={handleSidebarToggle} sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
           <MenuIcon />
         </IconButton>
       </Box>
@@ -434,32 +252,10 @@ const Layout: React.FC = () => {
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
-              onClick={() => {
-                if (item.action) {
-                  item.action();
-                } else if (item.path !== '#') {
-                  navigate(item.path);
-                }
-              }}
-              sx={{
-                borderRadius: 2,
-                justifyContent: 'center',
-                minHeight: 48,
-                '&.Mui-selected': {
-                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
-                  color: 'white',
-                  '& .MuiListItemIcon-root': {
-                    color: 'white',
-                  },
-                },
-                '&:hover': {
-                  background: 'rgba(5, 155, 255, 0.1)',
-                },
-              }}
+              onClick={() => { if (item.action) item.action(); else if (item.path !== '#') navigate(item.path); }}
+              sx={{ borderRadius: 2, justifyContent: 'center', minHeight: 48, '&.Mui-selected': { background: 'linear-gradient(45deg, #059BFF, #006EB8)', color: 'white', '& .MuiListItemIcon-root': { color: 'white' } }, '&:hover': { background: 'rgba(5, 155, 255, 0.1)' } }}
             >
-              <ListItemIcon sx={{ minWidth: 'auto', justifyContent: 'center' }}>
-                {item.icon}
-              </ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 'auto', justifyContent: 'center' }}>{item.icon}</ListItemIcon>
             </ListItemButton>
           </ListItem>
         ))}
@@ -467,40 +263,17 @@ const Layout: React.FC = () => {
 
       <Divider />
 
-      {/* AIチャット開始ボタン（縮小版） */}
+      {/* AIチャットトグル（縮小版） */}
       <Box sx={{ p: 1 }}>
-        <IconButton
-          onClick={toggleChat}
-          sx={{
-            width: '100%',
-            height: 48,
-            borderRadius: 2,
-            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
-            color: 'primary.main',
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.2)',
-            },
-          }}
-        >
+        <IconButton onClick={toggleChat} sx={{ width: '100%', height: 48, borderRadius: 2, bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)', color: 'primary.main', '&:hover': { bgcolor: 'rgba(5, 155, 255, 0.2)' } }}>
           <Psychology />
         </IconButton>
       </Box>
 
       <Divider />
-      
+
       <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <IconButton
-          onClick={handleUserMenuOpen}
-          sx={{
-            width: '100%',
-            height: 48,
-            borderRadius: 1,
-            color: 'primary.main',
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.1)',
-            },
-          }}
-        >
+        <IconButton onClick={handleUserMenuOpen} sx={{ width: '100%', height: 48, borderRadius: 1, color: 'primary.main', '&:hover': { bgcolor: 'rgba(5, 155, 255, 0.1)' } }}>
           <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
             {user?.username?.charAt(0).toUpperCase()}
           </Avatar>
@@ -513,92 +286,26 @@ const Layout: React.FC = () => {
     <LayoutContext.Provider value={{ sidebarOpen, onSidebarToggle: handleSidebarToggle }}>
       <Box sx={{ display: 'flex', minHeight: '100vh' }}>
         {/* Drawer */}
-        <Box
-          component="nav"
-          sx={{ 
-            width: { 
-              xs: 0,
-              sm: isTablet ? (sidebarOpen ? tabletDrawerWidth : collapsedDrawerWidth) : 0,
-              md: sidebarOpen ? drawerWidth : collapsedDrawerWidth
-            },
-            flexShrink: { sm: 0 },
-            transition: 'width 0.3s ease',
-          }}
-        >
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{
-              keepMounted: true, // Better open performance on mobile.
-            }}
-            sx={{
-              display: { xs: 'block', sm: 'none' },
-              '& .MuiDrawer-paper': { 
-                boxSizing: 'border-box', 
-                width: drawerWidth,
-                border: 'none',
-                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
-              },
-            }}
-          >
+        <Box component="nav" sx={{ width: { xs: 0, sm: isTablet ? (sidebarOpen ? tabletDrawerWidth : collapsedDrawerWidth) : 0, md: sidebarOpen ? drawerWidth : collapsedDrawerWidth }, flexShrink: { sm: 0 }, transition: 'width 0.3s ease' }}>
+          <Drawer variant="temporary" open={mobileOpen} onClose={handleDrawerToggle} ModalProps={{ keepMounted: true }} sx={{ display: { xs: 'block', sm: 'none' }, '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth, border: 'none', boxShadow: '2px 0 10px rgba(0,0,0,0.1)' } }}>
             {fullDrawer}
           </Drawer>
-          
-          <Drawer
-            variant="permanent"
-            sx={{
-              display: { xs: 'none', sm: 'block' },
-              '& .MuiDrawer-paper': { 
-                boxSizing: 'border-box', 
-                width: sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth,
-                border: 'none',
-                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
-                transition: 'width 0.3s ease',
-                overflowX: 'hidden',
-              },
-            }}
-            open
-          >
+
+          <Drawer variant="permanent" sx={{ display: { xs: 'none', sm: 'block' }, '& .MuiDrawer-paper': { boxSizing: 'border-box', width: sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth, border: 'none', boxShadow: '2px 0 10px rgba(0,0,0,0.1)', transition: 'width 0.3s ease', overflowX: 'hidden' } }} open>
             {sidebarOpen ? fullDrawer : collapsedDrawer}
           </Drawer>
         </Box>
 
         {/* Main content */}
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            width: { 
-              xs: '100%',
-              sm: (() => {
-                const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-                const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidth : 0;
-                return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
-              })()
-            },
-            minHeight: '100vh',
-            transition: 'width 0.3s ease',
-          }}
-        >
+        <Box component="main" sx={{ flexGrow: 1, width: { xs: '100%', sm: (() => { const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth; const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidthDefault : 0; return `calc(100% - ${leftWidth}px - ${rightWidth}px)`; })() }, minHeight: '100vh', transition: 'width 0.3s ease' }}>
           {/* モバイル用のメニューボタン */}
           <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1 }}>
-            <IconButton
-              color="primary"
-              onClick={handleDrawerToggle}
-              sx={{ mb: 1 }}
-            >
+            <IconButton color="primary" onClick={handleDrawerToggle} sx={{ mb: 1 }}>
               <MenuIcon />
             </IconButton>
           </Box>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            style={{ height: '100%' }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} style={{ height: '100%' }}>
             <Outlet />
           </motion.div>
         </Box>
@@ -606,118 +313,36 @@ const Layout: React.FC = () => {
         {/* Right Chat Sidebar */}
         <AnimatePresence>
           {isHydrated && isChatOpen && (
-            <Box
-              component={motion.div}
-              initial={{ width: 0 }}
-              animate={{ width: chatSidebarWidth }}
-              exit={{ width: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              sx={{
-                width: chatSidebarWidth,
-                minHeight: '100vh',
-                backgroundColor: 'background.paper',
-                borderLeft: 1,
-                borderColor: 'divider',
-                boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
-                position: isMobile ? 'fixed' : 'relative',
-                right: isMobile ? 0 : 'auto',
-                top: isMobile ? 0 : 'auto',
-                zIndex: isMobile ? 1200 : 'auto',
-                overflow: 'hidden',
-              }}
-              className="chat-sidebar"
-              data-tutorial="ai-chat-panel"
-            >
-              {/* リサイズハンドル */}
-              <Box
-                onMouseDown={handleResizeStart}
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '8px',
-                  height: '100%',
-                  cursor: 'ew-resize',
-                  backgroundColor: 'transparent',
-                  borderRight: 1,
-                  borderColor: 'divider',
-                  '&:hover': {
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                  },
-                  zIndex: 1,
-                }}
-              >
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '3px',
-                    height: '40px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                    borderRadius: '2px',
-                  }}
-                />
+            <Box component={motion.div} initial={{ width: 0 }} animate={{ width: chatSidebarWidthDefault }} exit={{ width: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }} sx={{ width: chatSidebarWidthDefault, minHeight: '100vh', backgroundColor: 'background.paper', borderLeft: 1, borderColor: 'divider', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', position: isMobile ? 'fixed' : 'relative', right: isMobile ? 0 : 'auto', top: isMobile ? 0 : 'auto', zIndex: isMobile ? 1200 : 'auto', overflow: 'hidden' }} className="chat-sidebar">
+              {/* Chat Header */}
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>AIアシスタント</Typography>
+                </Box>
+                <IconButton onClick={toggleChat} size="small">
+                  <ChevronRight />
+                </IconButton>
               </Box>
-              
-              <Box sx={{ 
-                height: '100vh', 
-                display: 'flex', 
-                flexDirection: 'column',
-                pl: '8px', // リサイズハンドル分のパディング
-              }}>
-                {/* Chat Header */}
-                <Box sx={{ 
-                  p: 2, 
-                  borderBottom: 1, 
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}>
-                  <Box>
-                    <Typography variant="h6" fontWeight={600}>
-                      AIアシスタント
-                    </Typography>
-                  </Box>
-                  <IconButton onClick={toggleChat} size="small">
-                    <ChevronRight />
-                  </IconButton>
-                </Box>
 
-                {/* Chat Content */}
-                <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  <AIChat
-                    pageId={getEffectiveChatPageId()}
-                    title="AIアシスタント"
-                    persistentMode={true}
-                    loadHistoryFromDB={true}
-                    onMessageSend={handleAIMessage}
-                    initialMessage={AI_INITIAL_MESSAGE}
-                  />
-                </Box>
+              {/* Chat Content */}
+              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                <AIChat
+                  pageId={getEffectiveChatPageId()}
+                  title="AIアシスタント"
+                  persistentMode={true}
+                  loadHistoryFromDB={true}
+                  onMessageSend={handleAIMessage}
+                  initialMessage={AI_INITIAL_MESSAGE}
+                />
               </Box>
             </Box>
           )}
         </AnimatePresence>
 
         {/* ユーザーメニュー */}
-        <Menu
-          anchorEl={userMenuAnchor}
-          open={Boolean(userMenuAnchor)}
-          onClose={handleUserMenuClose}
-          anchorOrigin={{
-            vertical: 'top',
-            horizontal: 'center',
-          }}
-          transformOrigin={{
-            vertical: 'bottom',
-            horizontal: 'center',
-          }}
-        >
+        <Menu anchorEl={userMenuAnchor} open={Boolean(userMenuAnchor)} onClose={handleUserMenuClose} anchorOrigin={{ vertical: 'top', horizontal: 'center' }} transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
           <MenuItem onClick={handleLogout}>
-            <Logout sx={{ mr: 1 }} />
+            <ChevronRight sx={{ mr: 1 }} />
             ログアウト
           </MenuItem>
         </Menu>
@@ -727,3 +352,4 @@ const Layout: React.FC = () => {
 };
 
 export default memo(Layout);
+
