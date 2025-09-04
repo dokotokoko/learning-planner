@@ -1,0 +1,300 @@
+﻿        
+        # 驕主悉縺ｮ蟇ｾ隧ｱ螻･豁ｴ繧貞叙蠕暦ｼ域僑蠑ｵ・・0-100繝｡繝・そ繝ｼ繧ｸ・・
+        history_limit = 100  # Phase 1: 螻･豁ｴ繧ｦ繧｣繝ｳ繝峨え繧呈僑蠑ｵ
+        history_response = supabase.table("chat_logs").select("id, sender, message, created_at, context_data").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
+        conversation_history = history_response.data if history_response.data is not None else []
+
+        if conversation_history is None:
+            # 繧ｨ繝ｩ繝ｼ繝ｭ繧ｰ繧呈ｮ九☆
+            print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
+        
+        # 繝｡繝・そ繝ｼ繧ｸ縺ｮ貅門ｙ
+        # 繧ｷ繧ｹ繝・Β繝励Ο繝ｳ繝励ヨ縺ｨ繝｡繝・そ繝ｼ繧ｸ繧呈ｺ門ｙ
+        system_prompt_with_context = system_prompt
+        
+        # 繝励Ο繧ｸ繧ｧ繧ｯ繝域ュ蝣ｱ繧定ｿｽ蜉・磯聞譛溯ｨ俶・・・
+        if project_context:
+            system_prompt_with_context += project_context
+            logger.info(f"笨・繧ｷ繧ｹ繝・Β繝励Ο繝ｳ繝励ヨ縺ｫ繝励Ο繧ｸ繧ｧ繧ｯ繝域ュ蝣ｱ繧定ｿｽ蜉")
+        else:
+            logger.info(f"閥 繝励Ο繧ｸ繧ｧ繧ｯ繝域ュ蝣ｱ縺後↑縺・◆繧√√す繧ｹ繝・Β繝励Ο繝ｳ繝励ヨ縺ｫ霑ｽ蜉縺励↑縺・)
+        
+        logger.info(f"糖 繧ｷ繧ｹ繝・Β繝励Ο繝ｳ繝励ヨ髟ｷ: {len(system_prompt_with_context)}譁・ｭ・)
+        
+        messages = [{"role": "system", "content": system_prompt_with_context}]
+        if conversation_history:  # None 縺ｾ縺溘・遨ｺ繝ｪ繧ｹ繝医・繝√ぉ繝・け
+            for history_msg in conversation_history:
+                role = "user" if history_msg["sender"] == "user" else "assistant"
+                messages.append({"role": role, "content": history_msg["message"]})
+
+        user_message = chat_data.message
+        
+        messages.append({"role": "user", "content": user_message})
+        context_metadata = None
+        
+        # 菫晏ｭ倡畑縺ｮcontext_data菴懈・
+        context_data_dict = {"timestamp": datetime.now(timezone.utc).isoformat()}
+        if chat_data.memo_content:
+            context_data_dict["memo_content"] = chat_data.memo_content[:500]  # 譛蛻昴・500譁・ｭ励・縺ｿ菫晏ｭ・
+        if project_id:
+            context_data_dict["project_id"] = project_id
+        if project:
+            context_data_dict["project_info"] = {
+                "theme": project.get('theme'),
+                "question": project.get('question'),
+                "hypothesis": project.get('hypothesis')
+            }
+        
+        # 繝ｦ繝ｼ繧ｶ繝ｼ繝｡繝・そ繝ｼ繧ｸ繧奪B縺ｫ菫晏ｭ假ｼ域僑蠑ｵ・壹Γ繧ｿ繝・・繧ｿ莉倥″・・
+        user_message_data = {
+            "user_id": current_user,
+            "page": page_id,
+            "sender": "user",
+            "message": chat_data.message,
+            "conversation_id": conversation_id,
+            "context_data": json.dumps(context_data_dict, ensure_ascii=False)
+        }
+        supabase.table("chat_logs").insert(user_message_data).execute()
+        
+        # ===== Phase 1: 蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝域ｩ溯・邨ｱ蜷・=====
+        if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
+            try:
+                # 莨夊ｩｱ螻･豁ｴ繧貞ｯｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝育畑繝輔か繝ｼ繝槭ャ繝医↓螟画鋤
+                agent_history = []
+                for history_msg in conversation_history:
+                    sender = "user" if history_msg["sender"] == "user" else "assistant"
+                    agent_history.append({
+                        "sender": sender,
+                        "message": history_msg["message"]
+                    })
+                
+                # 繝励Ο繧ｸ繧ｧ繧ｯ繝域ュ蝣ｱ繧貞ｯｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝育畑縺ｫ螟画鋤
+                agent_project_context = None
+                if project:
+                    agent_project_context = {
+                        "theme": project.get('theme'),
+                        "question": project.get('question'),
+                        "hypothesis": project.get('hypothesis'),
+                        "id": project_id
+                    }
+                
+                # 蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝医〒蜃ｦ逅・
+                agent_result = conversation_orchestrator.process_turn(
+                    user_message=chat_data.message,
+                    conversation_history=agent_history,
+                    project_context=agent_project_context,
+                    user_id=current_user,
+                    conversation_id=conversation_id
+                )
+                
+                # 蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝医・蠢懃ｭ斐ｒ菴ｿ逕ｨ
+                response = agent_result["response"]
+                
+                # 繝｡繧ｿ繝・・繧ｿ繧剃ｿ晏ｭ倡畑context_data縺ｫ霑ｽ蜉
+                ai_context_data = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "has_project_context": bool(project_context),
+                    "conversation_agent": True,
+                    "support_type": agent_result.get("support_type"),
+                    "selected_acts": agent_result.get("selected_acts"),
+                    "state_snapshot": agent_result.get("state_snapshot", {}),
+                    "decision_metadata": agent_result.get("decision_metadata", {}),
+                    "project_plan": agent_result.get("project_plan")  # 繝励Ο繧ｸ繧ｧ繧ｯ繝郁ｨ育判繧定ｿｽ蜉
+                }
+                
+                # followups縺後≠繧句ｴ蜷医・response縺ｫ霑ｽ蜉
+                if agent_result.get("followups"):
+                    followup_text = "\n\n**谺｡縺ｫ縺ｧ縺阪ｋ縺薙→:**\n" + "\n".join([f"窶｢ {f}" for f in agent_result["followups"][:3]])
+                    response += followup_text
+                
+                logger.info(f"笨・蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝亥・逅・ｮ御ｺ・ {agent_result['support_type']} | {agent_result['selected_acts']}")
+                
+            except Exception as e:
+                logger.error(f"笶・蟇ｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝亥・逅・お繝ｩ繝ｼ縲∝ｾ捺擂蜃ｦ逅・↓繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ: {e}")
+                # 繧ｨ繝ｩ繝ｼ譎ゅ・蠕捺擂縺ｮ蜃ｦ逅・↓繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ
+                response = llm_client.generate_response_with_history(messages)
+                ai_context_data = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "has_project_context": bool(project_context),
+                    "conversation_agent_error": str(e)
+                }
+        else:
+            # 蠕捺擂縺ｮ蜃ｦ逅・
+            response = llm_client.generate_response_with_history(messages)
+            ai_context_data = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "has_project_context": bool(project_context)
+            }
+        
+        # 繝医・繧ｯ繝ｳ菴ｿ逕ｨ驥上ｒ險育ｮ暦ｼ井ｽｿ逕ｨ縺励↑縺・ｼ・
+        token_usage = None
+        
+        # 繝励Ο繧ｸ繧ｧ繧ｯ繝・D繧定ｿｽ蜉・亥ｯｾ隧ｱ繧ｨ繝ｼ繧ｸ繧ｧ繝ｳ繝医〒險ｭ螳壹＆繧後※縺・↑縺・ｴ蜷茨ｼ・
+        if project_id and "project_id" not in ai_context_data:
+            ai_context_data["project_id"] = project_id
+        
+        ai_message_data = {
+            "user_id": current_user,
+            "page": page_id,
+            "sender": "assistant",
+            "message": response,
+            "conversation_id": conversation_id,
+            "context_data": json.dumps(ai_context_data, ensure_ascii=False)
+        }
+        supabase.table("chat_logs").insert(ai_message_data).execute()
+        
+        # conversation縺ｮ譛邨よ峩譁ｰ譎ょ綾繧呈峩譁ｰ
+        try:
+            await update_conversation_timestamp(conversation_id)
+        except Exception as e:
+            # 繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝玲峩譁ｰ繧ｨ繝ｩ繝ｼ縺ｯ隴ｦ蜻翫Ο繧ｰ縺ｮ縺ｿ・医メ繝｣繝・ヨ閾ｪ菴薙・豁｣蟶ｸ縺ｫ蜃ｦ逅・ｼ・
+            logger.warning(f"conversation timestamp update failed: {e}")
+        
+        # 繝医・繧ｯ繝ｳ菴ｿ逕ｨ螻･豁ｴ繧定ｨ倬鹸・井ｽｿ逕ｨ縺励↑縺・ｼ・
+        
+        return ChatResponse(
+            response=response,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            token_usage=token_usage,
+            context_metadata=context_metadata
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Chat API Error: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        handle_database_error(e, "AI蠢懃ｭ斐・逕滓・")
+
+@app.get("/chat/history", response_model=List[ChatHistoryResponse])
+async def get_chat_history(
+    page: Optional[str] = None,
+    limit: Optional[int] = 50,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """蟇ｾ隧ｱ螻･豁ｴ蜿門ｾ暦ｼ域怙驕ｩ蛹也沿・・""
+    try:
+        validate_supabase()
+        
+        query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
+        
+        if page:
+            query = query.eq("page", page)
+        
+        query = query.order("created_at", desc=False).limit(limit or 50)
+        result = query.execute()
+        
+        return [
+            ChatHistoryResponse(
+                id=item["id"],
+                page=item["page"] or "general",
+                sender=item["sender"],
+                message=item["message"],
+                context_data=item.get("context_data"),
+                created_at=item["created_at"]
+            )
+            for item in result.data
+        ]
+    except Exception as e:
+        handle_database_error(e, "蟇ｾ隧ｱ螻･豁ｴ縺ｮ蜿門ｾ・)
+
+# /chat/conversations 繧ｨ繝ｳ繝峨・繧､繝ｳ繝医・蜑企勁・・hat_conversations繝・・繝悶Ν繧剃ｽｿ逕ｨ縺励↑縺・◆繧・ｼ・
+
+# /chat/conversations/{conversation_id}/messages 繧ｨ繝ｳ繝峨・繧､繝ｳ繝医・蜑企勁・・hat_conversations繝・・繝悶Ν繧剃ｽｿ逕ｨ縺励↑縺・◆繧・ｼ・
+
+@app.post("/memos", response_model=MemoResponse)
+async def save_memo(
+    memo_data: MemoSave,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """繝｡繝｢縺ｮ菫晏ｭ假ｼ・age_memos繝・・繝悶Ν髱槫ｯｾ蠢懊・縺溘ａ辟｡蜉ｹ蛹厄ｼ・""
+    try:
+        validate_supabase()
+        
+        # page_memos繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・◆繧√√お繝ｩ繝ｼ繧定ｿ斐☆
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="page_memos繝吶・繧ｹ縺ｮ繝｡繝｢菫晏ｭ倥・迴ｾ蝨ｨ蛻ｩ逕ｨ縺ｧ縺阪∪縺帙ｓ縲ゅ・繝ｭ繧ｸ繧ｧ繧ｯ繝医・繝ｼ繧ｹ縺ｮ繝｡繝｢讖溯・繧偵＃蛻ｩ逕ｨ縺上□縺輔＞縲・
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        handle_database_error(e, "繝｡繝｢縺ｮ菫晏ｭ・)
+
+@app.get("/memos/{page_id}", response_model=MemoResponse)
+async def get_memo_by_page_id(
+    page_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """繝壹・繧ｸID繝吶・繧ｹ縺ｮ繝｡繝｢蜿門ｾ暦ｼ医Ξ繧ｬ繧ｷ繝ｼ蟇ｾ蠢懶ｼ・""
+    try:
+        validate_supabase()
+        
+        # page_memos繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・◆繧√［emos繝・・繝悶Ν縺九ｉpage_id逶ｸ蠖薙・繧ゅ・繧呈､懃ｴ｢
+        # page_id縺梧焚蛟､縺ｮ蝣ｴ蜷医・memo_id縺ｨ縺励※謇ｱ縺・
+        try:
+            memo_id = int(page_id)
+            result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("id", memo_id).eq("user_id", current_user).execute()
+            
+            if result.data:
+                memo = result.data[0]
+                return MemoResponse(
+                    id=memo["id"],
+                    page_id=page_id,
+                    content=memo.get("content") or "",
+                    updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
+                )
+            else:
+                # 繝｡繝｢縺悟ｭ伜惠縺励↑縺・ｴ蜷医・遨ｺ縺ｮ繝｡繝｢繧定ｿ斐☆
+                return MemoResponse(
+                    id=0,
+                    page_id=page_id,
+                    content="",
+                    updated_at=datetime.now(timezone.utc).isoformat()
+                )
+        except ValueError:
+            # page_id縺梧焚蛟､縺ｧ縺ｪ縺・ｴ蜷医・遨ｺ縺ｮ繝｡繝｢繧定ｿ斐☆
+            return MemoResponse(
+                id=0,
+                page_id=page_id,
+                content="",
+                updated_at=datetime.now(timezone.utc).isoformat()
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        handle_database_error(e, "繝｡繝｢縺ｮ蜿門ｾ・)
+
+@app.get("/memos", response_model=List[MemoResponse])
+async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
+    """繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ蜈ｨ繝｡繝｢蜿門ｾ暦ｼ・emos繝・・繝悶Ν縺九ｉ蜿門ｾ暦ｼ・""
+    try:
+        validate_supabase()
+        
+        # memos繝・・繝悶Ν縺九ｉ蜈ｨ繝｡繝｢繧貞叙蠕・
+        result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("user_id", current_user).order("updated_at", desc=True).execute()
+        
+        return [
+            MemoResponse(
+                id=memo["id"],
+                page_id=str(memo["id"]),  # memo_id繧恥age_id縺ｨ縺励※菴ｿ逕ｨ
+                content=memo["content"] or "",
+                updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
+            )
+            for memo in result.data
+        ]
+    except Exception as e:
+        handle_database_error(e, "蜈ｨ繝｡繝｢縺ｮ蜿門ｾ・)
+
+# =============================================================================
+# 繝励Ο繧ｸ繧ｧ繧ｯ繝育ｮ｡逅・PI
+# =============================================================================
+
+@app.post("/projects", response_model=ProjectResponse)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """繝励Ο繧ｸ繧ｧ繧ｯ繝井ｽ懈・"""

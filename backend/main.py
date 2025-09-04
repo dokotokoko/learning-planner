@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -15,6 +15,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from functools import lru_cache
 import time
+from collections import deque
 
 # .envファイルを読み込み
 load_dotenv()
@@ -34,6 +35,21 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# =====================
+# Config/Feature flags
+# =====================
+# History window size for chat context (kept small to control latency/cost)
+CHAT_HISTORY_LIMIT_DEFAULT = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
+CHAT_HISTORY_LIMIT_MAX = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
+
+# Message length guard for /chat
+MAX_CHAT_MESSAGE_LENGTH = int(os.environ.get("MAX_CHAT_MESSAGE_LENGTH", "2000"))
+
+# Simple in-memory rate limiting for /chat (per user+IP)
+ENABLE_CHAT_RATE_LIMIT = os.environ.get("ENABLE_CHAT_RATE_LIMIT", "true").lower() == "true"
+RATE_LIMIT_WINDOW_SEC = int(os.environ.get("CHAT_RATE_LIMIT_WINDOW_SEC", "60"))
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("CHAT_RATE_LIMIT_MAX", "20"))
 
 # Phase 1: AI対話エージェント機能のインポート
 try:
@@ -89,6 +105,43 @@ if os.environ.get("ENABLE_CORS", "false").lower() == "true":
 
 # セキュリティスキーム
 security = HTTPBearer()
+
+# In-memory rate limiting store
+_rate_limit_store: dict = {}
+
+async def chat_rate_limiter(request: Request, current_user: int = Depends(security)):
+    """Simple per-user+IP rate limiter for /chat.
+    Uses a sliding window over RATE_LIMIT_WINDOW_SEC seconds.
+    """
+    if not ENABLE_CHAT_RATE_LIMIT:
+        return
+
+    try:
+        # Extract user id from bearer token (already required by Depends(security))
+        token = current_user.credentials if hasattr(current_user, "credentials") else None
+        user_key = str(token) if token else request.client.host
+    except Exception:
+        user_key = request.client.host
+
+    ip = request.client.host if request.client else "unknown"
+    key = f"{user_key}:{ip}"
+
+    now = time.time()
+    window_start = now - RATE_LIMIT_WINDOW_SEC
+
+    dq = _rate_limit_store.get(key)
+    if dq is None:
+        dq = deque()
+        _rate_limit_store[key] = dq
+
+    # Drop old entries
+    while dq and dq[0] < window_start:
+        dq.popleft()
+
+    if len(dq) >= RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please slow down.")
+
+    dq.append(now)
 
 # === Pydanticモデル ===
 # （元のモデルをそのまま継承）
@@ -416,9 +469,11 @@ async def get_or_create_conversation(user_id: int, page_id: str) -> str:
 async def update_conversation_timestamp(conversation_id: str):
     """conversationの最終更新時刻を更新"""
     try:
-        supabase.table("chat_conversations").update({
-            "updated_at": datetime.now().isoformat()
-        }).eq("id", conversation_id).execute()
+        await asyncio.to_thread(
+            lambda: supabase.table("chat_conversations").update({
+                "updated_at": datetime.now().isoformat()
+            }).eq("id", conversation_id).execute()
+        )
     except Exception as e:
         logger.error(f"conversation timestamp更新エラー: {e}")
 
@@ -527,7 +582,7 @@ async def register(user_data: UserRegister):
     except Exception as e:
         handle_database_error(e, "ユーザーの登録")
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limiter)])
 async def chat_with_ai(
     chat_data: ChatMessage,
     current_user: int = Depends(get_current_user_cached)
@@ -629,6 +684,10 @@ async def chat_with_ai(
 
         user_message = chat_data.message
         
+        # Guard: message size limit to protect backend/LLM
+        if user_message is not None and len(user_message) > MAX_CHAT_MESSAGE_LENGTH:
+            raise HTTPException(status_code=400, detail="Message too long")
+
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
         
@@ -654,7 +713,7 @@ async def chat_with_ai(
             "conversation_id": conversation_id,
             "context_data": json.dumps(context_data_dict, ensure_ascii=False)
         }
-        supabase.table("chat_logs").insert(user_message_data).execute()
+        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
         
         # ===== Phase 1: 対話エージェント機能統合 =====
         if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
@@ -741,7 +800,7 @@ async def chat_with_ai(
             "conversation_id": conversation_id,
             "context_data": json.dumps(ai_context_data, ensure_ascii=False)
         }
-        supabase.table("chat_logs").insert(ai_message_data).execute()
+        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
         
         # conversationの最終更新時刻を更新
         try:
@@ -771,21 +830,30 @@ async def chat_with_ai(
 async def get_chat_history(
     page: Optional[str] = None,
     limit: Optional[int] = 50,
+    before: Optional[str] = None,
     current_user: int = Depends(get_current_user_cached)
 ):
     """対話履歴取得（最適化版）"""
     try:
         validate_supabase()
         
+        # Bound the limit
+        eff_limit = min(max(1, limit or CHAT_HISTORY_LIMIT_DEFAULT), CHAT_HISTORY_LIMIT_MAX)
         query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
         
         if page:
             query = query.eq("page", page)
         
-        query = query.order("created_at", desc=False).limit(limit or 50)
-        result = query.execute()
+        if before:
+            try:
+                # Filter strictly before the cursor
+                query = query.lt("created_at", before)
+            except Exception:
+                pass
+        query = query.order("created_at", desc=True).limit(eff_limit)
+        result = await asyncio.to_thread(lambda: query.execute())
         
-        return [
+        items = [
             ChatHistoryResponse(
                 id=item["id"],
                 page=item["page"] or "general",
@@ -796,6 +864,8 @@ async def get_chat_history(
             )
             for item in result.data
         ]
+        # reverse to chronological order (oldest first)
+        return list(reversed(items))
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
 
@@ -938,7 +1008,7 @@ async def get_user_projects(
     try:
         validate_supabase()
         
-        result = supabase.table('projects').select('*').eq('user_id', user_id).order('updated_at', desc=True).execute()
+        result = supabase.table('projects').select('id, user_id, theme, question, hypothesis, created_at, updated_at').eq('user_id', user_id).order('updated_at', desc=True).execute()
         
         projects = []
         for project in result.data:
@@ -968,7 +1038,7 @@ async def get_project(
     try:
         validate_supabase()
         
-        result = supabase.table('projects').select('*').eq('id', project_id).eq('user_id', current_user).execute()
+        result = supabase.table('projects').select('id, user_id, theme, question, hypothesis, created_at, updated_at').eq('id', project_id).eq('user_id', current_user).execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
@@ -1085,7 +1155,7 @@ async def get_project_memos(
     try:
         validate_supabase()
         
-        result = supabase.table('memos').select('*').eq('project_id', project_id).eq('user_id', current_user).order('updated_at', desc=True).execute()
+        result = supabase.table('memos').select('id, title, content, project_id, created_at, updated_at').eq('project_id', project_id).eq('user_id', current_user).order('updated_at', desc=True).execute()
         
         return [
             MultiMemoResponse(
@@ -1113,7 +1183,7 @@ async def get_memo(
         
         logger.info(f"メモ取得開始: memo_id={memo_id}, user_id={current_user}")
         
-        result = supabase.table('memos').select('*').eq('id', memo_id).eq('user_id', current_user).execute()
+        result = supabase.table('memos').select('id, title, content, project_id, created_at, updated_at').eq('id', memo_id).eq('user_id', current_user).execute()
         
         logger.info(f"データベースクエリ結果: count={result.count if result.count else 0}, data_length={len(result.data) if result.data else 0}")
         
