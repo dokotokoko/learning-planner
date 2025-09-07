@@ -179,7 +179,7 @@ npm run dev
 
 アクセスURL:
 ```
-http://localhost:5173
+http://localhost:3000
 ```
 
 ## アーキテクチャ
@@ -238,12 +238,12 @@ docker network inspect learning-assistant_default
 ```bash
 # 使用中のポート確認（Windows）
 netstat -an | findstr :8000
-netstat -an | findstr :5173
+netstat -an | findstr :3000
 netstat -an | findstr :443
 
 # 使用中のポート確認（Mac/Linux）
 lsof -i :8000
-lsof -i :5173
+lsof -i :3000
 lsof -i :443
 ```
 
