@@ -666,6 +666,18 @@ async def chat_with_ai(
                     logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
             except Exception as e:
                 logger.warning(f"⚠️ memo_id:{page_id}からのproject_id取得に失敗: {e}")
+
+        elif page_id == 'conversation-agent-test':
+            logger.info(f"👉 page_idが'conversation-agent-test'のため、最新のプロジェクトを探します")
+            try:
+                latest_project_result = supabase.table('projects').select('id').eq('user_id', current_user).order('updated_at', desc=True).limit(1).execute()
+                if latest_project_result.data:
+                    project_id = latest_project_result.data[0]['id']
+                    logger.info(f"✅ 最新のプロジェクトIDを取得: {project_id}")
+                else:
+                    logger.info("🔴 利用可能なプロジェクトが見つかりませんでした")
+            except Exception as e:
+                logger.warning(f"⚠️ 最新プロジェクトの取得に失敗: {e}")
         
         else:
             logger.info(f"🔴 page_id形式が未対応: {page_id}")
