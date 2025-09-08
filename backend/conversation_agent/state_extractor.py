@@ -46,13 +46,17 @@ class StateExtractor:
 
 出力は厳密なJSON形式のみ:"""
     
+    # <summary>状態抽出器を初期化します。</summary>
+    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
     def __init__(self, llm_client=None):
-        """
-        Args:
-            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
-        """
         self.llm_client = llm_client
         
+    # <summary>会話履歴から状態を抽出するメイン関数です。</summary>
+    # <arg name="conversation_history">[{"sender": "user/assistant", "message": "..."}]形式の履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（既存システムから取得）。</arg>
+    # <arg name="use_llm">LLMを使用するか（Falseの場合はヒューリスティック処理）。</arg>
+    # <arg name="mock_mode">最小限の状態抽出モード（ゴール、目的、ProjectContext、会話履歴のみに焦点）。</arg>
+    # <returns>抽出された状態スナップショット。</returns>
     def extract_from_history(
         self,
         conversation_history: List[Dict[str, str]],
@@ -60,18 +64,6 @@ class StateExtractor:
         use_llm: bool = True,
         mock_mode: bool = False #mock
     ) -> StateSnapshot:
-        """
-        会話履歴から状態を抽出するメイン関数（
-        
-        Args:
-            conversation_history: [{"sender": "user/assistant", "message": "..."}]形式の履歴
-            project_context: プロジェクト情報（既存システムから取得）
-            use_llm: LLMを使用するか（Falseの場合はヒューリスティック処理）
-            mock_mode: 最小限の状態抽出モード（ゴール、目的、ProjectContext、会話履歴のみに焦点）
-            
-        Returns:
-            StateSnapshot: 抽出された状態
-        """
         
         if mock_mode:
             # Mock用に必要最低限の入力（入力パラメータ：ゴール, 目的, ProjectContext, 会話履歴）
@@ -87,7 +79,10 @@ class StateExtractor:
             return self._extract_heuristic(conversation_history, project_context)
 
 
-    """LLMを使用した状態抽出（デフォルト関数）"""
+    # <summary>LLMを使用して状態を抽出します（デフォルト関数）。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（任意）。</arg>
+    # <returns>抽出された状態スナップショット。</returns>
     def _extract_with_llm(
         self,
         conversation_history: List[Dict[str, str]],
@@ -149,7 +144,10 @@ class StateExtractor:
             logger.error(f"LLM応答のJSON解析エラー: {e}")
             raise
 
-     """ヒューリスティックな状態抽出（LLMが使用できない場合のフォールバック用）""" 
+    # <summary>ヒューリスティックな状態抽出を行います（LLMが使用できない場合のフォールバック用）。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（任意）。</arg>
+    # <returns>抽出された状態スナップショット。</returns> 
     def _extract_heuristic(
         self,
         conversation_history: List[Dict[str, str]],
@@ -191,16 +189,21 @@ class StateExtractor:
         
         return state
     
+    # <summary>会話履歴を文字列フォーマットに変換します。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>フォーマットされた会話文字列。</returns>
     def _format_conversation(self, conversation_history: List[Dict[str, str]]) -> str:
-        """会話履歴を文字列フォーマットに変換"""
         lines = []
         for msg in conversation_history:
             role = "U" if msg.get('sender') == 'user' else "A"
             lines.append(f"{role}: {msg.get('message', '')}")
         return "\n".join(lines)
     
+    # <summary>キーワード分析により状態を更新します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="messages">分析対象のメッセージリスト。</arg>
+    # <returns>更新された状態スナップショット。</returns>
     def _analyze_keywords(self, state: StateSnapshot, messages: List[str]) -> StateSnapshot:
-        """キーワード分析による状態更新"""
         
         all_text = " ".join(messages).lower()
         
@@ -230,8 +233,10 @@ class StateExtractor:
         
         return state
     
+    # <summary>メッセージから感情状態を推定します。</summary>
+    # <arg name="messages">分析対象のメッセージリスト。</arg>
+    # <returns>推定された感情状態。</returns>
     def _estimate_affect(self, messages: List[str]) -> Affect:
-        """感情状態の推定"""
         affect = Affect()
         
         if not messages:
@@ -262,8 +267,10 @@ class StateExtractor:
         
         return affect
     
+    # <summary>会話履歴から進捗シグナルを推定します。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>推定された進捗シグナル。</returns>
     def _estimate_progress(self, conversation_history: List[Dict[str, str]]) -> ProgressSignal:
-        """進捗シグナルの推定"""
         progress = ProgressSignal()
         
         # 最近のメッセージ数から行動数を推定
@@ -288,7 +295,10 @@ class StateExtractor:
         
         return progress
 
-    """ Mock用に最小限の状態抽出（ゴール、目的、ProjectContext、会話履歴のみ）"""  
+    # <summary>Mock用に最小限の状態抽出を行います（ゴール、目的、ProjectContext、会話履歴のみ）。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（任意）。</arg>
+    # <returns>最小限の状態スナップショット。</returns>  
     def _extract_minimal(
         self,
         conversation_history: List[Dict[str, str]],

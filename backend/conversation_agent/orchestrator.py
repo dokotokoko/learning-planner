@@ -2,7 +2,6 @@
 対話エージェントの統合制御モジュール（Phase 1: モック版）
 すべてのコンポーネントを統合して対話フローを制御
 """
-
 import json
 import logging
 from typing import List, Dict, Optional, Any, Tuple
@@ -26,20 +25,18 @@ logger = logging.getLogger(__name__)
 class ConversationOrchestrator:
     """対話フロー全体を統合制御"""
     
+    # <summary>対話オーケストレーターを初期化します。</summary>
+    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
+    # <arg name="use_mock">モックモードで動作するか（Phase 1ではTrue）。</arg>
     def __init__(self, llm_client=None, use_mock: bool = False):
-        """
-        Args:
-            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
-            use_mock: モックモードで動作するか（Phase 1ではTrue）
-        """
         self.llm_client = llm_client
         self.use_mock = use_mock
         
         # 各コンポーネントの初期化
         self.state_extractor = StateExtractor(llm_client)
+        self.project_planner = ProjectPlanner(llm_client)
         self.support_typer = SupportTyper(llm_client)
         self.policy_engine = PolicyEngine()
-        self.project_planner = ProjectPlanner(llm_client)
         
         # メトリクス追跡
         self.metrics = ConversationMetrics()
@@ -49,6 +46,13 @@ class ConversationOrchestrator:
         self.support_type_history: List[str] = []
         self.act_history: List[List[str]] = []
     
+    # <summary>1ターンの対話処理を実行します（メインエントリポイント）。</summary>
+    # <arg name="user_message">ユーザーの入力メッセージ。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（任意）。</arg>
+    # <arg name="user_id">ユーザーID（任意）。</arg>
+    # <arg name="conversation_id">会話ID（任意）。</arg>
+    # <returns>応答パッケージ（response, followups, support_type, selected_acts, state_snapshot, project_plan, decision_metadata, metrics）。</returns>
     def process_turn(
         self,
         user_message: str,
@@ -57,28 +61,6 @@ class ConversationOrchestrator:
         user_id: Optional[int] = None,
         conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        1ターンの対話処理（メインエントリポイント）
-        
-        Args:
-            user_message: ユーザーの入力メッセージ
-            conversation_history: 会話履歴
-            project_context: プロジェクト情報
-            user_id: ユーザーID
-            conversation_id: 会話ID
-            
-        Returns:
-            {
-                "response": str,                # 自然な応答文
-                "followups": List[str],         # フォローアップ候補
-                "support_type": str,            # 選択された支援タイプ
-                "selected_acts": List[str],     # 選択された発話アクト
-                "state_snapshot": dict,         # 状態スナップショット
-                "project_plan": dict,           # AIエージェントの計画思考結果（NEW!）
-                "decision_metadata": dict,      # 意思決定メタデータ
-                "metrics": dict                 # メトリクス
-            }
-        """
         
         try:
             # 1. 状態抽出(理解)
@@ -128,6 +110,12 @@ class ConversationOrchestrator:
             # エラー時のフォールバック応答
             return self._generate_fallback_response(str(e))
     
+    # <summary>会話履歴から現在の状態を抽出します。</summary>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="project_context">プロジェクト情報（任意）。</arg>
+    # <arg name="user_id">ユーザーID（任意）。</arg>
+    # <arg name="conversation_id">会話ID（任意）。</arg>
+    # <returns>現在の状態スナップショット。</returns>
     def _extract_state(
         self,
         conversation_history: List[Dict[str, str]],
@@ -135,7 +123,6 @@ class ConversationOrchestrator:
         user_id: Optional[int],
         conversation_id: Optional[str]
     ) -> StateSnapshot:
-        """状態抽出フェーズ"""
         
         # プロジェクト情報のログ出力（デバッグ用）
         if project_context:
@@ -177,12 +164,15 @@ class ConversationOrchestrator:
         
         return state
     
+    # <summary>プロジェクト計画を生成します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>プロジェクト計画（任意）。</returns>
     def _generate_project_plan(
         self,
         state: StateSnapshot,
         conversation_history: List[Dict[str, str]]
     ) -> Optional[ProjectPlan]:
-        """プロジェクト計画思考フェーズ"""
         
         # プロジェクト情報がない場合はスキップ
         if not state.project_context:
@@ -208,8 +198,10 @@ class ConversationOrchestrator:
             logger.error(f"プロジェクト計画生成エラー: {e}")
             return None
     
+    # <summary>状態から支援タイプを判定します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <returns>(support_type, reason, confidence)。支援タイプ、理由、確信度。</returns>
     def _determine_support_type(self, state: StateSnapshot) -> Tuple[str, str, float]:
-        """支援タイプ判定フェーズ"""
         
         # モックモードの場合はルールベース処理を使用
         use_llm = not self.use_mock and self.llm_client is not None
@@ -232,8 +224,11 @@ class ConversationOrchestrator:
         
         return support_type, reason, confidence
     
+    # <summary>支援タイプに基づいて発話アクトを選択します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <returns>(selected_acts, reason)。選択された発話アクトリストと理由。</returns>
     def _select_acts(self, state: StateSnapshot, support_type: str) -> Tuple[List[str], str]:
-        """発話アクト選択フェーズ"""
         
         selected_acts, reason = self.policy_engine.select_acts(
             state,
@@ -248,6 +243,12 @@ class ConversationOrchestrator:
         
         return selected_acts, reason
     
+    # <summary>発話アクトに基づいて応答を生成します（Phase 1: モック版）。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
+    # <arg name="user_message">ユーザーの入力メッセージ。</arg>
+    # <returns>応答パッケージ。</returns>
     def _generate_response(
         self,
         state: StateSnapshot,
@@ -255,7 +256,6 @@ class ConversationOrchestrator:
         selected_acts: List[str],
         user_message: str
     ) -> TurnPackage:
-        """応答生成フェーズ（Phase 1: モック版）"""
         
         if self.use_mock or not self.llm_client:
             return self._generate_mock_response(state, support_type, selected_acts)
@@ -263,13 +263,17 @@ class ConversationOrchestrator:
         # Phase 2で実装: LLMを使用した自然文生成
         return self._generate_llm_response(state, support_type, selected_acts, user_message)
     
+    # <summary>テンプレートベースのモック応答を生成します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
+    # <returns>モック応答パッケージ。</returns>
     def _generate_mock_response(
         self,
         state: StateSnapshot,
         support_type: str,
         selected_acts: List[str]
     ) -> TurnPackage:
-        """モック応答の生成"""
         
         # アクトに基づくテンプレート応答
         responses = {
@@ -304,6 +308,12 @@ class ConversationOrchestrator:
             metadata={"mock": True, "support_type": support_type}
         )
     
+    # <summary>LLMを使用して自然な応答を生成します（Phase 2で実装）。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
+    # <arg name="user_message">ユーザーの入力メッセージ。</arg>
+    # <returns>LLM生成応答パッケージ。</returns>
     def _generate_llm_response(
         self,
         state: StateSnapshot,
@@ -311,7 +321,6 @@ class ConversationOrchestrator:
         selected_acts: List[str],
         user_message: str
     ) -> TurnPackage:
-        """LLMを使用した応答生成（Phase 2で実装）"""
         
         # プロンプト構築
         prompt = f"""あなたは探究学習のメンターAIです。
@@ -353,13 +362,16 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
             logger.error(f"LLM応答生成エラー: {e}")
             return self._generate_mock_response(state, support_type, selected_acts)
     
+    # <summary>会話メトリクスを更新します。</summary>
+    # <arg name="state">現在の状態スナップショット。</arg>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
     def _update_metrics(
         self,
         state: StateSnapshot,
         support_type: str,
         selected_acts: List[str]
     ):
-        """メトリクスの更新"""
         
         # ターン数をインクリメント
         self.metrics.turns_count += 1
@@ -372,13 +384,16 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
         else:
             self.metrics.momentum_delta = 0.1
     
+    # <summary>会話履歴を更新します。</summary>
+    # <arg name="support_type">選択された支援タイプ。</arg>
+    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
+    # <arg name="response_package">応答パッケージ。</arg>
     def _update_history(
         self,
         support_type: str,
         selected_acts: List[str],
         response_package: TurnPackage
     ):
-        """履歴の更新"""
         
         self.support_type_history.append(support_type)
         self.act_history.append(selected_acts)
@@ -389,8 +404,10 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
         if len(self.act_history) > 20:
             self.act_history = self.act_history[-20:]
     
+    # <summary>エラー時のフォールバック応答を生成します。</summary>
+    # <arg name="error_message">エラーメッセージ。</arg>
+    # <returns>フォールバック応答辞書。</returns>
     def _generate_fallback_response(self, error_message: str) -> Dict[str, Any]:
-        """エラー時のフォールバック応答"""
         
         logger.error(f"フォールバック応答生成: {error_message}")
         
@@ -408,8 +425,9 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
             "metrics": self.metrics.dict()
         }
     
+    # <summary>現在の会話セッションの要約を取得します。</summary>
+    # <returns>会話要約辞書（total_turns, momentum_delta, support_types_used等）。</returns>
     def get_conversation_summary(self) -> Dict[str, Any]:
-        """会話の要約を取得"""
         
         return {
             "total_turns": self.metrics.turns_count,
@@ -419,8 +437,9 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
             "effectiveness": self._calculate_effectiveness()
         }
     
+    # <summary>最も頻繁に使用された発話アクトのリストを取得します。</summary>
+    # <returns>上位3つの発話アクトリスト。</returns>
     def _get_most_common_acts(self) -> List[str]:
-        """最も使用された発話アクトを取得"""
         
         act_counts = {}
         for acts in self.act_history:
@@ -430,8 +449,9 @@ Socratic（問いかけ中心）なアプローチを優先し、必要最小限
         sorted_acts = sorted(act_counts.items(), key=lambda x: x[1], reverse=True)
         return [act for act, _ in sorted_acts[:3]]
     
+    # <summary>会話の効果スコアを計算します（簡易版）。</summary>
+    # <returns>効果スコア（0.0～1.0）。</returns>
     def _calculate_effectiveness(self) -> float:
-        """会話の効果を計算（簡易版）"""
         
         if self.metrics.turns_count == 0:
             return 0.5
