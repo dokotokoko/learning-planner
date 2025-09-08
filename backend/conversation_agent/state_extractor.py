@@ -15,7 +15,7 @@ class StateExtractor:
     """会話履歴から状態スナップショットを抽出"""
     
     # 状態抽出用プロンプトテンプレート
-    STATE_EXTRACT_PROMPT = """あなたは学習メンターAIです。以下の会話文から学習者の現在の状態をStateSnapshotとしてJSONで生成してください。
+    STATE_EXTRACT_PROMPT = """あなたは学習メンターAIです。学習者の発話から現在の状態をStateSnapshotとしてJSONで生成してください。
 
 必須フィールド:
 - goal: 学習者の現在の目標（明示されていない場合は推測）
@@ -58,23 +58,23 @@ class StateExtractor:
         conversation_history: List[Dict[str, str]],
         project_context: Optional[Dict[str, Any]] = None,
         use_llm: bool = True,
-        minimal_mode: bool = False
+        mock_mode: bool = False #mock
     ) -> StateSnapshot:
         """
-        会話履歴から状態を抽出
+        会話履歴から状態を抽出するメイン関数（
         
         Args:
             conversation_history: [{"sender": "user/assistant", "message": "..."}]形式の履歴
             project_context: プロジェクト情報（既存システムから取得）
             use_llm: LLMを使用するか（Falseの場合はヒューリスティック処理）
-            minimal_mode: 最小限の状態抽出モード（ゴール、目的、ProjectContext、会話履歴のみに焦点）
+            mock_mode: 最小限の状態抽出モード（ゴール、目的、ProjectContext、会話履歴のみに焦点）
             
         Returns:
             StateSnapshot: 抽出された状態
         """
         
-        if minimal_mode:
-            # 最小限の状態抽出（ゴール、目的、ProjectContext、会話履歴に焦点）
+        if mock_mode:
+            # Mock用に必要最低限の入力（入力パラメータ：ゴール, 目的, ProjectContext, 会話履歴）
             return self._extract_minimal(conversation_history, project_context)
         
         if use_llm and self.llm_client:
@@ -85,13 +85,14 @@ class StateExtractor:
                 return self._extract_heuristic(conversation_history, project_context)
         else:
             return self._extract_heuristic(conversation_history, project_context)
-    
+
+
+    """LLMを使用した状態抽出（デフォルト関数）"""
     def _extract_with_llm(
         self,
         conversation_history: List[Dict[str, str]],
         project_context: Optional[Dict[str, Any]] = None
     ) -> StateSnapshot:
-        """LLMを使用した状態抽出"""
         
         # 会話履歴を文字列に変換
         conversation_text = self._format_conversation(conversation_history[-20:])  # 最新20メッセージ
@@ -100,10 +101,10 @@ class StateExtractor:
         project_text = ""
         if project_context:
             project_text = f"""
-- テーマ: {project_context.get('theme', '未設定')}
-- 問い: {project_context.get('question', '未設定')}
-- 仮説: {project_context.get('hypothesis', '未設定')}
-"""
+            - テーマ: {project_context.get('theme', '未設定')}
+            - 問い: {project_context.get('question', '未設定')}
+            - 仮説: {project_context.get('hypothesis', '未設定')}
+            """
         
         # プロンプト生成
         prompt = self.STATE_EXTRACT_PROMPT.format(
@@ -147,13 +148,13 @@ class StateExtractor:
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"LLM応答のJSON解析エラー: {e}")
             raise
-    
+
+     """ヒューリスティックな状態抽出（LLMが使用できない場合のフォールバック用）""" 
     def _extract_heuristic(
         self,
         conversation_history: List[Dict[str, str]],
         project_context: Optional[Dict[str, Any]] = None
     ) -> StateSnapshot:
-        """ヒューリスティックな状態抽出（フォールバック用）"""
         
         # 基本的な状態を構築
         state = StateSnapshot()
@@ -286,13 +287,13 @@ class StateExtractor:
         progress.scope_breadth = min(max(1, unique_words // 20), 10)
         
         return progress
-    
+
+    """ Mock用に最小限の状態抽出（ゴール、目的、ProjectContext、会話履歴のみ）"""  
     def _extract_minimal(
         self,
         conversation_history: List[Dict[str, str]],
         project_context: Optional[Dict[str, Any]] = None
     ) -> StateSnapshot:
-        """最小限の状態抽出（ゴール、目的、ProjectContext、会話履歴のみに焦点）"""
         
         logger.info("最小限の状態抽出モードを使用")
         
@@ -325,34 +326,6 @@ class StateExtractor:
             # プロジェクト情報がない場合のデフォルト
             state.goal = "学習目標の明確化"
             state.purpose = "効果的な学習を進める"
-        
-        # その他のフィールドは最小限またはデフォルト値を設定
-        # 会話履歴は既に参照されているため、必要に応じて追加の分析は行わない
-        
-        # 最新のユーザーメッセージから簡単な分析のみ実施
-        recent_user_messages = [
-            msg['message'] for msg in conversation_history[-3:]  # 最新3件のみ
-            if msg.get('sender') == 'user'
-        ]
-        
-        if recent_user_messages:
-            all_text = " ".join(recent_user_messages).lower()
-            
-            # 明確なブロッカーの兆候のみ検出
-            if any(keyword in all_text for keyword in ["困って", "わからない", "できない"]):
-                state.blockers.append("進行上の困難")
-            
-            # 明確な不確実性の兆候のみ検出
-            if any(keyword in all_text for keyword in ["どうすれば", "どうやって", "？"]):
-                state.uncertainties.append("方法に関する疑問")
-        
-        # 感情状態とプログレス信号はデフォルト値を使用（最小限の推定）
-        state.affect = Affect(interest=3, anxiety=2, excitement=2)  # 中程度のデフォルト値
-        state.progress_signal = ProgressSignal(
-            actions_in_last_7_days=len([msg for msg in conversation_history if msg.get('sender') == 'user']),
-            novelty_ratio=0.5,
-            scope_breadth=3  # 中程度
-        )
         
         logger.info(f"最小限状態抽出完了: goal={state.goal}, purpose={state.purpose}")
         
