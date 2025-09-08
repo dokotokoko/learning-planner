@@ -2,7 +2,7 @@
 
 ## Assistant（解析結果と手順 1〜9）
 
-````markdown
+
 ## 1. Repo Fingerprint（解析要約）
 
 - 言語/フレームワーク: 

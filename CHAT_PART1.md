@@ -6,7 +6,6 @@
 
 ## User (環境コンテキスト)
 
-````markdown
 <environment_context>
   <cwd>c:\\Users\\hiro_\\デスクトップ\\Work\\mitouAD_tdGit\\mori0907</cwd>
   <approval_policy>never</approval_policy>
@@ -14,11 +13,11 @@
   <network_access>enabled</network_access>
   <shell>powershell.exe</shell>
 </environment_context>
-````
+
 
 ## User（最初の依頼）
 
-````markdown
+```markdown
 # Context from my IDE setup:
 
 ## My request for Codex:
@@ -115,10 +114,9 @@
 - 「パッチ版で：README と package.json の不整合を直す Unified Diff だけください。必要なら .vscode も。」
 
 以上に従い、このワークスペースをスキャンして **1〜9** を順番に出力してください。
-````
+```
 
 ## Assistant（スキャン開始メッセージ）
 
-````markdown
 リポジトリ全体をざっとスキャンし、主要ファイルと実行方式を特定します。続けて関連設定を順に読みます。
-````
+
