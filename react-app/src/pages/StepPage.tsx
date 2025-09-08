@@ -79,7 +79,7 @@ const ReviewStepPage: React.FC<{ handleAIMessage: (message: string, workContent:
 
   const handleComplete = () => {
     handleSaveActionPlan();
-    navigate('/home');
+    navigate('/app/home');
   };
 
   return (
@@ -649,9 +649,9 @@ AIアシスタントが社会との繋がりを見つけることをサポート
     
     if (currentStep === 4) {
       // Step4からは特別にStep5（振り返りページ）へ遷移
-      navigate('/step/5');
+      navigate('/app/step/5');
     } else if (currentStep < 5) {
-      navigate(`/step/${currentStep + 1}`);
+      navigate(`/app/step/${currentStep + 1}`);
     }
   };
 
@@ -739,7 +739,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      navigate(`/step/${currentStep - 1}`);
+      navigate(`/app/step/${currentStep - 1}`);
     }
   };
 
@@ -829,7 +829,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
           }}>
             <StepProgressBar 
               currentStep={currentStep} 
-              onStepClick={(step) => navigate(`/step/${step}`)}
+              onStepClick={(step) => navigate(`/app/step/${step}`)}
               clickable
               compact
             />

@@ -207,7 +207,7 @@ const ProjectPage: React.FC = () => {
       
       const newMemo = await response.json();
       // 新規作成されたメモの編集画面に遷移
-      navigate(`/projects/${projectId}/memos/${newMemo.id}`);
+      navigate(`/app/projects/${projectId}/memos/${newMemo.id}`);
     } catch (error) {
       console.error('Error creating memo:', error);
     }
@@ -493,7 +493,7 @@ const ProjectPage: React.FC = () => {
                         boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
                       },
                     }}
-                    onClick={() => navigate(`/projects/${projectId}/memos/${memo.id}`)}
+                    onClick={() => navigate(`/app/projects/${projectId}/memos/${memo.id}`)}
                   >
                     <CardContent sx={{ p: 3 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -574,7 +574,7 @@ const ProjectPage: React.FC = () => {
           <MenuItem
             onClick={() => {
               if (selectedMemo) {
-                navigate(`/projects/${projectId}/memos/${selectedMemo.id}`);
+                navigate(`/app/projects/${projectId}/memos/${selectedMemo.id}`);
               }
               handleMenuClose();
             }}

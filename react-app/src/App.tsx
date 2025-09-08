@@ -14,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 
 // その他のページは遅延ローディング
+const GuidePage = lazy(() => import('./pages/GuidePage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const StepPage = lazy(() => import('./pages/StepPage'));
 const GeneralInquiryPage = lazy(() => import('./pages/GeneralInquiryPage'));
@@ -156,10 +157,26 @@ function App() {
         <Router>
           <AnimatePresence mode="wait">
             <Routes>
+              {/* 使い方ページ（認証不要） */}
+              <Route 
+                path="/" 
+                element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <LazyWrapper><GuidePage /></LazyWrapper>
+                  </motion.div>
+                } 
+              />
+              
+              {/* ログインページ */}
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/dashboard" replace /> : 
+                  user ? <Navigate to="/app" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -171,7 +188,8 @@ function App() {
                 } 
               />
               
-              <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+              {/* アプリケーション本体（認証必要） */}
+              <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
                 <Route path="dashboard" element={<DashboardPage />} />
@@ -196,7 +214,8 @@ function App() {
                 <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
               </Route>
               
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* 未定義ルートのフォールバック */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AnimatePresence>
         </Router>
