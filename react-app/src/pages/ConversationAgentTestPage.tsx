@@ -1,5 +1,5 @@
 // react-app/src/pages/ConversationAgentTestPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -42,6 +42,7 @@ const ConversationAgentTestPage: React.FC = () => {
   
   const [lastResponse, setLastResponse] = useState<any>(null);
   const [forceRefresh, setForceRefresh] = useState(false);
+  const aiChatApiRef = useRef<{ sendMessage: (message: string) => void; } | null>(null);
   
   // テストメッセージのプリセット
   const testMessages = [
@@ -96,12 +97,8 @@ const ConversationAgentTestPage: React.FC = () => {
     }
   };
 
-  const handleQuickTest = async (message: string) => {
-    try {
-      await handleAIMessage(message, `プロジェクト情報:\nテーマ: ${projectInfo.theme}\n問い: ${projectInfo.question}\n仮説: ${projectInfo.hypothesis}`);
-    } catch (error) {
-      console.error('クイックテストに失敗しました:', error);
-    }
+  const handleQuickTest = (message: string) => {
+    aiChatApiRef.current?.sendMessage(message);
   };
 
   const resetConversation = () => {
@@ -236,7 +233,7 @@ const ConversationAgentTestPage: React.FC = () => {
                         <Typography variant="body2" fontWeight={600} color="primary">支援タイプ:</Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                           <Chip 
-                            label={lastResponse.support_type || 'N/A'} 
+                            label={lastResponse.support_type || 'N/A'}
                             color="primary" 
                             size="medium"
                           />
@@ -265,7 +262,7 @@ const ConversationAgentTestPage: React.FC = () => {
                               label={act} 
                               variant="outlined" 
                               size="medium"
-                              sx={{ mr: 1, mt: 0.5 }} 
+                              sx={{ mr: 1, mt: 0.5 }}
                             />
                           ))}
                         </Box>
@@ -320,12 +317,12 @@ const ConversationAgentTestPage: React.FC = () => {
                               </Typography>
                               <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                                 <Chip 
-                                  label={`緊急度: ${action.urgency}`} 
+                                  label={`緊急度: ${action.urgency}`}
                                   size="small" 
                                   color={action.urgency >= 4 ? "error" : action.urgency >= 3 ? "warning" : "default"}
                                 />
                                 <Chip 
-                                  label={`重要度: ${action.importance}`} 
+                                  label={`重要度: ${action.importance}`}
                                   size="small" 
                                   color={action.importance >= 4 ? "info" : "default"}
                                 />
@@ -377,7 +374,7 @@ const ConversationAgentTestPage: React.FC = () => {
                           {lastResponse.project_plan.strategic_approach && (
                             <Box sx={{ flex: 1 }}>
                               <Typography variant="body2" fontWeight={600} color="primary">
-                                <Assignment sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: '1rem' }} />
+                                <Assignment sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
                                 戦略的アプローチ:
                               </Typography>
                               <Typography variant="caption">
@@ -554,6 +551,9 @@ const ConversationAgentTestPage: React.FC = () => {
 
                 <Box sx={{ height: 'calc(100% - 120px)' }}>
                   <AIChat
+                    onLoad={(api) => {
+                      aiChatApiRef.current = api;
+                    }}
                     pageId="conversation-agent-test"
                     title="対話エージェントテスト"
                     persistentMode={true}

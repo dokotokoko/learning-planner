@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -53,6 +53,7 @@ interface AIChatProps {
   enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
   onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
   persistentMode?: boolean; // 継続モード（メモ切り替えでリセットしない）
+  onLoad?: (api: { sendMessage: (message: string) => void }) => void;
 }
 
 const AIChat: React.FC<AIChatProps> = ({
@@ -74,6 +75,7 @@ const AIChat: React.FC<AIChatProps> = ({
   enableSmartNotifications = true,
   onActivityRecord,
   persistentMode = false,
+  onLoad,
 }) => {
   // chatStoreからの機能を使用
   const { getMessages, addMessage, clearMessages } = useChatStore();
@@ -311,21 +313,24 @@ const AIChat: React.FC<AIChatProps> = ({
 
 
 
-  // メッセージ送信処理
-  const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+  const handleSendMessage = useCallback(async (messageOverride?: string) => {
+    const messageToSend = messageOverride || inputValue.trim();
+    if (!messageToSend || isLoading) return;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: inputValue.trim(),
+      content: messageToSend,
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
     // chatStoreにも保存
     addMessage(pageId, { ...userMessage, timestamp: new Date(userMessage.timestamp ?? Date.now()) });
-    setInputValue('');
+    
+    if (!messageOverride) {
+      setInputValue('');
+    }
     setIsLoading(true);
     
     // 学習活動記録
@@ -428,7 +433,21 @@ const AIChat: React.FC<AIChatProps> = ({
       setIsLoading(false);
       inputRef.current?.focus();
     }
-  };
+  }, [
+    inputValue, isLoading, pageId, addMessage, onActivityRecord, 
+    scrollToBottomIfNeeded, onMessageSend, persistentMode, 
+    currentMemoContent, memoContent, currentMemoTitle
+  ]);
+
+  useEffect(() => {
+    if (onLoad) {
+      onLoad({
+        sendMessage: (message: string) => {
+          handleSendMessage(message);
+        },
+      });
+    }
+  }, [onLoad, handleSendMessage]);
 
   // Enterキーでメッセージ送信
   const handleKeyPress = (event: React.KeyboardEvent) => {
