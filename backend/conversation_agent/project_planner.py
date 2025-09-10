@@ -71,30 +71,22 @@ class ProjectPlanner:
 - 探究学習の本質（問いを立て、仮説を検証する）を重視する
 """
 
+    # <summary>ProjectPlannerクラスを初期化します。</summary>
+    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
     def __init__(self, llm_client=None):
-        """
-        Args:
-            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
-        """
         self.llm_client = llm_client
     
+    # <summary>プロジェクト計画を生成します。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="use_llm">LLMを使用するか。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def generate_project_plan(
         self,
         state: StateSnapshot,
         conversation_history: List[Dict[str, str]],
         use_llm: bool = True
     ) -> ProjectPlan:
-        """
-        プロジェクト計画を生成
-        
-        Args:
-            state: 学習者の状態
-            conversation_history: 会話履歴
-            use_llm: LLMを使用するか
-            
-        Returns:
-            ProjectPlan: 生成されたプロジェクト計画
-        """
         
         if use_llm and self.llm_client:
             try:
@@ -105,12 +97,15 @@ class ProjectPlanner:
         else:
             return self._generate_rule_based(state)
     
+    # <summary>LLMを使用して計画を生成します。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def _generate_with_llm(
         self,
         state: StateSnapshot,
         conversation_history: List[Dict[str, str]]
     ) -> ProjectPlan:
-        """LLMを使用した計画生成"""
         
         # プロジェクト情報の抽出
         project_context = state.project_context or {}
@@ -148,8 +143,10 @@ class ProjectPlanner:
             logger.error(f"LLM計画応答のJSON解析エラー: {e}")
             raise
     
+    # <summary>ルールベースで計画を生成します（フォールバック用）。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def _generate_rule_based(self, state: StateSnapshot) -> ProjectPlan:
-        """ルールベースの計画生成（フォールバック用）"""
         
         project_context = state.project_context or {}
         theme = project_context.get('theme', '探究プロジェクト')
@@ -237,8 +234,10 @@ class ProjectPlanner:
             confidence=0.6
         )
     
+    # <summary>計画データを検証しProjectPlanオブジェクトを作成します。</summary>
+    # <arg name="plan_dict">計画データの辞書。</arg>
+    # <returns>検証済みのProjectPlanオブジェクト。</returns>
     def _validate_and_create_plan(self, plan_dict: Dict[str, Any]) -> ProjectPlan:
-        """計画データの検証とProjectPlanオブジェクト作成"""
         
         # 必須フィールドの確認
         required_fields = ['north_star', 'north_star_metric', 'milestones', 'next_actions', 'strategic_approach']
@@ -284,8 +283,10 @@ class ProjectPlanner:
             confidence=0.8
         )
     
+    # <summary>会話履歴を要約します。</summary>
+    # <arg name="conversation_history">会話履歴のリスト。</arg>
+    # <returns>要約された会話履歴の文字列。</returns>
     def _summarize_conversation(self, conversation_history: List[Dict[str, str]]) -> str:
-        """会話履歴を要約"""
         
         if not conversation_history:
             return "会話履歴なし"
@@ -301,13 +302,17 @@ class ProjectPlanner:
         
         return "\n".join(summary_lines)
     
+    # <summary>フィードバックに基づいて計画を更新します。</summary>
+    # <arg name="original_plan">元のプロジェクト計画。</arg>
+    # <arg name="feedback">フィードバック文字列。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>更新されたプロジェクト計画。</returns>
     def update_plan_based_on_feedback(
         self,
         original_plan: ProjectPlan,
         feedback: str,
         conversation_history: List[Dict[str, str]]
     ) -> ProjectPlan:
-        """フィードバックに基づいて計画を更新"""
         
         # TODO: Phase 2で実装 - フィードバックに基づく計画の動的更新
         logger.info(f"計画更新要求: {feedback}")
@@ -315,8 +320,11 @@ class ProjectPlanner:
         # 現在は元の計画をそのまま返す
         return original_plan
     
+    # <summary>計画の質を評価します。</summary>
+    # <arg name="plan">評価するプロジェクト計画。</arg>
+    # <arg name="state">学習者の状態。</arg>
+    # <returns>計画の質スコア（0.0-1.0）。</returns>
     def calculate_plan_score(self, plan: ProjectPlan, state: StateSnapshot) -> float:
-        """計画の質を評価"""
         
         score = 0.0
         

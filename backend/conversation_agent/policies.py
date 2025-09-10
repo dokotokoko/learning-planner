@@ -303,8 +303,10 @@ class PolicyEngine:
             "example": ""
         })
     
+    # <summary>Socratic（ソクラテス式）優先順位でアクトを並び替えます。</summary>
+    # <arg name="acts">アクトのリスト。</arg>
+    # <returns>優先順位でソートされたアクトのリスト。</returns>
     def get_socratic_priority(self, acts: List[str]) -> List[str]:
-        """Socratic（ソクラテス式）優先順位でアクトを並び替え"""
         
         # Socratic優先度（高い順）
         socratic_order = [

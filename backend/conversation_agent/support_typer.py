@@ -37,30 +37,22 @@ StateSnapshot:
 出力形式（JSON）:
 {{"support_type": "選択した支援タイプ", "reason": "選択理由（1-2文）", "confidence": 0.0-1.0}}"""
     
+    # <summary>支援タイプ判定器を初期化します。</summary>
+    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
     def __init__(self, llm_client=None):
-        """
-        Args:
-            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
-        """
         self.llm_client = llm_client
     
+    # <summary>状態から支援タイプを判定します。</summary>
+    # <arg name="state">状態スナップショット。</param> 
+    # <arg name="history_context">会話履歴の要約（任意）。</param> 
+    # <arg name="use_llm">LLMを使用するか。</param> 
+    # <returns>(support_type, reason, confidence)。支援タイプ、理由、確信度</returns>
     def determine_support_type(
         self,
         state: StateSnapshot,
         history_context: Optional[str] = None,
         use_llm: bool = True
     ) -> tuple[str, str, float]:
-        """
-        状態から支援タイプを判定
-        
-        Args:
-            state: 状態スナップショット
-            history_context: 会話履歴の要約（オプション）
-            use_llm: LLMを使用するか
-            
-        Returns:
-            (support_type, reason, confidence): 支援タイプ、理由、確信度
-        """
         
         if use_llm and self.llm_client:
             try:
@@ -71,12 +63,15 @@ StateSnapshot:
         else:
             return self._determine_rule_based(state)
     
+    # <summary>LLMを使用して支援タイプを判定します。</summary>
+    # <arg name="state">状態スナップショット。</arg>
+    # <arg name="history_context">会話履歴の要約（任意）。</arg>
+    # <returns>(support_type, reason, confidence)。支援タイプ、理由、確信度。</returns>
     def _determine_with_llm(
         self,
         state: StateSnapshot,
         history_context: Optional[str] = None
     ) -> tuple[str, str, float]:
-        """LLMを使用した支援タイプ判定"""
         
         # 状態をJSON形式に変換（プロジェクト情報は除く）
         state_dict = state.dict(exclude={'user_id', 'conversation_id', 'turn_index', 'project_context'})
@@ -115,8 +110,10 @@ StateSnapshot:
             logger.error(f"LLM応答の解析エラー: {e}")
             raise
     
+    # <summary>ルールベースで支援タイプを判定します。</summary>
+    # <arg name="state">状態スナップショット。</arg>
+    # <returns>(support_type, reason, confidence)。支援タイプ、理由、確信度。</returns>
     def _determine_rule_based(self, state: StateSnapshot) -> tuple[str, str, float]:
-        """ルールベースの支援タイプ判定"""
         
         # スコアリングシステム
         scores = {
@@ -186,8 +183,10 @@ StateSnapshot:
         
         return support_type, reason, confidence
     
+    # <summary>支援タイプの特性情報を取得します。</summary>
+    # <arg name="support_type">支援タイプ。</arg>
+    # <returns>支援タイプの特性辞書（focus, approach, typical_acts, outcome）。</returns>
     def get_support_characteristics(self, support_type: str) -> Dict[str, Any]:
-        """支援タイプの特性を取得"""
         
         characteristics = {
             SupportType.UNDERSTANDING: {
@@ -229,40 +228,3 @@ StateSnapshot:
         }
         
         return characteristics.get(support_type, characteristics[SupportType.UNDERSTANDING])
-    
-    def adjust_for_context(
-        self,
-        initial_type: str,
-        recent_types: List[str],
-        effectiveness_scores: Dict[str, float]
-    ) -> str:
-        """
-        文脈に基づいて支援タイプを調整
-        
-        Args:
-            initial_type: 初期判定された支援タイプ
-            recent_types: 最近使用された支援タイプのリスト
-            effectiveness_scores: 各支援タイプの効果スコア
-            
-        Returns:
-            調整後の支援タイプ
-        """
-        
-        # 同じタイプが連続している場合は変更を検討
-        if recent_types and len(recent_types) >= 3:
-            last_three = recent_types[-3:]
-            if all(t == initial_type for t in last_three):
-                # 効果が低い場合は別のタイプに変更
-                if effectiveness_scores.get(initial_type, 0.5) < 0.4:
-                    # 代替タイプを選択
-                    alternatives = {
-                        SupportType.UNDERSTANDING: SupportType.PATHFINDING,
-                        SupportType.PATHFINDING: SupportType.ACTIVATION,
-                        SupportType.REFRAMING: SupportType.ACTIVATION,
-                        SupportType.ACTIVATION: SupportType.REFRAMING,
-                        SupportType.NARROWING: SupportType.DECISION,
-                        SupportType.DECISION: SupportType.ACTIVATION
-                    }
-                    return alternatives.get(initial_type, SupportType.REFRAMING)
-        
-        return initial_type

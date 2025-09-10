@@ -1,5 +1,5 @@
 // react-app/src/pages/ConversationAgentTestPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -23,6 +23,10 @@ import {
   Send,
   Refresh,
   Science,
+  TrendingUp,
+  Timeline,
+  Assignment,
+  Warning,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import AIChat from '../components/MemoChat/AIChat';
@@ -36,9 +40,9 @@ const ConversationAgentTestPage: React.FC = () => {
     hypothesis: 'AIが学習者の理解度と学習パターンを分析することで、個別に最適化された学習経験を提供し、学習効果を向上させる',
   });
   
-  const [conversationHistory, setConversationHistory] = useState<Array<{sender: string, message: string}>>([]);
-  const [loading, setLoading] = useState(false);
   const [lastResponse, setLastResponse] = useState<any>(null);
+  const [forceRefresh, setForceRefresh] = useState(false);
+  const aiChatApiRef = useRef<{ sendMessage: (message: string) => void; } | null>(null);
   
   // テストメッセージのプリセット
   const testMessages = [
@@ -47,10 +51,12 @@ const ConversationAgentTestPage: React.FC = () => {
     "データ収集の方法について迷っています",
     "結果の分析はどのようにすればよいでしょうか？",
     "研究の進め方について行き詰まりを感じています",
+    "やることが多すぎて何から始めたらいいかわからない",
+    "プロジェクトの方向性が定まらない",
+    "時間が足りない気がする"
   ];
 
-  const handleAIMessage = async (message: string): Promise<string> => {
-    setLoading(true);
+  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
       const userId = user?.id;
       if (!userId) {
@@ -77,35 +83,29 @@ const ConversationAgentTestPage: React.FC = () => {
       }
 
       const data = await response.json();
-      setLastResponse(data);
       
-      // 会話履歴を更新
-      setConversationHistory(prev => [
-        ...prev,
-        { sender: 'user', message },
-        { sender: 'assistant', message: data.response }
-      ]);
+      // デバッグ用ログ
+      console.log('Orchestrator Response:', data);
+      
+      // 詳細情報のみを保存（UIの詳細パネル用）
+      setLastResponse(data);
       
       return data.response;
     } catch (error) {
       console.error('AI応答の取得に失敗しました:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleQuickTest = async (message: string) => {
-    try {
-      await handleAIMessage(message);
-    } catch (error) {
-      console.error('クイックテストに失敗しました:', error);
-    }
+  const handleQuickTest = (message: string) => {
+    aiChatApiRef.current?.sendMessage(message);
   };
 
   const resetConversation = () => {
-    setConversationHistory([]);
     setLastResponse(null);
+    setForceRefresh(true);
+    // forceRefreshをリセットして、次回のリセットに備える
+    setTimeout(() => setForceRefresh(false), 100);
   };
 
   return (
@@ -196,7 +196,7 @@ const ConversationAgentTestPage: React.FC = () => {
                       variant="outlined"
                       size="small"
                       onClick={() => handleQuickTest(message)}
-                      disabled={loading}
+                      disabled={false}
                       sx={{ justifyContent: 'flex-start', textAlign: 'left', fontSize: '0.85rem' }}
                     >
                       {message}
@@ -226,91 +226,301 @@ const ConversationAgentTestPage: React.FC = () => {
                   
                   <Accordion>
                     <AccordionSummary expandIcon={<ExpandMore />}>
-                      <Typography variant="subtitle2">支援タイプ & アクト</Typography>
+                      <Typography variant="subtitle2">📋 支援タイプ & アクト選択</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
                       <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" color="text.secondary">支援タイプ:</Typography>
-                        <Chip 
-                          label={lastResponse.support_type || 'N/A'} 
-                          color="primary" 
-                          size="small"
-                          sx={{ mr: 1 }} 
-                        />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">選択されたアクト:</Typography>
-                        {lastResponse.selected_acts?.map((act: string, index: number) => (
+                        <Typography variant="body2" fontWeight={600} color="primary">支援タイプ:</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                           <Chip 
-                            key={index}
-                            label={act} 
-                            variant="outlined" 
-                            size="small"
-                            sx={{ mr: 0.5, mt: 0.5 }} 
+                            label={lastResponse.support_type || 'N/A'}
+                            color="primary" 
+                            size="medium"
                           />
-                        ))}
+                          {lastResponse.decision_metadata?.support_confidence && (
+                            <Chip 
+                              label={`確信度: ${(lastResponse.decision_metadata.support_confidence * 100).toFixed(0)}%`}
+                              variant="outlined"
+                              size="small"
+                              color="info"
+                            />
+                          )}
+                        </Box>
+                        {lastResponse.decision_metadata?.support_reason && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 1, fontStyle: 'italic' }}>
+                            理由: {lastResponse.decision_metadata.support_reason}
+                          </Typography>
+                        )}
                       </Box>
+                      
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" fontWeight={600} color="primary">選択された発話アクト:</Typography>
+                        <Box sx={{ mt: 1 }}>
+                          {lastResponse.selected_acts?.map((act: string, index: number) => (
+                            <Chip 
+                              key={index}
+                              label={act} 
+                              variant="outlined" 
+                              size="medium"
+                              sx={{ mr: 1, mt: 0.5 }}
+                            />
+                          ))}
+                        </Box>
+                        {lastResponse.decision_metadata?.act_reason && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 1, fontStyle: 'italic' }}>
+                            選択理由: {lastResponse.decision_metadata.act_reason}
+                          </Typography>
+                        )}
+                      </Box>
+                      
+                      {lastResponse.decision_metadata?.timestamp && (
+                        <Typography variant="caption" color="text.secondary">
+                          処理時刻: {new Date(lastResponse.decision_metadata.timestamp).toLocaleString('ja-JP')}
+                        </Typography>
+                      )}
                     </AccordionDetails>
                   </Accordion>
 
                   {lastResponse.project_plan && (
                     <Accordion>
                       <AccordionSummary expandIcon={<ExpandMore />}>
-                        <Typography variant="subtitle2">🎯 プロジェクト計画（NEW!）</Typography>
+                        <Typography variant="subtitle2">
+                          <TrendingUp sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          🎯 プロジェクト計画（思考フェーズ）
+                        </Typography>
                       </AccordionSummary>
                       <AccordionDetails>
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="body2" fontWeight={600} color="primary">
-                            北極星:
+                        {/* 北極星 */}
+                        <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 1 }}>
+                          <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+                            🌟 北極星（最重要指標）
                           </Typography>
-                          <Typography variant="body2" sx={{ mb: 2 }}>
+                          <Typography variant="body1">
                             {lastResponse.project_plan.north_star}
                           </Typography>
+                          {lastResponse.project_plan.north_star_metric && (
+                            <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.9 }}>
+                              測定方法: {lastResponse.project_plan.north_star_metric}
+                            </Typography>
+                          )}
                         </Box>
 
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="body2" fontWeight={600} color="primary">
-                            次の行動 (緊急度×重要度順):
+                        {/* 次の行動 */}
+                        <Box sx={{ mb: 3 }}>
+                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 2 }}>
+                            🚀 次の行動 (緊急度×重要度順)
                           </Typography>
                           {lastResponse.project_plan.next_actions?.slice(0, 3).map((action: any, index: number) => (
-                            <Paper key={index} sx={{ p: 1, mt: 1, bgcolor: 'background.default' }}>
-                              <Typography variant="caption" fontWeight={600}>
-                                {action.action}
+                            <Paper key={index} sx={{ p: 2, mb: 1.5, border: '1px solid', borderColor: 'divider' }}>
+                              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+                                {index + 1}. {action.action}
                               </Typography>
-                              <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                                <Chip label={`緊急度: ${action.urgency}`} size="small" color="error" />
-                                <Chip label={`重要度: ${action.importance}`} size="small" color="info" />
+                              <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                                <Chip 
+                                  label={`緊急度: ${action.urgency}`}
+                                  size="small" 
+                                  color={action.urgency >= 4 ? "error" : action.urgency >= 3 ? "warning" : "default"}
+                                />
+                                <Chip 
+                                  label={`重要度: ${action.importance}`}
+                                  size="small" 
+                                  color={action.importance >= 4 ? "info" : "default"}
+                                />
+                                <Chip 
+                                  label={`総合: ${action.urgency * action.importance}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
                               </Box>
+                              {action.reason && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                  理由: {action.reason}
+                                </Typography>
+                              )}
+                              {action.expected_outcome && (
+                                <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>
+                                  期待結果: {action.expected_outcome}
+                                </Typography>
+                              )}
                             </Paper>
                           ))}
                         </Box>
 
-                        <Box>
-                          <Typography variant="body2" fontWeight={600} color="primary">
-                            マイルストーン数:
+                        {/* マイルストーン */}
+                        <Box sx={{ mb: 3 }}>
+                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 1 }}>
+                            <Timeline sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
+                            マイルストーン ({lastResponse.project_plan.milestones?.length || 0}個)
                           </Typography>
-                          <Typography variant="body2">
-                            {lastResponse.project_plan.milestones?.length || 0}個
-                          </Typography>
+                          {lastResponse.project_plan.milestones?.slice(0, 3).map((milestone: any, index: number) => (
+                            <Box key={index} sx={{ ml: 2, mb: 1 }}>
+                              <Typography variant="caption" fontWeight={600}>
+                                {milestone.order}. {milestone.title}
+                              </Typography>
+                              {milestone.target_date && (
+                                <Chip 
+                                  label={milestone.target_date}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ ml: 1, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Box>
+                          ))}
                         </Box>
+
+                        {/* 戦略・リスク */}
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                          {lastResponse.project_plan.strategic_approach && (
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2" fontWeight={600} color="primary">
+                                <Assignment sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
+                                戦略的アプローチ:
+                              </Typography>
+                              <Typography variant="caption">
+                                {lastResponse.project_plan.strategic_approach}
+                              </Typography>
+                            </Box>
+                          )}
+                          {lastResponse.project_plan.risk_factors && lastResponse.project_plan.risk_factors.length > 0 && (
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2" fontWeight={600} color="warning.main">
+                                <Warning sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: '1rem' }} />
+                                リスク要因:
+                              </Typography>
+                              {lastResponse.project_plan.risk_factors.slice(0, 3).map((risk: string, index: number) => (
+                                <Chip 
+                                  key={index}
+                                  label={risk}
+                                  size="small"
+                                  color="warning"
+                                  variant="outlined"
+                                  sx={{ mr: 0.5, mt: 0.5, fontSize: '0.7rem' }}
+                                />
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+
+                        {lastResponse.project_plan.confidence && (
+                          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              計画信頼度: {(lastResponse.project_plan.confidence * 100).toFixed(0)}%
+                              {lastResponse.project_plan.created_at && (
+                                ` | 作成: ${new Date(lastResponse.project_plan.created_at).toLocaleString('ja-JP')}`
+                              )}
+                            </Typography>
+                          </Box>
+                        )}
                       </AccordionDetails>
                     </Accordion>
                   )}
 
                   <Accordion>
                     <AccordionSummary expandIcon={<ExpandMore />}>
-                      <Typography variant="subtitle2">状態スナップショット</Typography>
+                      <Typography variant="subtitle2">📊 状態スナップショット & メトリクス</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
-                      <Typography variant="body2" color="text.secondary">目標:</Typography>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        {lastResponse.state_snapshot?.goal || 'N/A'}
-                      </Typography>
+                      {/* 基本状態 */}
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" fontWeight={600} color="primary">学習者の状態:</Typography>
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="body2" color="text.secondary">目標:</Typography>
+                          <Typography variant="body2" sx={{ mb: 1, ml: 1 }}>
+                            {lastResponse.state_snapshot?.goal || 'N/A'}
+                          </Typography>
+                          
+                          <Typography variant="body2" color="text.secondary">目的:</Typography>
+                          <Typography variant="body2" sx={{ mb: 1, ml: 1 }}>
+                            {lastResponse.state_snapshot?.purpose || 'N/A'}
+                          </Typography>
+                          
+                          {lastResponse.state_snapshot?.time_horizon && (
+                            <>
+                              <Typography variant="body2" color="text.secondary">時間軸:</Typography>
+                              <Chip 
+                                label={lastResponse.state_snapshot.time_horizon}
+                                size="small"
+                                color="info"
+                                sx={{ ml: 1, mb: 1 }}
+                              />
+                            </>
+                          )}
+                        </Box>
+                      </Box>
+
+                      {/* ブロッカー・不確実性 */}
+                      {(lastResponse.state_snapshot?.blockers?.length > 0 || lastResponse.state_snapshot?.uncertainties?.length > 0) && (
+                        <Box sx={{ mb: 2, p: 1.5, bgcolor: 'warning.light', borderRadius: 1 }}>
+                          {lastResponse.state_snapshot?.blockers?.length > 0 && (
+                            <Box sx={{ mb: 1 }}>
+                              <Typography variant="caption" fontWeight={600} color="warning.dark">
+                                🚧 ブロッカー:
+                              </Typography>
+                              <Box sx={{ mt: 0.5 }}>
+                                {lastResponse.state_snapshot.blockers.map((blocker: string, index: number) => (
+                                  <Chip 
+                                    key={index}
+                                    label={blocker}
+                                    size="small"
+                                    color="warning"
+                                    sx={{ mr: 0.5, mt: 0.5, fontSize: '0.75rem' }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+                          
+                          {lastResponse.state_snapshot?.uncertainties?.length > 0 && (
+                            <Box>
+                              <Typography variant="caption" fontWeight={600} color="warning.dark">
+                                ❓ 不確実性:
+                              </Typography>
+                              <Box sx={{ mt: 0.5 }}>
+                                {lastResponse.state_snapshot.uncertainties.map((uncertainty: string, index: number) => (
+                                  <Chip 
+                                    key={index}
+                                    label={uncertainty}
+                                    size="small"
+                                    variant="outlined"
+                                    color="warning"
+                                    sx={{ mr: 0.5, mt: 0.5, fontSize: '0.75rem' }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+                        </Box>
+                      )}
                       
-                      <Typography variant="body2" color="text.secondary">目的:</Typography>
-                      <Typography variant="body2">
-                        {lastResponse.state_snapshot?.purpose || 'N/A'}
-                      </Typography>
+                      {/* メトリクス */}
+                      {lastResponse.metrics && (
+                        <Box sx={{ pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 1 }}>
+                            📈 会話メトリクス:
+                          </Typography>
+                          <Grid container spacing={1}>
+                            {lastResponse.metrics.turns_count && (
+                              <Grid item>
+                                <Chip 
+                                  label={`ターン数: ${lastResponse.metrics.turns_count}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </Grid>
+                            )}
+                            {lastResponse.metrics.momentum_delta !== undefined && (
+                              <Grid item>
+                                <Chip 
+                                  label={`前進感: ${lastResponse.metrics.momentum_delta >= 0 ? '+' : ''}${lastResponse.metrics.momentum_delta.toFixed(2)}`}
+                                  size="small"
+                                  color={lastResponse.metrics.momentum_delta >= 0 ? "success" : "error"}
+                                />
+                              </Grid>
+                            )}
+                          </Grid>
+                        </Box>
+                      )}
                     </AccordionDetails>
                   </Accordion>
                 </CardContent>
@@ -333,20 +543,23 @@ const ConversationAgentTestPage: React.FC = () => {
                   <Typography variant="h6" fontWeight={600}>
                     AI対話エージェント
                   </Typography>
-                  {loading && <CircularProgress size={20} />}
                 </Box>
                 
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <strong>実装機能:</strong> 状態抽出（簡素化）→ 計画思考フェーズ → 支援タイプ判定 → アクト選択 → 応答生成
+                  <strong>新実装機能:</strong> 状態抽出(理解) → 計画思考フェーズ(思考) → 支援タイプ判定 → アクト選択 → 応答生成
                 </Alert>
 
                 <Box sx={{ height: 'calc(100% - 120px)' }}>
                   <AIChat
+                    onLoad={(api) => {
+                      aiChatApiRef.current = api;
+                    }}
                     pageId="conversation-agent-test"
                     title="対話エージェントテスト"
                     persistentMode={true}
                     loadHistoryFromDB={true}
                     onMessageSend={handleAIMessage}
+                    forceRefresh={forceRefresh}
                     initialMessage="こんにちは！新しい対話エージェント機能をテストしています。プロジェクトについて何でもお気軽にご相談ください。"
                   />
                 </Box>

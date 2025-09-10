@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -15,6 +15,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from functools import lru_cache
 import time
+from collections import deque
 
 # .envファイルを読み込み
 load_dotenv()
@@ -34,6 +35,21 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# =====================
+# Config/Feature flags
+# =====================
+# History window size for chat context (kept small to control latency/cost)
+CHAT_HISTORY_LIMIT_DEFAULT = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
+CHAT_HISTORY_LIMIT_MAX = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
+
+# Message length guard for /chat
+MAX_CHAT_MESSAGE_LENGTH = int(os.environ.get("MAX_CHAT_MESSAGE_LENGTH", "2000"))
+
+# Simple in-memory rate limiting for /chat (per user+IP)
+ENABLE_CHAT_RATE_LIMIT = os.environ.get("ENABLE_CHAT_RATE_LIMIT", "true").lower() == "true"
+RATE_LIMIT_WINDOW_SEC = int(os.environ.get("CHAT_RATE_LIMIT_WINDOW_SEC", "60"))
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("CHAT_RATE_LIMIT_MAX", "20"))
 
 # Phase 1: AI対話エージェント機能のインポート
 try:
@@ -90,6 +106,43 @@ if os.environ.get("ENABLE_CORS", "false").lower() == "true":
 # セキュリティスキーム
 security = HTTPBearer()
 
+# In-memory rate limiting store
+_rate_limit_store: dict = {}
+
+async def chat_rate_limiter(request: Request, current_user: int = Depends(security)):
+    """Simple per-user+IP rate limiter for /chat.
+    Uses a sliding window over RATE_LIMIT_WINDOW_SEC seconds.
+    """
+    if not ENABLE_CHAT_RATE_LIMIT:
+        return
+
+    try:
+        # Extract user id from bearer token (already required by Depends(security))
+        token = current_user.credentials if hasattr(current_user, "credentials") else None
+        user_key = str(token) if token else request.client.host
+    except Exception:
+        user_key = request.client.host
+
+    ip = request.client.host if request.client else "unknown"
+    key = f"{user_key}:{ip}"
+
+    now = time.time()
+    window_start = now - RATE_LIMIT_WINDOW_SEC
+
+    dq = _rate_limit_store.get(key)
+    if dq is None:
+        dq = deque()
+        _rate_limit_store[key] = dq
+
+    # Drop old entries
+    while dq and dq[0] < window_start:
+        dq.popleft()
+
+    if len(dq) >= RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please slow down.")
+
+    dq.append(now)
+
 # === Pydanticモデル ===
 # （元のモデルをそのまま継承）
 
@@ -123,6 +176,44 @@ class ChatResponse(BaseModel):
     timestamp: str
     token_usage: Optional[Dict[str, Any]] = None
     context_metadata: Optional[Dict[str, Any]] = None
+    # Conversation agent metadata (optional)
+    support_type: Optional[str] = None
+    selected_acts: Optional[List[str]] = None
+    state_snapshot: Optional[Dict[str, Any]] = None
+    project_plan: Optional[Dict[str, Any]] = None
+    decision_metadata: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
+
+# Conversation Agent専用モデル（検証用）
+class ConversationAgentRequest(BaseModel):
+    """対話エージェント検証用リクエストモデル"""
+    message: str
+    project_id: Optional[int] = None
+    page_id: Optional[str] = None
+    include_history: bool = True
+    history_limit: int = 50
+    debug_mode: bool = False  # デバッグ情報を含めるか
+    mock_mode: bool = True  # モックモードで動作するか
+
+class ConversationAgentResponse(BaseModel):
+    """対話エージェント検証用レスポンスモデル"""
+    response: str
+    timestamp: str
+    # エージェント固有のメタデータ
+    support_type: str
+    selected_acts: List[str]
+    state_snapshot: Dict[str, Any]
+    project_plan: Optional[Dict[str, Any]]
+    decision_metadata: Dict[str, Any]
+    metrics: Dict[str, Any]
+    # デバッグ情報
+    debug_info: Optional[Dict[str, Any]] = None
+    # 履歴情報
+    conversation_id: Optional[str] = None
+    history_count: int = 0
+    # エラー情報
+    error: Optional[str] = None
+    warning: Optional[str] = None
 
 class ChatHistoryResponse(BaseModel):
     id: int
@@ -416,9 +507,11 @@ async def get_or_create_conversation(user_id: int, page_id: str) -> str:
 async def update_conversation_timestamp(conversation_id: str):
     """conversationの最終更新時刻を更新"""
     try:
-        supabase.table("chat_conversations").update({
-            "updated_at": datetime.now().isoformat()
-        }).eq("id", conversation_id).execute()
+        await asyncio.to_thread(
+            lambda: supabase.table("chat_conversations").update({
+                "updated_at": datetime.now().isoformat()
+            }).eq("id", conversation_id).execute()
+        )
     except Exception as e:
         logger.error(f"conversation timestamp更新エラー: {e}")
 
@@ -527,7 +620,7 @@ async def register(user_data: UserRegister):
     except Exception as e:
         handle_database_error(e, "ユーザーの登録")
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(chat_rate_limiter)])
 async def chat_with_ai(
     chat_data: ChatMessage,
     current_user: int = Depends(get_current_user_cached)
@@ -573,6 +666,18 @@ async def chat_with_ai(
                     logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
             except Exception as e:
                 logger.warning(f"⚠️ memo_id:{page_id}からのproject_id取得に失敗: {e}")
+
+        elif page_id == 'conversation-agent-test':
+            logger.info(f"👉 page_idが'conversation-agent-test'のため、最新のプロジェクトを探します")
+            try:
+                latest_project_result = supabase.table('projects').select('id').eq('user_id', current_user).order('updated_at', desc=True).limit(1).execute()
+                if latest_project_result.data:
+                    project_id = latest_project_result.data[0]['id']
+                    logger.info(f"✅ 最新のプロジェクトIDを取得: {project_id}")
+                else:
+                    logger.info("🔴 利用可能なプロジェクトが見つかりませんでした")
+            except Exception as e:
+                logger.warning(f"⚠️ 最新プロジェクトの取得に失敗: {e}")
         
         else:
             logger.info(f"🔴 page_id形式が未対応: {page_id}")
@@ -629,6 +734,10 @@ async def chat_with_ai(
 
         user_message = chat_data.message
         
+        # Guard: message size limit to protect backend/LLM
+        if user_message is not None and len(user_message) > MAX_CHAT_MESSAGE_LENGTH:
+            raise HTTPException(status_code=400, detail="Message too long")
+
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
         
@@ -654,9 +763,10 @@ async def chat_with_ai(
             "conversation_id": conversation_id,
             "context_data": json.dumps(context_data_dict, ensure_ascii=False)
         }
-        supabase.table("chat_logs").insert(user_message_data).execute()
+        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
         
         # ===== Phase 1: 対話エージェント機能統合 =====
+        agent_payload: Dict[str, Any] = {}
         if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
             try:
                 # 会話履歴を対話エージェント用フォーマットに変換
@@ -689,6 +799,15 @@ async def chat_with_ai(
                 
                 # 対話エージェントの応答を使用
                 response = agent_result["response"]
+                # capture for response
+                agent_payload = {
+                    "support_type": agent_result.get("support_type"),
+                    "selected_acts": agent_result.get("selected_acts"),
+                    "state_snapshot": agent_result.get("state_snapshot"),
+                    "project_plan": agent_result.get("project_plan"),
+                    "decision_metadata": agent_result.get("decision_metadata"),
+                    "metrics": agent_result.get("metrics"),
+                }
                 
                 # メタデータを保存用context_dataに追加
                 ai_context_data = {
@@ -741,7 +860,7 @@ async def chat_with_ai(
             "conversation_id": conversation_id,
             "context_data": json.dumps(ai_context_data, ensure_ascii=False)
         }
-        supabase.table("chat_logs").insert(ai_message_data).execute()
+        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
         
         # conversationの最終更新時刻を更新
         try:
@@ -756,7 +875,8 @@ async def chat_with_ai(
             response=response,
             timestamp=datetime.now(timezone.utc).isoformat(),
             token_usage=token_usage,
-            context_metadata=context_metadata
+            context_metadata=context_metadata,
+            **agent_payload
         )
     except HTTPException:
         raise
@@ -771,21 +891,30 @@ async def chat_with_ai(
 async def get_chat_history(
     page: Optional[str] = None,
     limit: Optional[int] = 50,
+    before: Optional[str] = None,
     current_user: int = Depends(get_current_user_cached)
 ):
     """対話履歴取得（最適化版）"""
     try:
         validate_supabase()
         
+        # Bound the limit
+        eff_limit = min(max(1, limit or CHAT_HISTORY_LIMIT_DEFAULT), CHAT_HISTORY_LIMIT_MAX)
         query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
         
         if page:
             query = query.eq("page", page)
         
-        query = query.order("created_at", desc=False).limit(limit or 50)
-        result = query.execute()
+        if before:
+            try:
+                # Filter strictly before the cursor
+                query = query.lt("created_at", before)
+            except Exception:
+                pass
+        query = query.order("created_at", desc=True).limit(eff_limit)
+        result = await asyncio.to_thread(lambda: query.execute())
         
-        return [
+        items = [
             ChatHistoryResponse(
                 id=item["id"],
                 page=item["page"] or "general",
@@ -796,6 +925,8 @@ async def get_chat_history(
             )
             for item in result.data
         ]
+        # reverse to chronological order (oldest first)
+        return list(reversed(items))
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
 
@@ -938,7 +1069,7 @@ async def get_user_projects(
     try:
         validate_supabase()
         
-        result = supabase.table('projects').select('*').eq('user_id', user_id).order('updated_at', desc=True).execute()
+        result = supabase.table('projects').select('id, user_id, theme, question, hypothesis, created_at, updated_at').eq('user_id', user_id).order('updated_at', desc=True).execute()
         
         projects = []
         for project in result.data:
@@ -968,7 +1099,7 @@ async def get_project(
     try:
         validate_supabase()
         
-        result = supabase.table('projects').select('*').eq('id', project_id).eq('user_id', current_user).execute()
+        result = supabase.table('projects').select('id, user_id, theme, question, hypothesis, created_at, updated_at').eq('id', project_id).eq('user_id', current_user).execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="プロジェクトが見つかりません")
@@ -1085,7 +1216,7 @@ async def get_project_memos(
     try:
         validate_supabase()
         
-        result = supabase.table('memos').select('*').eq('project_id', project_id).eq('user_id', current_user).order('updated_at', desc=True).execute()
+        result = supabase.table('memos').select('id, title, content, project_id, created_at, updated_at').eq('project_id', project_id).eq('user_id', current_user).order('updated_at', desc=True).execute()
         
         return [
             MultiMemoResponse(
@@ -1113,7 +1244,7 @@ async def get_memo(
         
         logger.info(f"メモ取得開始: memo_id={memo_id}, user_id={current_user}")
         
-        result = supabase.table('memos').select('*').eq('id', memo_id).eq('user_id', current_user).execute()
+        result = supabase.table('memos').select('id, title, content, project_id, created_at, updated_at').eq('id', memo_id).eq('user_id', current_user).execute()
         
         logger.info(f"データベースクエリ結果: count={result.count if result.count else 0}, data_length={len(result.data) if result.data else 0}")
         
@@ -1755,6 +1886,344 @@ async def check_quest_tables(
         
     except Exception as e:
         return {"error": f"Database connection failed: {str(e)}"}
+
+# =============================================================================
+# Conversation Agent検証用エンドポイント
+# =============================================================================
+
+@app.post("/conversation-agent/chat", response_model=ConversationAgentResponse)
+async def chat_with_conversation_agent(
+    request: ConversationAgentRequest,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """
+    対話エージェント検証用エンドポイント
+    
+    通常の /chat エンドポイントから分離された、conversation_agent の機能を
+    独立して検証するための専用エンドポイントです。
+    
+    Features:
+    - 対話エージェントの動作を独立して検証可能
+    - デバッグモードでの詳細情報取得
+    - モック/実モードの切り替え可能
+    - エラーハンドリングの強化
+    """
+    start_time = time.time()
+    
+    try:
+        validate_supabase()
+        
+        # エージェントの可用性チェック
+        if not CONVERSATION_AGENT_AVAILABLE:
+            return ConversationAgentResponse(
+                response="対話エージェント機能は現在利用できません。モジュールがインポートされていません。",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                support_type="error",
+                selected_acts=[],
+                state_snapshot={},
+                decision_metadata={},
+                metrics={"error": "module_not_available"},
+                error="ConversationAgent module not available",
+                history_count=0
+            )
+        
+        if conversation_orchestrator is None:
+            # オーケストレーターを初期化（リクエストごとに初期化可能）
+            try:
+                temp_orchestrator = ConversationOrchestrator(
+                    llm_client=llm_client,
+                    use_mock=request.mock_mode
+                )
+                logger.info(f"✅ 対話エージェント一時初期化完了（mock={request.mock_mode}）")
+            except Exception as e:
+                logger.error(f"❌ 対話エージェント初期化エラー: {e}")
+                return ConversationAgentResponse(
+                    response="対話エージェントの初期化に失敗しました。",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    support_type="error",
+                    selected_acts=[],
+                    state_snapshot={},
+                    decision_metadata={},
+                    metrics={"error": "initialization_failed"},
+                    error=f"Initialization error: {str(e)}",
+                    history_count=0
+                )
+        else:
+            temp_orchestrator = conversation_orchestrator
+        
+        # ページIDの決定
+        page_id = request.page_id or (f"project-{request.project_id}" if request.project_id else "general")
+        
+        # conversationの取得または作成
+        conversation_id = await get_or_create_conversation(current_user, page_id)
+        
+        # プロジェクト情報の取得
+        project_context = None
+        if request.project_id:
+            try:
+                project_result = supabase.table('projects').select('*').eq('id', request.project_id).eq('user_id', current_user).execute()
+                if project_result.data:
+                    project = project_result.data[0]
+                    project_context = {
+                        "theme": project.get('theme'),
+                        "question": project.get('question'),
+                        "hypothesis": project.get('hypothesis'),
+                        "id": request.project_id
+                    }
+                    logger.info(f"✅ プロジェクト情報取得成功: {project['theme']}")
+            except Exception as e:
+                logger.warning(f"⚠️ プロジェクト情報取得失敗: {e}")
+        
+        # 対話履歴の取得
+        conversation_history = []
+        if request.include_history:
+            try:
+                history_response = supabase.table("chat_logs").select(
+                    "id, sender, message, created_at, context_data"
+                ).eq(
+                    "conversation_id", conversation_id
+                ).order(
+                    "created_at", desc=False
+                ).limit(
+                    request.history_limit
+                ).execute()
+                
+                if history_response.data:
+                    conversation_history = [
+                        {
+                            "sender": msg["sender"],
+                            "message": msg["message"]
+                        }
+                        for msg in history_response.data
+                    ]
+                    logger.info(f"📜 対話履歴取得: {len(conversation_history)}件")
+            except Exception as e:
+                logger.warning(f"⚠️ 対話履歴取得エラー: {e}")
+        
+        # 対話エージェントで処理
+        try:
+            agent_start = time.time()
+            
+            agent_result = temp_orchestrator.process_turn(
+                user_message=request.message,
+                conversation_history=conversation_history,
+                project_context=project_context,
+                user_id=current_user,
+                conversation_id=conversation_id
+            )
+            
+            agent_time = time.time() - agent_start
+            
+            # デバッグ情報の構築
+            debug_info = None
+            if request.debug_mode:
+                debug_info = {
+                    "processing_time_ms": int(agent_time * 1000),
+                    "mock_mode": request.mock_mode,
+                    "history_items": len(conversation_history),
+                    "has_project_context": bool(project_context),
+                    "conversation_id": conversation_id,
+                    "page_id": page_id,
+                    "raw_state": agent_result.get("state_snapshot", {}),
+                    "raw_decision": agent_result.get("decision_metadata", {}),
+                    "raw_metrics": agent_result.get("metrics", {})
+                }
+            
+            # 応答をデータベースに保存（ユーザーメッセージ）
+            user_message_data = {
+                "user_id": current_user,
+                "page": page_id,
+                "sender": "user",
+                "message": request.message,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "agent_endpoint": True,
+                    "project_id": request.project_id
+                }, ensure_ascii=False)
+            }
+            await asyncio.to_thread(
+                lambda: supabase.table("chat_logs").insert(user_message_data).execute()
+            )
+            
+            # 応答をデータベースに保存（AIメッセージ）
+            ai_message_data = {
+                "user_id": current_user,
+                "page": page_id,
+                "sender": "assistant",
+                "message": agent_result["response"],
+                "conversation_id": conversation_id,
+                "context_data": json.dumps({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "agent_endpoint": True,
+                    "support_type": agent_result.get("support_type"),
+                    "selected_acts": agent_result.get("selected_acts"),
+                    "state_snapshot": agent_result.get("state_snapshot", {}),
+                    "project_plan": agent_result.get("project_plan"),
+                    "decision_metadata": agent_result.get("decision_metadata", {}),
+                    "metrics": agent_result.get("metrics", {})
+                }, ensure_ascii=False)
+            }
+            await asyncio.to_thread(
+                lambda: supabase.table("chat_logs").insert(ai_message_data).execute()
+            )
+            
+            # conversationのタイムスタンプ更新
+            await update_conversation_timestamp(conversation_id)
+            
+            # レスポンスの構築
+            return ConversationAgentResponse(
+                response=agent_result["response"],
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                support_type=agent_result.get("support_type", "unknown"),
+                selected_acts=agent_result.get("selected_acts", []),
+                state_snapshot=agent_result.get("state_snapshot", {}),
+                project_plan=agent_result.get("project_plan"),
+                decision_metadata=agent_result.get("decision_metadata", {}),
+                metrics=agent_result.get("metrics", {}),
+                debug_info=debug_info,
+                conversation_id=conversation_id,
+                history_count=len(conversation_history)
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ 対話エージェント処理エラー: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            return ConversationAgentResponse(
+                response="申し訳ございません。対話処理中にエラーが発生しました。",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                support_type="error",
+                selected_acts=[],
+                state_snapshot={},
+                decision_metadata={},
+                metrics={"error": "processing_failed"},
+                error=f"Processing error: {str(e)}",
+                warning="エージェント処理中にエラーが発生しました",
+                conversation_id=conversation_id,
+                history_count=len(conversation_history) if 'conversation_history' in locals() else 0
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ エンドポイントエラー: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        return ConversationAgentResponse(
+            response="システムエラーが発生しました。",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            support_type="error",
+            selected_acts=[],
+            state_snapshot={},
+            decision_metadata={},
+            metrics={"error": "system_error", "processing_time_ms": int((time.time() - start_time) * 1000)},
+            error=f"System error: {str(e)}",
+            history_count=0
+        )
+
+@app.get("/conversation-agent/status")
+async def get_conversation_agent_status(
+    current_user: int = Depends(get_current_user_cached)
+):
+    """
+    対話エージェントのステータス確認エンドポイント
+    
+    Returns:
+        エージェントの可用性、設定、状態情報
+    """
+    try:
+        status = {
+            "available": CONVERSATION_AGENT_AVAILABLE,
+            "enabled": ENABLE_CONVERSATION_AGENT,
+            "initialized": conversation_orchestrator is not None,
+            "module_path": "backend.conversation_agent",
+            "environment": {
+                "ENABLE_CONVERSATION_AGENT": os.environ.get("ENABLE_CONVERSATION_AGENT", "false"),
+                "mode": "mock" if conversation_orchestrator and hasattr(conversation_orchestrator, 'use_mock') else "unknown"
+            },
+            "features": {
+                "state_extraction": True,
+                "support_typing": True,
+                "policy_engine": True,
+                "project_planning": True
+            }
+        }
+        
+        # オーケストレーターが初期化されている場合、追加情報を取得
+        if conversation_orchestrator:
+            try:
+                status["orchestrator_info"] = {
+                    "class": conversation_orchestrator.__class__.__name__,
+                    "has_llm_client": conversation_orchestrator.llm_client is not None if hasattr(conversation_orchestrator, 'llm_client') else False,
+                    "mock_mode": conversation_orchestrator.use_mock if hasattr(conversation_orchestrator, 'use_mock') else None
+                }
+            except Exception as e:
+                status["orchestrator_info"] = {"error": str(e)}
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"ステータス取得エラー: {e}")
+        return {
+            "available": False,
+            "error": str(e)
+        }
+
+@app.post("/conversation-agent/initialize")
+async def initialize_conversation_agent(
+    mock_mode: bool = True,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """
+    対話エージェントの手動初期化エンドポイント（管理者用）
+    
+    Args:
+        mock_mode: モックモードで初期化するか
+    
+    Returns:
+        初期化結果
+    """
+    global conversation_orchestrator
+    
+    try:
+        if not CONVERSATION_AGENT_AVAILABLE:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="対話エージェントモジュールが利用不可です"
+            )
+        
+        # 既存のオーケストレーターをクリーンアップ
+        if conversation_orchestrator:
+            logger.info("既存のオーケストレーターをクリーンアップ")
+            conversation_orchestrator = None
+        
+        # 新しいオーケストレーターを初期化
+        conversation_orchestrator = ConversationOrchestrator(
+            llm_client=llm_client,
+            use_mock=mock_mode
+        )
+        
+        logger.info(f"✅ 対話エージェント手動初期化完了（mock={mock_mode}）")
+        
+        return {
+            "success": True,
+            "message": f"対話エージェントを{'モック' if mock_mode else '実'}モードで初期化しました",
+            "mock_mode": mock_mode,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"初期化エラー: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"対話エージェントの初期化に失敗しました: {str(e)}"
+        )
 
 # Phase 2: AI提案機能（今後実装予定）
 # =============================================================================
