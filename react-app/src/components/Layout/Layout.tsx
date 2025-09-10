@@ -31,13 +31,14 @@ import {
   Logout,
   ExpandMore,
   Explore,
+  Dashboard as DashboardIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useTutorialStore } from '../../stores/tutorialStore';
 import { Link } from 'react-router-dom';
-import AIChat from '../MemoChat/AIChat';
+import DashboardSidebar from './DashboardSidebar';
 // import QuestSuggestion from './QuestSuggestion'; // 一時的に非表示
 // import QuestBoardPage from '../../pages/QuestBoardPage'; // 一時的に非表示
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
@@ -45,10 +46,9 @@ import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 const drawerWidth = 280;
 const tabletDrawerWidth = 240;
 const collapsedDrawerWidth = 64;
-const defaultChatSidebarWidth = 400;
-const tabletChatSidebarWidth = 350;
-const minChatSidebarWidth = 300;
-const minMainContentWidth = 400; // メインコンテンツの最小幅
+const defaultDashboardSidebarWidth = 350;
+const minDashboardSidebarWidth = 300;
+const minMainContentWidth = 600; // メインコンテンツ（中央のチャット）の最小幅
 
 interface LayoutContextType {
   sidebarOpen: boolean;
@@ -70,9 +70,6 @@ const Layout: React.FC = () => {
   
   const { user, logout } = useAuthStore();
   const { 
-    isChatOpen, 
-    isHydrated,
-    toggleChat, 
     chatPageId, 
     currentMemoTitle, 
     currentMemoContent,
@@ -96,17 +93,21 @@ const Layout: React.FC = () => {
   
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-  const [chatSidebarWidth, setChatSidebarWidth] = useState(isTablet ? tabletChatSidebarWidth : defaultChatSidebarWidth);
-  const [isResizing, setIsResizing] = useState(false);
+  const [dashboardSidebarOpen, setDashboardSidebarOpen] = useState(!isMobile); // モバイルではデフォルトで非表示
+  const [dashboardSidebarWidth, setDashboardSidebarWidth] = useState(defaultDashboardSidebarWidth);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const handleDrawerToggle = useCallback(() => {
+    setMobileOpen(prev => !prev);
+  }, []);
 
-  const handleSidebarToggle = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  const handleSidebarToggle = useCallback(() => {
+    setSidebarOpen(prev => !prev);
+  }, []);
+
+  const handleDashboardSidebarToggle = useCallback(() => {
+    setDashboardSidebarOpen(prev => !prev);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -122,140 +123,42 @@ const Layout: React.FC = () => {
     setUserMenuAnchor(null);
   };
 
-  // チャットサイドバーのリサイズ機能
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  };
-
-  const handleResize = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    const newWidth = window.innerWidth - e.clientX;
-    
-    // 現在の左サイドバーの幅を取得
-    const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-    
-    // 動的な最大幅を計算（メインコンテンツの最小幅を確保）
-    const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
-    
-    const clampedWidth = Math.max(
-      minChatSidebarWidth,
-      Math.min(dynamicMaxWidth, newWidth)
-    );
-    
-    setChatSidebarWidth(clampedWidth);
-  }, [isResizing, sidebarOpen]);
-
-  const handleResizeEnd = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  // マウスイベントリスナーの管理
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleResize);
-      document.addEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = 'ew-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.removeEventListener('mousemove', handleResize);
-      document.removeEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleResize);
-      document.removeEventListener('mouseup', handleResizeEnd);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, handleResize, handleResizeEnd]);
-
-  // ウィンドウリサイズ時のチャット幅調整
+  // ウィンドウリサイズ時のサイドバー幅調整と画面サイズ変更時のサイドバー状態管理
   useEffect(() => {
     const handleWindowResize = () => {
-      if (!isHydrated || !isChatOpen) return;
+      if (!dashboardSidebarOpen) return;
       
       const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
       const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
       
-      // チャット幅が新しい最大幅を超えている場合は調整
-      if (chatSidebarWidth > dynamicMaxWidth) {
-        setChatSidebarWidth(Math.max(minChatSidebarWidth, dynamicMaxWidth));
+      // ダッシュボード幅が新しい最大幅を超えている場合は調整
+      if (dashboardSidebarWidth > dynamicMaxWidth) {
+        setDashboardSidebarWidth(Math.max(minDashboardSidebarWidth, dynamicMaxWidth));
       }
     };
 
     window.addEventListener('resize', handleWindowResize);
     return () => window.removeEventListener('resize', handleWindowResize);
-  }, [isHydrated, isChatOpen, sidebarOpen, chatSidebarWidth]);
+  }, [dashboardSidebarOpen, sidebarOpen, dashboardSidebarWidth]);
 
-  // AI応答の処理
-  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
-    try {
-      // ユーザーIDを取得
-      let userId = null;
-      
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (!userId) {
-        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
-      }
-
-      // 現在のメモコンテンツを使用
-      const contextContent = currentMemoContent || memoContent;
-
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          message: message,
-          memo_content: contextContent,
-          page_id: getEffectiveChatPageId(),
-        }),
-      });
-
-      if (!response.ok) {
-        // より詳細なエラー情報を取得
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorDetail += ` - ${JSON.stringify(errorData)}`;
-        } catch (e) {
-          // JSON解析に失敗した場合はテキストで取得
-          try {
-            const errorText = await response.text();
-            errorDetail += ` - ${errorText}`;
-          } catch (e2) {
-            // 何も取得できない場合
-          }
-        }
-        throw new Error(errorDetail);
-      }
-
-      const data = await response.json();
-      return data.response;
-    } catch (error) {
-      console.error('AI応答の取得に失敗しました:', error);
-      throw error;
+  // 画面サイズが変わった時のダッシュボードサイドバー状態管理
+  // モバイル/デスクトップ切り替え時の処理（初回レンダリング時は除く）
+  const [hasInitialized, setHasInitialized] = useState(false);
+  useEffect(() => {
+    if (!hasInitialized) {
+      setHasInitialized(true);
+      return;
     }
-  };
+    // モバイルからデスクトップに変わった場合、ダッシュボードサイドバーを開く
+    if (!isMobile) {
+      setDashboardSidebarOpen(true);
+    }
+    // デスクトップからモバイルに変わった場合、ダッシュボードサイドバーを閉じる
+    else {
+      setDashboardSidebarOpen(false);
+    }
+  }, [isMobile, hasInitialized]);
+
 
   interface MenuItem {
     text: string;
@@ -265,11 +168,12 @@ const Layout: React.FC = () => {
   }
 
   const mainListItems: MenuItem[] = useMemo(() => [
-    { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
+    { text: 'AIチャット', icon: <ChatIcon />, path: '/chat' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
     // { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
     // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
-  ], []);
+  ], [handleDashboardSidebarToggle]);
 
   // 展開状態のサイドバー
   const fullDrawer = (
@@ -344,33 +248,6 @@ const Layout: React.FC = () => {
       {/* <QuestSuggestion /> */}
 
       <Divider />
-
-      {/* AIチャット開始ボタン */}
-      <Box sx={{ p: 2 }}>
-        <Card 
-          sx={{ 
-            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
-            borderRadius: 2,
-            cursor: 'pointer',
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.2)',
-            },
-          }}
-          onClick={toggleChat}
-        >
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Psychology color="primary" />
-              <Typography variant="body2" fontWeight={600}>
-                AIアシスタント
-              </Typography>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              探究学習をサポート
-            </Typography>
-          </CardContent>
-        </Card>
-      </Box>
 
       <Divider />
       
@@ -467,25 +344,6 @@ const Layout: React.FC = () => {
 
       <Divider />
 
-      {/* AIチャット開始ボタン（縮小版） */}
-      <Box sx={{ p: 1 }}>
-        <IconButton
-          onClick={toggleChat}
-          sx={{
-            width: '100%',
-            height: 48,
-            borderRadius: 2,
-            bgcolor: (isHydrated && isChatOpen) ? 'primary.light' : 'rgba(5, 155, 255, 0.1)',
-            color: 'primary.main',
-            '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.2)',
-            },
-          }}
-        >
-          <Psychology />
-        </IconButton>
-      </Box>
-
       <Divider />
       
       <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -564,7 +422,7 @@ const Layout: React.FC = () => {
           </Drawer>
         </Box>
 
-        {/* Main content */}
+        {/* Main content - 中央のチャットエリア */}
         <Box
           component="main"
           sx={{
@@ -573,7 +431,7 @@ const Layout: React.FC = () => {
               xs: '100%',
               sm: (() => {
                 const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-                const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidth : 0;
+                const rightWidth = dashboardSidebarOpen ? dashboardSidebarWidth : 0;
                 return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
               })()
             },
@@ -603,104 +461,13 @@ const Layout: React.FC = () => {
           </motion.div>
         </Box>
 
-        {/* Right Chat Sidebar */}
-        <AnimatePresence>
-          {isHydrated && isChatOpen && (
-            <Box
-              component={motion.div}
-              initial={{ width: 0 }}
-              animate={{ width: chatSidebarWidth }}
-              exit={{ width: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              sx={{
-                width: chatSidebarWidth,
-                minHeight: '100vh',
-                backgroundColor: 'background.paper',
-                borderLeft: 1,
-                borderColor: 'divider',
-                boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
-                position: isMobile ? 'fixed' : 'relative',
-                right: isMobile ? 0 : 'auto',
-                top: isMobile ? 0 : 'auto',
-                zIndex: isMobile ? 1200 : 'auto',
-                overflow: 'hidden',
-              }}
-              className="chat-sidebar"
-              data-tutorial="ai-chat-panel"
-            >
-              {/* リサイズハンドル */}
-              <Box
-                onMouseDown={handleResizeStart}
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '8px',
-                  height: '100%',
-                  cursor: 'ew-resize',
-                  backgroundColor: 'transparent',
-                  borderRight: 1,
-                  borderColor: 'divider',
-                  '&:hover': {
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                  },
-                  zIndex: 1,
-                }}
-              >
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '3px',
-                    height: '40px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                    borderRadius: '2px',
-                  }}
-                />
-              </Box>
-              
-              <Box sx={{ 
-                height: '100vh', 
-                display: 'flex', 
-                flexDirection: 'column',
-                pl: '8px', // リサイズハンドル分のパディング
-              }}>
-                {/* Chat Header */}
-                <Box sx={{ 
-                  p: 2, 
-                  borderBottom: 1, 
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}>
-                  <Box>
-                    <Typography variant="h6" fontWeight={600}>
-                      AIアシスタント
-                    </Typography>
-                  </Box>
-                  <IconButton onClick={toggleChat} size="small">
-                    <ChevronRight />
-                  </IconButton>
-                </Box>
-
-                {/* Chat Content */}
-                <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  <AIChat
-                    pageId={getEffectiveChatPageId()}
-                    title="AIアシスタント"
-                    persistentMode={true}
-                    loadHistoryFromDB={true}
-                    onMessageSend={handleAIMessage}
-                    initialMessage={AI_INITIAL_MESSAGE}
-                  />
-                </Box>
-              </Box>
-            </Box>
-          )}
-        </AnimatePresence>
+        {/* Right Dashboard Sidebar */}
+        <DashboardSidebar
+          isOpen={dashboardSidebarOpen}
+          onToggle={handleDashboardSidebarToggle}
+          width={isMobile ? window.innerWidth * 0.85 : dashboardSidebarWidth}
+          isMobile={isMobile}
+        />
 
         {/* ユーザーメニュー */}
         <Menu
