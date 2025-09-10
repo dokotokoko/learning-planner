@@ -656,7 +656,7 @@ async def chat_with_ai(
         }
         supabase.table("chat_logs").insert(user_message_data).execute()
         
-        # ===== Phase 1: 対話エージェント機能統合 =====
+        # ===== Phase 1: 対話エージェント機能統合 =====【思考プロセスメソッド！！：ENABLE_CONVERSATION_AGENT】
         if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
             try:
                 # 会話履歴を対話エージェント用フォーマットに変換

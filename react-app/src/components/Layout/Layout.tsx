@@ -267,7 +267,7 @@ const Layout: React.FC = () => {
   const mainListItems: MenuItem[] = useMemo(() => [
     { text: 'ダッシュボード', icon: <TipsAndUpdates />, path: '/dashboard' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
-    // { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
+    { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
     // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
   ], []);
 
