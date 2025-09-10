@@ -194,7 +194,11 @@ const AIChat: React.FC<AIChatProps> = ({
       if (!userId) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
+      // グローバルチャット履歴を取得（pageIdに関係なく独立）
+      const historyUrl = pageId.includes('dashboard') 
+        ? `${apiBaseUrl}/chat/history?page=dashboard` 
+        : `${apiBaseUrl}/chat/history`; // pageパラメータを除去
+      const response = await fetch(historyUrl, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
@@ -210,16 +214,18 @@ const AIChat: React.FC<AIChatProps> = ({
           timestamp: item.created_at ? new Date(item.created_at) : new Date(),
         }));
 
-        // ダッシュボード画面の場合は履歴があっても初期メッセージを先頭に追加
-        if (pageId.includes('dashboard') || pageId.includes('general-')) {
+        // ダッシュボードの場合は空の履歴（バックエンドで制御済み）
+        if (pageId.includes('dashboard')) {
+          // ダッシュボードは初期メッセージのみ表示
           const initialMessage: Message = {
             id: `initial-${Date.now()}`,
             role: 'assistant',
             content: getDefaultInitialMessage(),
             timestamp: new Date(),
           };
-          setMessages([initialMessage, ...historyMessages]);
+          setMessages([initialMessage]);
         } else {
+          // その他のページは全てグローバル履歴を表示
           setMessages(historyMessages);
         }
         
@@ -379,9 +385,8 @@ const AIChat: React.FC<AIChatProps> = ({
             credentials: 'include',
             body: JSON.stringify({
               message: userMessage.content,
-              page: pageId,
+              // pageIdを送信しない（グローバルチャットのため）
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
-              memo_content: persistentMode ? currentMemoContent : undefined,
             }),
           });
 
