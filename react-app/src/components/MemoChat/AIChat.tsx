@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   TextField,
@@ -25,6 +25,7 @@ import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
+import { useAIChatMessages } from '../../hooks/useAIChatMessages';
 
 interface Message {
   id: string;
@@ -75,10 +76,8 @@ const AIChat: React.FC<AIChatProps> = ({
   onActivityRecord,
   persistentMode = false,
 }) => {
-  // chatStoreからの機能を使用
-  const { getMessages, addMessage, clearMessages } = useChatStore();
-  const storedMessages = getMessages(pageId);
-  const [messages, setMessages] = useState<Message[]>(storedMessages);
+  // 統一されたメッセージ管理フックを使用
+  const { messages, addMessage, setMessages, clearMessages } = useAIChatMessages(pageId);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -94,6 +93,10 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
   const initializationKeyRef = useRef(pageId);
+  
+  // タイマー管理用
+  const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
@@ -145,8 +148,7 @@ const AIChat: React.FC<AIChatProps> = ({
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
     if (forceRefresh || (!persistentMode && initializationKeyRef.current !== pageId)) {
-      clearMessages(pageId);
-      setMessages([]);
+      clearMessages();
       setHistoryLoaded(false);
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
@@ -156,13 +158,20 @@ const AIChat: React.FC<AIChatProps> = ({
     return false;
   }, [forceRefresh, pageId, persistentMode, clearMessages]);
 
-  // ストア同期関数（イベント駆動）
+  // ストア同期関数（カスタムフックで管理されるため不要）
   const syncMessagesFromStore = useCallback(() => {
-    const stored = getMessages(pageId);
-    if (stored.length > 0 && messages.length === 0) {
-      setMessages(stored);
-    }
-  }, [pageId, messages.length, getMessages]);
+    // カスタムフックが自動的に同期するため、ここでは何もしない
+  }, []);
+
+  // タイマー管理ヘルパー
+  const setManagedTimeout = useCallback((callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      timersRef.current.delete(timer);
+      callback();
+    }, delay);
+    timersRef.current.add(timer);
+    return timer;
+  }, []);
 
   // 対話履歴読み込み関数（イベント駆動）
   const loadChatHistory = useCallback(async () => {
@@ -185,7 +194,11 @@ const AIChat: React.FC<AIChatProps> = ({
       if (!userId) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
+      // グローバルチャット履歴を取得（pageIdに関係なく独立）
+      const historyUrl = pageId.includes('dashboard') 
+        ? `${apiBaseUrl}/chat/history?page=dashboard` 
+        : `${apiBaseUrl}/chat/history`; // pageパラメータを除去
+      const response = await fetch(historyUrl, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
@@ -201,23 +214,25 @@ const AIChat: React.FC<AIChatProps> = ({
           timestamp: item.created_at ? new Date(item.created_at) : new Date(),
         }));
 
-        // ダッシュボード画面の場合は履歴があっても初期メッセージを先頭に追加
-        if (pageId.includes('dashboard') || pageId.includes('general-')) {
+        // ダッシュボードの場合は空の履歴（バックエンドで制御済み）
+        if (pageId.includes('dashboard')) {
+          // ダッシュボードは初期メッセージのみ表示
           const initialMessage: Message = {
             id: `initial-${Date.now()}`,
             role: 'assistant',
             content: getDefaultInitialMessage(),
             timestamp: new Date(),
           };
-          setMessages([initialMessage, ...historyMessages]);
+          setMessages([initialMessage]);
         } else {
+          // その他のページは全てグローバル履歴を表示
           setMessages(historyMessages);
         }
         
         setHistoryLoaded(true);
         
         // 履歴読み込み後に最下部にスクロール
-        setTimeout(() => {
+        setManagedTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
         }, 100);
       }
@@ -302,12 +317,12 @@ const AIChat: React.FC<AIChatProps> = ({
   const scrollToBottomIfNeeded = useCallback(() => {
     // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
     if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
-      setTimeout(() => {
+      setManagedTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
     previousMessageCountRef.current = messages.length;
-  }, [messages, isUserScrolling, shouldAutoScroll]);
+  }, [messages, isUserScrolling, shouldAutoScroll, setManagedTimeout]);
 
 
 
@@ -322,9 +337,8 @@ const AIChat: React.FC<AIChatProps> = ({
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    // chatStoreにも保存
-    addMessage(pageId, { ...userMessage, timestamp: new Date(userMessage.timestamp ?? Date.now()) });
+    // 統一されたフックでメッセージ追加
+    addMessage(userMessage);
     setInputValue('');
     setIsLoading(true);
     
@@ -371,9 +385,8 @@ const AIChat: React.FC<AIChatProps> = ({
             credentials: 'include',
             body: JSON.stringify({
               message: userMessage.content,
-              page: pageId,
+              // pageIdを送信しない（グローバルチャットのため）
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
-              memo_content: persistentMode ? currentMemoContent : undefined,
             }),
           });
 
@@ -397,9 +410,8 @@ const AIChat: React.FC<AIChatProps> = ({
         timestamp: new Date(),  
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-      // chatStoreにも保存
-      addMessage(pageId, { ...assistantMessage, timestamp: new Date(assistantMessage.timestamp ?? Date.now()) });
+      // 統一されたフックでAI応答を追加
+      addMessage(assistantMessage);
       
       // 学習活動記録（AI応答）
       if (onActivityRecord) {
@@ -409,7 +421,7 @@ const AIChat: React.FC<AIChatProps> = ({
       notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
       
       // AI応答完了時も条件付きで最下部にスクロール
-      setTimeout(() => scrollToBottomIfNeeded(), 200);
+      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
     } catch (error) {
       console.error('AI応答エラー:', error);
       const errorMessage: Message = {
@@ -418,12 +430,11 @@ const AIChat: React.FC<AIChatProps> = ({
         content: '申し訳ございません。応答の生成中にエラーが発生しました。もう一度お試しください。',
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
-      // chatStoreにも保存
-      addMessage(pageId, { ...errorMessage, timestamp: new Date(errorMessage.timestamp ?? Date.now()) });
+      // 統一されたフックでエラーメッセージを追加
+      addMessage(errorMessage);
       
       // エラーメッセージ表示時も条件付きで最下部にスクロール
-      setTimeout(() => scrollToBottomIfNeeded(), 200);
+      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -492,14 +503,14 @@ const AIChat: React.FC<AIChatProps> = ({
     setShouldAutoScroll(true);
     
     // 最下部にスクロール
-    setTimeout(() => {
+    setManagedTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
 
   // 新しいチャット開始
   const handleNewChat = () => {
-    setMessages([]);
+    clearMessages();
     setIsHistoryOpen(false);
     setShouldAutoScroll(true);
     
@@ -511,26 +522,49 @@ const AIChat: React.FC<AIChatProps> = ({
       content: messageContent,
       timestamp: new Date(),
     };
-    setMessages([initialMsg]);
+    addMessage(initialMsg);
   };
 
-  // 初期化処理を実行（イベント駆動）
-  const wasCleared = clearMessagesIfNeeded();
-  if (!wasCleared) {
-    syncMessagesFromStore();
-    if (!historyLoaded && loadHistoryFromDB) {
-      loadChatHistory();
-    } else if (!loadHistoryFromDB || historyLoaded) {
-      loadInitialMessages();
+  // 初期化とクリーンアップ
+  useEffect(() => {
+    const wasCleared = clearMessagesIfNeeded();
+    if (!wasCleared) {
+      syncMessagesFromStore();
+      if (!historyLoaded && loadHistoryFromDB) {
+        loadChatHistory();
+      } else if (!loadHistoryFromDB || historyLoaded) {
+        loadInitialMessages();
+      }
     }
-  }
+  }, [pageId, forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
 
   // スクロール処理の設定
-  const cleanupScrollHandling = setupScrollHandling();
-  if (messages.length > previousMessageCountRef.current) {
-    scrollToBottomIfNeeded();
-    previousMessageCountRef.current = messages.length;
-  }
+  useEffect(() => {
+    const cleanup = setupScrollHandling();
+    return cleanup;
+  }, [setupScrollHandling]);
+  
+  // メッセージ変更時のスクロール
+  useEffect(() => {
+    if (messages.length > previousMessageCountRef.current) {
+      scrollToBottomIfNeeded();
+      previousMessageCountRef.current = messages.length;
+    }
+  }, [messages, scrollToBottomIfNeeded]);
+  
+  // コンポーネントアンマウント時のクリーンアップ
+  useEffect(() => {
+    return () => {
+      // 全タイマーのクリア
+      timersRef.current.forEach(timer => clearTimeout(timer));
+      timersRef.current.clear();
+      
+      // 非同期処理のキャンセル
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   return (
     <Box sx={{ 

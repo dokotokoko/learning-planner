@@ -187,68 +187,71 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
     }
   };
 
-  // メモタイトルを取得する関数
+  // メモタイトルを取得する関数（並列処理で高速化）
   const fetchMemoTitles = async (sessions: ChatSession[], userId: string) => {
     // 統一した認証トークンの取得
     const token = userId; // userIdをそのまま使用
+    const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
     
-    for (const session of sessions) {
-      if (session.page.startsWith('memo-')) {
-        try {
-          const memoId = session.page.replace('memo-', '');
-          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-          const memoResponse = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-            credentials: 'include',
-          });
+    // メモセッションのみをフィルタリング
+    const memoSessions = sessions.filter(session => session.page.startsWith('memo-'));
+    
+    // 並列でメモ情報を取得
+    const memoPromises = memoSessions.map(async (session) => {
+      try {
+        const memoId = session.page.replace('memo-', '');
+        const memoResponse = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          credentials: 'include',
+        });
+        
+        if (memoResponse.ok) {
+          const memoData = await memoResponse.json();
+          session.memoTitle = memoData.title || '無題のメモ';
+          session.title = memoData.title || '無題のメモ';
           
-          if (memoResponse.ok) {
-            const memoData = await memoResponse.json();
-            session.memoTitle = memoData.title || '無題のメモ';
-            session.title = memoData.title || '無題のメモ';
-            
-            // プロジェクト名も取得
-            if (memoData.project_id) {
-              try {
-                const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-                const projectResponse = await fetch(`${apiBaseUrl}/projects/${memoData.project_id}`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  credentials: 'include',
-                });
-                if (projectResponse.ok) {
-                  const projectData = await projectResponse.json();
-                  session.projectName = projectData.theme;
-                }
-              } catch (e) {
-                console.error('プロジェクト情報の取得に失敗:', e);
+          // プロジェクト名も取得
+          if (memoData.project_id) {
+            try {
+              const projectResponse = await fetch(`${apiBaseUrl}/projects/${memoData.project_id}`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                },
+                credentials: 'include',
+              });
+              if (projectResponse.ok) {
+                const projectData = await projectResponse.json();
+                session.projectName = projectData.theme;
               }
+            } catch (e) {
+              console.error('プロジェクト情報の取得に失敗:', e);
             }
-          } else if (memoResponse.status === 404) {
-            // メモが見つからない場合のフォールバック
-            const memoId = session.page.replace('memo-', '');
-            session.memoTitle = `メモ ${memoId} (削除済み)`;
-            session.title = `メモ ${memoId} (削除済み)`;
-            session.projectName = '不明';
-            console.warn(`メモ ID ${memoId} が見つかりません（削除済みまたは権限なし）`);
-          } else {
-            // その他のHTTPエラー
-            const memoId = session.page.replace('memo-', '');
-            session.memoTitle = `メモ ${memoId} (取得エラー)`;
-            session.title = `メモ ${memoId} (取得エラー)`;
-            console.error(`メモ ${memoId} の取得でエラー: ${memoResponse.status}`);
           }
-        } catch (error) {
-          console.error(`メモ${session.page}の情報取得に失敗:`, error);
-          // エラーの場合はデフォルトタイトルを使用
-          session.memoTitle = `メモ ${session.page.replace('memo-', '')}`;
-          session.title = session.memoTitle;
+        } else if (memoResponse.status === 404) {
+          // メモが見つからない場合のフォールバック
+          session.memoTitle = `メモ ${memoId} (削除済み)`;
+          session.title = `メモ ${memoId} (削除済み)`;
+          session.projectName = '不明';
+          console.warn(`メモ ID ${memoId} が見つかりません（削除済みまたは権限なし）`);
+        } else {
+          // その他のHTTPエラー
+          session.memoTitle = `メモ ${memoId} (取得エラー)`;
+          session.title = `メモ ${memoId} (取得エラー)`;
+          console.error(`メモ ${memoId} の取得でエラー: ${memoResponse.status}`);
         }
+      } catch (error) {
+        console.error(`メモ${session.page}の情報取得に失敗:`, error);
+        // エラーの場合はデフォルトタイトルを使用
+        const memoId = session.page.replace('memo-', '');
+        session.memoTitle = `メモ ${memoId}`;
+        session.title = session.memoTitle;
       }
-    }
+    });
+    
+    // 全てのPromiseの完了を待つ
+    await Promise.all(memoPromises);
   };
 
   // ページIDからタイトルを生成

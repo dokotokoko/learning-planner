@@ -114,9 +114,10 @@ class UserResponse(BaseModel):
 class ChatMessage(BaseModel):
     message: str
     context: Optional[str] = None
-    page: Optional[str] = "general"
-    page_id: Optional[str] = None  # フロントエンドとの互換性のため
-    memo_content: Optional[str] = None  # Layout.tsxから送られるフィールド
+    # ページ依存フィールドを削除（独立設計のため）
+    # page: Optional[str] = "general"  # 削除
+    # page_id: Optional[str] = None     # 削除  
+    # memo_content: Optional[str] = None # 削除
 
 class ChatResponse(BaseModel):
     response: str
@@ -391,26 +392,25 @@ def handle_database_error(error: Exception, operation: str):
         detail=error_detail
     )
 
-async def get_or_create_conversation(user_id: int, page_id: str) -> str:
-    """ページに対応するconversationを取得または作成"""
+async def get_or_create_global_chat_session(user_id: int) -> str:
+    """独立したグローバルAIチャットセッションを取得または作成"""
     try:
-        # 既存のconversationを探す
-        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", page_id).execute()
+        # ユーザーのグローバルチャットセッションを探す
+        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", "global_chat").execute()
         
         if existing_conv.data:
             return existing_conv.data[0]["id"]
         else:
-            # 新しいconversationを作成
-            title = f"{page_id}での相談"
+            # 新しいグローバルチャットセッションを作成
             new_conv_data = {
                 "user_id": user_id,
-                "title": title,
-                "page_id": page_id
+                "title": "AIチャットセッション",
+                "page_id": "global_chat"  # 独立セッションの統一ID
             }
             new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
             return new_conv.data[0]["id"] if new_conv.data else None
     except Exception as e:
-        logger.error(f"conversation取得/作成エラー: {e}")
+        logger.error(f"グローバルチャットセッション取得/作成エラー: {e}")
         raise
 
 async def update_conversation_timestamp(conversation_id: str):
@@ -542,66 +542,19 @@ async def chat_with_ai(
                 detail="LLMクライアントが初期化されていません"
             )
         
-        # conversationを取得または作成
-        # page_idが送られてきた場合はそれを使用、なければpageを使用
-        page_id = chat_data.page_id or chat_data.page or "general"
-        conversation_id = await get_or_create_conversation(current_user, page_id)
+        # 独立したAIチャットセッション（ページ非依存）
+        conversation_id = await get_or_create_global_chat_session(current_user)
         
-        # プロジェクト情報を自動取得（長期記憶）
-        project_context = ""
+        # プロジェクト情報はDBから取得せず、会話履歴から推測する方針に変更
+        project_context = None
         project = None
         project_id = None
         
-        logger.info(f"🔍 プロジェクト情報取得開始 - page_id: {page_id}")
+        logger.info(f"📝 独立 AIチャットモード - ページ非依存セッション")
         
-        # 1. pageIdがproject-形式の場合（既存ロジック維持）
-        if page_id.startswith('project-'):
-            try:
-                project_id = int(page_id.replace('project-', ''))
-                logger.info(f"✅ project-形式からプロジェクトIDを取得: {project_id}")
-            except ValueError:
-                logger.warning(f"⚠️ project-形式の解析に失敗: {page_id}")
-        
-        # 2. pageIdが数値（memo_id）の場合、memosテーブルから直接project_idを取得
-        elif page_id.isdigit():
-            try:
-                memo_result = supabase.table('memos').select('project_id').eq('id', int(page_id)).eq('user_id', current_user).execute()
-                if memo_result.data and memo_result.data[0].get('project_id'):
-                    project_id = memo_result.data[0]['project_id']
-                    logger.info(f"✅ memo_id:{page_id}からプロジェクトIDを直接取得: {project_id}")
-                else:
-                    logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
-            except Exception as e:
-                logger.warning(f"⚠️ memo_id:{page_id}からのproject_id取得に失敗: {e}")
-        
-        else:
-            logger.info(f"🔴 page_id形式が未対応: {page_id}")
-            # その他の形式の場合はproject_idをNoneのまま継続
-        
-        # プロジェクト情報を取得
-        if project_id:
-            try:
-                logger.info(f"📛 プロジェクト情報を取得中: project_id={project_id}, user_id={current_user}")
-                project_result = supabase.table('projects').select('*').eq('id', project_id).eq('user_id', current_user).execute()
-                
-                if project_result.data:
-                    project = project_result.data[0]
-                    # プロジェクト情報を軽量フォーマットで統合（トークン削減）
-                    theme_short = (project['theme'] or '')[:30]
-                    question_short = (project.get('question') or 'NA')[:25]
-                    hypothesis_short = (project.get('hypothesis') or 'NA')[:25]
-                    project_context = f"[テーマ:{theme_short}|問い:{question_short}|仮説:{hypothesis_short}]"
-                    logger.info(f"✅ プロジェクト情報を軽量フォーマットで取得成功: {project['theme']}")
-                else:
-                    logger.warning(f"⚠️ プロジェクトが見つからない: project_id={project_id}, user_id={current_user}")
-            except Exception as e:
-                logger.error(f"❌ プロジェクト情報の取得に失敗: {e}")
-        else:
-            logger.info(f"🔴 project_idが取得できなかった")
-        
-        # 過去の対話履歴を取得（拡張：50-100メッセージ）
-        history_limit = 100  # Phase 1: 履歴ウィンドウを拡張
-        history_response = supabase.table("chat_logs").select("id, sender, message, created_at, context_data").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
+        # 過去の対話履歴を取得（最適化：20-30メッセージに制限）
+        history_limit = 30  # 履歴取得を最小限に抑える
+        history_response = supabase.table("chat_logs").select("id, sender, message, created_at").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
         conversation_history = history_response.data if history_response.data is not None else []
 
         if conversation_history is None:
@@ -609,19 +562,8 @@ async def chat_with_ai(
             print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
         
         # メッセージの準備
-        # システムプロンプトとメッセージを準備
-        system_prompt_with_context = system_prompt
-        
-        # プロジェクト情報を追加（長期記憶）
-        if project_context:
-            system_prompt_with_context += project_context
-            logger.info(f"✅ システムプロンプトにプロジェクト情報を追加")
-        else:
-            logger.info(f"🔴 プロジェクト情報がないため、システムプロンプトに追加しない")
-        
-        logger.info(f"📜 システムプロンプト長: {len(system_prompt_with_context)}文字")
-        
-        messages = [{"role": "system", "content": system_prompt_with_context}]
+        # システムプロンプトとメッセージを準備（プロジェクト情報は含めない）
+        messages = [{"role": "system", "content": system_prompt}]
         if conversation_history:  # None または空リストのチェック
             for history_msg in conversation_history:
                 role = "user" if history_msg["sender"] == "user" else "assistant"
@@ -632,23 +574,17 @@ async def chat_with_ai(
         messages.append({"role": "user", "content": user_message})
         context_metadata = None
         
-        # 保存用のcontext_data作成
-        context_data_dict = {"timestamp": datetime.now(timezone.utc).isoformat()}
-        if chat_data.memo_content:
-            context_data_dict["memo_content"] = chat_data.memo_content[:500]  # 最初の500文字のみ保存
-        if project_id:
-            context_data_dict["project_id"] = project_id
-        if project:
-            context_data_dict["project_info"] = {
-                "theme": project.get('theme'),
-                "question": project.get('question'),
-                "hypothesis": project.get('hypothesis')
-            }
+        # 保存用のcontext_data作成（独立設計版）
+        context_data_dict = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_type": "global_chat",  # 独立チャットセッション
+            "independent": True  # ページ非依存のフラグ
+        }
         
-        # ユーザーメッセージをDBに保存（拡張：メタデータ付き）
+        # ユーザーメッセージをDBに保存（独立チャット版）
         user_message_data = {
             "user_id": current_user,
-            "page": page_id,
+            "page": "global_chat",  # 独立チャットの統一タグ
             "sender": "user",
             "message": chat_data.message,
             "conversation_id": conversation_id,
@@ -656,86 +592,18 @@ async def chat_with_ai(
         }
         supabase.table("chat_logs").insert(user_message_data).execute()
         
-        # ===== Phase 1: 対話エージェント機能統合 =====
-        if ENABLE_CONVERSATION_AGENT and conversation_orchestrator is not None:
-            try:
-                # 会話履歴を対話エージェント用フォーマットに変換
-                agent_history = []
-                for history_msg in conversation_history:
-                    sender = "user" if history_msg["sender"] == "user" else "assistant"
-                    agent_history.append({
-                        "sender": sender,
-                        "message": history_msg["message"]
-                    })
-                
-                # プロジェクト情報を対話エージェント用に変換
-                agent_project_context = None
-                if project:
-                    agent_project_context = {
-                        "theme": project.get('theme'),
-                        "question": project.get('question'),
-                        "hypothesis": project.get('hypothesis'),
-                        "id": project_id
-                    }
-                
-                # 対話エージェントで処理
-                agent_result = conversation_orchestrator.process_turn(
-                    user_message=chat_data.message,
-                    conversation_history=agent_history,
-                    project_context=agent_project_context,
-                    user_id=current_user,
-                    conversation_id=conversation_id
-                )
-                
-                # 対話エージェントの応答を使用
-                response = agent_result["response"]
-                
-                # メタデータを保存用context_dataに追加
-                ai_context_data = {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "has_project_context": bool(project_context),
-                    "conversation_agent": True,
-                    "support_type": agent_result.get("support_type"),
-                    "selected_acts": agent_result.get("selected_acts"),
-                    "state_snapshot": agent_result.get("state_snapshot", {}),
-                    "decision_metadata": agent_result.get("decision_metadata", {}),
-                    "project_plan": agent_result.get("project_plan")  # プロジェクト計画を追加
-                }
-                
-                # followupsがある場合はresponseに追加
-                if agent_result.get("followups"):
-                    followup_text = "\n\n**次にできること:**\n" + "\n".join([f"• {f}" for f in agent_result["followups"][:3]])
-                    response += followup_text
-                
-                logger.info(f"✅ 対話エージェント処理完了: {agent_result['support_type']} | {agent_result['selected_acts']}")
-                
-            except Exception as e:
-                logger.error(f"❌ 対話エージェント処理エラー、従来処理にフォールバック: {e}")
-                # エラー時は従来の処理にフォールバック
-                response = llm_client.generate_response_with_history(messages)
-                ai_context_data = {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "has_project_context": bool(project_context),
-                    "conversation_agent_error": str(e)
-                }
-        else:
-            # 従来の処理
-            response = llm_client.generate_response_with_history(messages)
-            ai_context_data = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "has_project_context": bool(project_context)
-            }
+        # 従来の処理
+        response = llm_client.generate_response(messages)
+        ai_context_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
         
         # トークン使用量を計算（使用しない）
         token_usage = None
         
-        # プロジェクトIDを追加（対話エージェントで設定されていない場合）
-        if project_id and "project_id" not in ai_context_data:
-            ai_context_data["project_id"] = project_id
-        
         ai_message_data = {
             "user_id": current_user,
-            "page": page_id,
+            "page": "global_chat",  # 独立チャットの統一タグ
             "sender": "assistant",
             "message": response,
             "conversation_id": conversation_id,
@@ -773,15 +641,18 @@ async def get_chat_history(
     limit: Optional[int] = 50,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """対話履歴取得（最適化版）"""
+    """対話履歴取得（グローバル履歴ベース）"""
     try:
         validate_supabase()
         
+        # ダッシュボードの場合は空の履歴を返す
+        if page == "dashboard":
+            return []
+        
+        # その他のページは全て最新のグローバル履歴を返す
         query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
         
-        if page:
-            query = query.eq("page", page)
-        
+        # pageフィルタを削除（全履歴を取得）
         query = query.order("created_at", desc=False).limit(limit or 50)
         result = query.execute()
         
@@ -798,10 +669,6 @@ async def get_chat_history(
         ]
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
-
-# /chat/conversations エンドポイントは削除（chat_conversationsテーブルを使用しないため）
-
-# /chat/conversations/{conversation_id}/messages エンドポイントは削除（chat_conversationsテーブルを使用しないため）
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
@@ -1267,7 +1134,7 @@ async def generate_theme_suggestions(
             {"role": "user", "content": user_prompt}
         ]
         
-        response = llm_client.generate_response_with_history(messages)
+        response = llm_client.generate_response(messages)
         
         # 応答のパース（最適化：効率的な正規表現）
         import re
