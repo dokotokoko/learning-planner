@@ -26,6 +26,7 @@ import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartN
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import AnimatedAICharacter, { type CharacterState } from './AnimatedAICharacter';
+import { CHARACTER_CONFIG } from '../../config/character';
 
 interface Message {
   id: string;
@@ -77,6 +78,11 @@ const AIChat: React.FC<AIChatProps> = ({
   onActivityRecord,
   persistentMode = false,
   onLoad,
+  // キャラクタカスタマイズ
+  characterPosition = 'bottom-right',
+  characterSize = 68,
+  characterColors,
+  characterRenderer,
 }) => {
   // chatStoreからの機能を使用
   const { getMessages, addMessage, clearMessages } = useChatStore();
@@ -95,6 +101,9 @@ const AIChat: React.FC<AIChatProps> = ({
   const [characterState, setCharacterState] = useState<CharacterState>('idle');
   const speakingTimeoutRef = useRef<number | null>(null);
   const lastAssistantIdRef = useRef<string | null>(null);
+  // キャラクタの位置に応じた余白計算
+  const isCharRight = CHARACTER_CONFIG.position.includes('right');
+  const characterGutterPx = Math.max((CHARACTER_CONFIG.size ?? 68) + 24, 88); // キャラ分の安全余白
   
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -663,9 +672,12 @@ const AIChat: React.FC<AIChatProps> = ({
           flex: 1, 
           overflow: 'auto',
           p: 1,
+          position: 'relative',
+          pr: isCharRight ? `${characterGutterPx}px` : 1,
+          pl: !isCharRight ? `${characterGutterPx}px` : 1,
         }}
       >
-        <List sx={{ py: 0 }}>
+        <List sx={{ py: 0, pb: `${characterGutterPx}px` }}>
           {/* 初期化中の特別なローディング表示 */}
           {isInitializing && messages.length === 0 && (
             <Box sx={{ 
@@ -786,6 +798,23 @@ const AIChat: React.FC<AIChatProps> = ({
           )}
         </List>
         <div ref={messagesEndRef} />
+
+        {/* アニメキャラクタ（メッセージ領域内に配置して入力欄と重ならない） */}
+        <AnimatedAICharacter
+          state={characterState}
+          position={CHARACTER_CONFIG.position}
+          size={CHARACTER_CONFIG.size}
+          colors={CHARACTER_CONFIG.colors}
+          imageSrc={CHARACTER_CONFIG.imageSrc}
+          renderAvatar={CHARACTER_CONFIG.renderAvatar as any}
+          messageHint={
+            characterState === 'thinking'
+              ? '考え中…'
+              : characterState === 'speaking'
+              ? '話しているよ…'
+              : undefined
+          }
+        />
       </Box>
 
       {/* 入力エリア */}
@@ -826,18 +855,6 @@ const AIChat: React.FC<AIChatProps> = ({
           </Button>
         </Stack>
       </Box>
-
-      {/* アニメキャラクタ（UI機能に影響しないフロート表示） */}
-      <AnimatedAICharacter
-        state={characterState}
-        messageHint={
-          characterState === 'thinking'
-            ? '考え中…'
-            : characterState === 'speaking'
-            ? '話しているよ…'
-            : undefined
-        }
-      />
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
