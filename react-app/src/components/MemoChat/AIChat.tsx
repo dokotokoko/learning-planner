@@ -25,6 +25,7 @@ import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
+import AnimatedAICharacter, { type CharacterState } from './AnimatedAICharacter';
 
 interface Message {
   id: string;
@@ -90,6 +91,10 @@ const AIChat: React.FC<AIChatProps> = ({
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  // キャラクタの状態管理
+  const [characterState, setCharacterState] = useState<CharacterState>('idle');
+  const speakingTimeoutRef = useRef<number | null>(null);
+  const lastAssistantIdRef = useRef<string | null>(null);
   
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -440,6 +445,11 @@ const AIChat: React.FC<AIChatProps> = ({
   ]);
 
   useEffect(() => {
+    // 初期化中（初期メッセージ未表示時）はthinkingを優先
+    if (isInitializing && messages.length === 0) {
+      setCharacterState('thinking');
+      return;
+    }
     if (onLoad) {
       onLoad({
         sendMessage: (message: string) => {
@@ -551,12 +561,56 @@ const AIChat: React.FC<AIChatProps> = ({
     previousMessageCountRef.current = messages.length;
   }
 
+  // キャラクタ状態の更新ロジック
+  useEffect(() => {
+    // 思考中は常にthinking
+    if (isLoading) {
+      setCharacterState('thinking');
+      if (speakingTimeoutRef.current) {
+        clearTimeout(speakingTimeoutRef.current);
+        speakingTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // 応答が追加されたタイミングでspeakingに遷移（簡易的に文字数に応じた時間）
+    const last = messages[messages.length - 1];
+    if (last && last.role === 'assistant') {
+      if (lastAssistantIdRef.current !== last.id) {
+        lastAssistantIdRef.current = last.id;
+        const len = (last.content || '').length;
+        const duration = Math.min(5000, Math.max(1500, Math.floor(len * 20))); // 20ms/文字、最小1.5s〜最大5s
+        setCharacterState('speaking');
+        if (speakingTimeoutRef.current) {
+          clearTimeout(speakingTimeoutRef.current);
+        }
+        speakingTimeoutRef.current = window.setTimeout(() => {
+          setCharacterState('idle');
+          speakingTimeoutRef.current = null;
+        }, duration);
+        return;
+      }
+    }
+
+    // それ以外はidle
+    setCharacterState('idle');
+  }, [isLoading, messages, isInitializing]);
+
+  useEffect(() => {
+    return () => {
+      if (speakingTimeoutRef.current) {
+        clearTimeout(speakingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <Box sx={{ 
       height: '100%', 
       display: 'flex', 
       flexDirection: 'column',
       backgroundColor: 'background.default',
+      position: 'relative',
     }}>
       {/* ヘッダー */}
       <Box sx={{ 
@@ -772,6 +826,18 @@ const AIChat: React.FC<AIChatProps> = ({
           </Button>
         </Stack>
       </Box>
+
+      {/* アニメキャラクタ（UI機能に影響しないフロート表示） */}
+      <AnimatedAICharacter
+        state={characterState}
+        messageHint={
+          characterState === 'thinking'
+            ? '考え中…'
+            : characterState === 'speaking'
+            ? '話しているよ…'
+            : undefined
+        }
+      />
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
