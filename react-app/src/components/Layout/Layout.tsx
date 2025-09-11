@@ -13,35 +13,27 @@ import {
   ListItemButton,
   Divider,
   Avatar,
-  Button,
   useTheme,
   useMediaQuery,
-  Card,
-  CardContent,
   Menu,
   MenuItem,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  TipsAndUpdates,
-  Psychology,
   Chat as ChatIcon,
-  ChevronLeft,
-  ChevronRight,
   Logout,
   ExpandMore,
   Explore,
+  Psychology,
   Dashboard as DashboardIcon,
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion} from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useTutorialStore } from '../../stores/tutorialStore';
-import { Link } from 'react-router-dom';
 import DashboardSidebar from './DashboardSidebar';
 // import QuestSuggestion from './QuestSuggestion'; // 一時的に非表示
 // import QuestBoardPage from '../../pages/QuestBoardPage'; // 一時的に非表示
-import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 
 const drawerWidth = 280;
 const tabletDrawerWidth = 240;
@@ -71,9 +63,6 @@ const Layout: React.FC = () => {
   const { user, logout } = useAuthStore();
   const { 
     chatPageId, 
-    currentMemoTitle, 
-    currentMemoContent,
-    currentProjectId 
   } = useChatStore();
 
   // 現在のページに基づくチャットページIDを生成
@@ -171,7 +160,7 @@ const Layout: React.FC = () => {
     { text: 'AIチャット', icon: <ChatIcon />, path: '/chat' },
     { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
     { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
-    // { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
+    { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
     // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
   ], [handleDashboardSidebarToggle]);
 

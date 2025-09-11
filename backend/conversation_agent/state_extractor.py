@@ -5,46 +5,20 @@ LLMを使用した動的な状態抽出と、ヒューリスティックなフ�
 
 import json
 import logging
+import sys
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from .schema import StateSnapshot, Affect, ProgressSignal
+
+# prompt.pyへのパスを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from prompt.prompt import STATE_EXTRACT_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class StateExtractor:
     """会話履歴から状態スナップショットを抽出"""
-    
-    # 状態抽出用プロンプトテンプレート
-    STATE_EXTRACT_PROMPT = """あなたは学習メンターAIです。学習者の発話から現在の状態をStateSnapshotとしてJSONで生成してください。
-
-必須フィールド:
-- goal: 学習者の現在の目標（明示されていない場合は推測）
-- time_horizon: 時間軸（今日/今週/今月/今学期など）
-- last_action: 最後に実行した行動
-- blockers: 障害・ブロッカー（配列）
-- uncertainties: 不確実な点（配列）
-- options_considered: 検討中の選択肢（配列）
-- resources: 利用可能なリソース（配列）
-- affect: 感情状態 {{interest: 0-5, anxiety: 0-5, excitement: 0-5}}
-- progress_signal: 進捗シグナル {{
-    actions_in_last_7_days: 数値,
-    novelty_ratio: 0.0-1.0,
-    looping_signals: ["繰り返しのパターン"],
-    scope_breadth: 1-10
-  }}
-
-会話履歴:
-{conversation}
-
-プロジェクト情報（参考）:
-{project_context}
-
-注意:
-- 会話から読み取れない情報は適切なデフォルト値を使用
-- 感情状態は会話のトーンから推測
-- ループ兆候があれば looping_signals に記載
-
-出力は厳密なJSON形式のみ:"""
     
     # <summary>状態抽出器を初期化します。</summary>
     # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
@@ -102,7 +76,7 @@ class StateExtractor:
             """
         
         # プロンプト生成
-        prompt = self.STATE_EXTRACT_PROMPT.format(
+        prompt = STATE_EXTRACT_PROMPT.format(
             conversation=conversation_text,
             project_context=project_text
         )

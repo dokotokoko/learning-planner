@@ -5,71 +5,20 @@ AIエージェントが探究学習プロジェクトに対して最適な計画
 
 import json
 import logging
+import sys
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from .schema import StateSnapshot, ProjectPlan, NextAction, Milestone
+
+# prompt.pyへのパスを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from prompt.prompt import PLAN_GENERATION_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class ProjectPlanner:
     """プロジェクト計画思考エンジン"""
-    
-    # プロジェクト計画生成用プロンプトテンプレート
-    PLAN_GENERATION_PROMPT = """あなたは探究学習の専門家AIです。生徒のプロジェクト情報と状態を分析し、最適な学習計画を立ててください。
-
-## 生徒の状態
-ゴール: {goal}
-目的: {purpose}
-
-## プロジェクト情報
-テーマ: {theme}
-問い: {question}
-仮説: {hypothesis}
-
-## 会話履歴の要約
-{conversation_summary}
-
-## 要求される計画要素
-
-1. 北極星（最重要指標）- このプロジェクトで最も重要な成果指標
-2. 北極星の測定方法 - どのように成果を測定するか
-3. 重要なマイルストーン（3-5個）- ゴール達成までの重要な節目
-4. 今取るべき行動（5個以内）- 緊急度と重要度を考慮した最優先行動
-5. 戦略的アプローチ - 全体的な進め方
-6. リスク要因 - 想定される障害やリスク
-
-## 出力形式（JSON）
-{{
-  "north_star": "最重要指標（具体的で測定可能）",
-  "north_star_metric": "測定方法",
-  "milestones": [
-    {{
-      "title": "マイルストーン名",
-      "description": "詳細説明",
-      "target_date": "目標時期（相対的表現）",
-      "success_criteria": ["成功基準1", "成功基準2"],
-      "order": 1
-    }}
-  ],
-  "next_actions": [
-    {{
-      "action": "具体的な行動",
-      "urgency": 緊急度(1-5),
-      "importance": 重要度(1-5),
-      "reason": "理由",
-      "expected_outcome": "期待される成果"
-    }}
-  ],
-  "strategic_approach": "戦略的アプローチ",
-  "risk_factors": ["リスク1", "リスク2"]
-}}
-
-注意事項:
-- 高校生レベルに適した実行可能な計画にする
-- 緊急度×重要度が高い順にnext_actionsを並べる
-- 具体的で測定可能な指標を設定する
-- 探究学習の本質（問いを立て、仮説を検証する）を重視する
-"""
 
     # <summary>ProjectPlannerクラスを初期化します。</summary>
     # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
@@ -117,7 +66,7 @@ class ProjectPlanner:
         conversation_summary = self._summarize_conversation(conversation_history)
         
         # プロンプト生成
-        prompt = self.PLAN_GENERATION_PROMPT.format(
+        prompt = PLAN_GENERATION_PROMPT.format(
             goal=state.goal or theme,
             purpose=state.purpose or question,
             theme=theme,

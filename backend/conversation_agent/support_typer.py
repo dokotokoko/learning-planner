@@ -4,38 +4,19 @@
 
 import json
 import logging
+import sys
+import os
 from typing import Optional, Dict, Any, List
 from .schema import StateSnapshot, SupportType
+
+# prompt.pyへのパスを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from prompt.prompt import SUPPORT_TYPE_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class SupportTyper:
     """状態スナップショットから適切な支援タイプを判定"""
-    
-    # 支援タイプ判定用プロンプトテンプレート
-    SUPPORT_TYPE_PROMPT = """次の学習者の状態（StateSnapshot）を読み、最も適切な支援タイプを1つ選んでください。
-
-候補:
-- 理解深化: 概念や内容の理解を深める必要がある
-- 道筋提示: 進め方や手順が分からない
-- 視点転換: 新しい見方や切り口が必要
-- 行動活性化: 具体的な行動を促す必要がある
-- 絞り込み: 選択肢が多すぎて決められない
-- 意思決定: 重要な決定を下す必要がある
-
-判定基準:
-- ループ兆候が強い → 視点転換 または 絞り込み
-- 不確実性が核心 → 道筋提示 または 行動活性化
-- 行動ゼロ＆不安高 → 行動活性化
-- スコープ過大/選択肢過多 → 絞り込み または 意思決定
-- ブロッカーが明確 → その解決に適した支援
-- 興味は高いが進まない → 道筋提示 または 行動活性化
-
-StateSnapshot:
-{snapshot}
-
-出力形式（JSON）:
-{{"support_type": "選択した支援タイプ", "reason": "選択理由（1-2文）", "confidence": 0.0-1.0}}"""
     
     # <summary>支援タイプ判定器を初期化します。</summary>
     # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
@@ -78,7 +59,7 @@ StateSnapshot:
         state_json = json.dumps(state_dict, ensure_ascii=False, indent=2)
         
         # プロンプト生成
-        prompt = self.SUPPORT_TYPE_PROMPT.format(snapshot=state_json)
+        prompt = SUPPORT_TYPE_PROMPT.format(snapshot=state_json)
         
         # 履歴コンテキストがあれば追加
         if history_context:

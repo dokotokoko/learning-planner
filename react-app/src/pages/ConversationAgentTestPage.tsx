@@ -58,13 +58,24 @@ const ConversationAgentTestPage: React.FC = () => {
 
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
+      console.log('================== 対話エージェント処理開始 ==================');
+      console.log('📝 ユーザーメッセージ:', message);
+      
       const userId = user?.id;
       if (!userId) {
         throw new Error('ユーザーIDが見つかりません');
       }
 
+      console.log('📋 プロジェクト情報:', {
+        theme: projectInfo.theme,
+        question: projectInfo.question,
+        hypothesis: projectInfo.hypothesis
+      });
+
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat`, {
+      console.log('🚀 対話エージェント専用APIリクエスト送信中...');
+      
+      const response = await fetch(`${apiBaseUrl}/conversation-agent/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,7 +85,11 @@ const ConversationAgentTestPage: React.FC = () => {
         body: JSON.stringify({
           message: message,
           page_id: 'conversation-agent-test',
-          memo_content: `プロジェクト情報:\nテーマ: ${projectInfo.theme}\n問い: ${projectInfo.question}\n仮説: ${projectInfo.hypothesis}`,
+          project_id: 1,  // テスト用プロジェクトID（整数）
+          include_history: true,
+          history_limit: 50,
+          debug_mode: true,
+          mock_mode: true
         }),
       });
 
@@ -84,8 +99,72 @@ const ConversationAgentTestPage: React.FC = () => {
 
       const data = await response.json();
       
-      // デバッグ用ログ
-      console.log('Orchestrator Response:', data);
+      // レスポンス全体を確認
+      console.log('✅ APIレスポンス受信完了');
+      console.log('📦 レスポンス全体:', data);
+      console.log('  - レスポンスのキー:', Object.keys(data));
+      console.log('================== ステップ詳細ログ ==================');
+      
+      // Step 1: 理解フェーズ
+      if (data.state_snapshot) {
+        console.log('📊 Step 1: 理解フェーズ (状態抽出)');
+        console.log('  - 目標:', data.state_snapshot.goal || 'なし');
+        console.log('  - 目的:', data.state_snapshot.purpose || 'なし');
+        console.log('  - 時間軸:', data.state_snapshot.time_horizon || 'なし');
+        console.log('  - ブロッカー:', data.state_snapshot.blockers?.length || 0, '個');
+        console.log('  - 不確実性:', data.state_snapshot.uncertainties?.length || 0, '個');
+      }
+      
+      // Step 2: 思考フェーズ
+      if (data.project_plan) {
+        console.log('🎯 Step 2: 思考フェーズ (計画作成)');
+        console.log('  - 北極星:', data.project_plan.north_star);
+        console.log('  - 次の行動数:', data.project_plan.next_actions?.length || 0);
+        if (data.project_plan.next_actions?.length > 0) {
+          console.log('  - 最優先行動:', data.project_plan.next_actions[0].action);
+          console.log('    緊急度:', data.project_plan.next_actions[0].urgency);
+          console.log('    重要度:', data.project_plan.next_actions[0].importance);
+        }
+        console.log('  - マイルストーン数:', data.project_plan.milestones?.length || 0);
+        console.log('  - 計画信頼度:', data.project_plan.confidence ? `${(data.project_plan.confidence * 100).toFixed(0)}%` : 'なし');
+      }
+      
+      // Step 3: 支援タイプ判定
+      if (data.support_type) {
+        console.log('🔍 Step 3: 支援タイプ判定');
+        console.log('  - 選択された支援タイプ:', data.support_type);
+        if (data.decision_metadata?.support_confidence) {
+          console.log('  - 確信度:', `${(data.decision_metadata.support_confidence * 100).toFixed(0)}%`);
+        }
+        if (data.decision_metadata?.support_reason) {
+          console.log('  - 判定理由:', data.decision_metadata.support_reason);
+        }
+      }
+      
+      // Step 4: 発話アクト選択
+      if (data.selected_acts) {
+        console.log('💬 Step 4: 発話アクト選択');
+        console.log('  - 選択されたアクト:', data.selected_acts.join(', '));
+        if (data.decision_metadata?.act_reason) {
+          console.log('  - 選択理由:', data.decision_metadata.act_reason);
+        }
+      }
+      
+      // Step 5: 応答生成
+      console.log('📝 Step 5: 応答生成');
+      console.log('  - 応答文字数:', data.response?.length || 0);
+      console.log('  - 応答内容プレビュー:', data.response?.substring(0, 100) + '...');
+      
+      // メトリクス
+      if (data.metrics) {
+        console.log('📈 会話メトリクス:');
+        console.log('  - ターン数:', data.metrics.turns_count || 0);
+        console.log('  - 前進感:', data.metrics.momentum_delta || 0);
+      }
+      
+      console.log('================== 処理完了 ==================');
+      console.log('総処理時間:', data.decision_metadata?.timestamp ? 
+        `${new Date(data.decision_metadata.timestamp).toLocaleTimeString('ja-JP')}` : '不明');
       
       // 詳細情報のみを保存（UIの詳細パネル用）
       setLastResponse(data);

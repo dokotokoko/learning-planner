@@ -1472,14 +1472,6 @@ async def save_theme_selection(
         )
 
 # =============================================================================
-# メモリ管理API（Phase 1）- 削除済み
-# =============================================================================
-
-# メモリ管理関連のエンドポイントは使用しないため削除しました
-
-# メモリ管理関連の残りのエンドポイントも使用しないため削除しました
-
-# =============================================================================
 # クエストシステムAPI
 # =============================================================================
 
@@ -1960,19 +1952,29 @@ async def chat_with_conversation_agent(
         # プロジェクト情報の取得
         project_context = None
         if request.project_id:
-            try:
-                project_result = supabase.table('projects').select('*').eq('id', request.project_id).eq('user_id', current_user).execute()
-                if project_result.data:
-                    project = project_result.data[0]
-                    project_context = {
-                        "theme": project.get('theme'),
-                        "question": project.get('question'),
-                        "hypothesis": project.get('hypothesis'),
-                        "id": request.project_id
-                    }
-                    logger.info(f"✅ プロジェクト情報取得成功: {project['theme']}")
-            except Exception as e:
-                logger.warning(f"⚠️ プロジェクト情報取得失敗: {e}")
+            # モックモードの場合はダミーのプロジェクト情報を使用
+            if request.mock_mode:
+                project_context = {
+                    "theme": "AI技術の教育への応用",
+                    "question": "AIを活用した個別最適化学習システムはどのように学習効果を向上させるか？",
+                    "hypothesis": "AIが学習者の理解度と学習パターンを分析することで、個別に最適化された学習経験を提供し、学習効果を向上させる",
+                    "id": request.project_id
+                }
+                logger.info(f"✅ モックプロジェクト情報使用: {project_context['theme']}")
+            else:
+                try:
+                    project_result = supabase.table('projects').select('*').eq('id', request.project_id).eq('user_id', current_user).execute()
+                    if project_result.data:
+                        project = project_result.data[0]
+                        project_context = {
+                            "theme": project.get('theme'),
+                            "question": project.get('question'),
+                            "hypothesis": project.get('hypothesis'),
+                            "id": request.project_id
+                        }
+                        logger.info(f"✅ プロジェクト情報取得成功: {project['theme']}")
+                except Exception as e:
+                    logger.warning(f"⚠️ プロジェクト情報取得失敗: {e}")
         
         # 対話履歴の取得
         conversation_history = []

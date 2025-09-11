@@ -4,6 +4,8 @@
 """
 import json
 import logging
+import sys
+import os
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 from .schema import (
@@ -19,6 +21,10 @@ from .state_extractor import StateExtractor
 from .support_typer import SupportTyper
 from .policies import PolicyEngine
 from .project_planner import ProjectPlanner
+
+# prompt.pyへのパスを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from prompt.prompt import generate_response_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +68,41 @@ class ConversationOrchestrator:
         conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         
+        logger.info("🚀 対話エージェント処理開始")
+        logger.info(f"   - ユーザーメッセージ: {user_message[:100]}...")
+        logger.info(f"   - プロジェクトコンテキスト: {bool(project_context)}")
+        logger.info(f"   - 履歴件数: {len(conversation_history)}")
+        
         try:
             # 1. 状態抽出(理解)
+            logger.info("📊 Step 1: 状態抽出開始")
             state = self._extract_state(conversation_history, project_context, user_id, conversation_id)
+            logger.info(f"✅ Step 1完了: 目標={state.goal or '未設定'}, 目的={state.purpose or '未設定'}")
             
             # 2. 計画思考フェーズ（思考）
+            logger.info("🎯 Step 2: 計画思考フェーズ開始")
             project_plan = self._generate_project_plan(state, conversation_history)
+            if project_plan:
+                logger.info(f"✅ Step 2完了: 北極星={project_plan.north_star[:50]}...")
+            else:
+                logger.info("⚠️ Step 2完了: プロジェクト計画なし")
             
             # 3. 支援タイプ判定
+            logger.info("🔍 Step 3: 支援タイプ判定開始")
             support_type, support_reason, confidence = self._determine_support_type(state)
+            logger.info(f"✅ Step 3完了: 支援タイプ={support_type}, 確信度={confidence}")
             
             # 4. 発話アクト選択
+            logger.info("💬 Step 4: 発話アクト選択開始")
             selected_acts, act_reason = self._select_acts(state, support_type)
+            logger.info(f"✅ Step 4完了: アクト={selected_acts}")
             
             # 5. 応答生成
-            response_package = self._generate_response(
+            logger.info("📝 Step 5: 応答生成開始")
+            response_package = self._generate_llm_response(
                 state, support_type, selected_acts, user_message
             )
+            logger.info(f"✅ Step 5完了: 応答文字数={len(response_package.natural_reply)}")
             
             # 6. メトリクス更新
             self._update_metrics(state, support_type, selected_acts)
@@ -103,10 +127,13 @@ class ConversationOrchestrator:
                 "metrics": self.metrics.dict()
             }
             
+            logger.info("🎉 対話エージェント処理完了")
             return result
             
         except Exception as e:
-            logger.error(f"対話処理エラー: {e}")
+            import traceback
+            logger.error(f"❌ 対話処理エラー: {e}")
+            logger.error(f"❌ トレースバック:\n{traceback.format_exc()}")
             # エラー時のフォールバック応答
             return self._generate_fallback_response(str(e))
     
@@ -139,7 +166,7 @@ class ConversationOrchestrator:
             conversation_history,
             project_context,
             use_llm=use_llm,
-            minimal_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
+            mock_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
         )
         
         # システム情報を追加
@@ -258,7 +285,7 @@ class ConversationOrchestrator:
     ) -> TurnPackage:
         
         if self.use_mock or not self.llm_client:
-            return self._generate_mock_response(state, support_type, selected_acts)
+            return self._generate_llm_response(state, support_type, selected_acts)
         
         # Phase 2で実装: LLMを使用した自然文生成
         return self._generate_llm_response(state, support_type, selected_acts, user_message)
@@ -322,26 +349,8 @@ class ConversationOrchestrator:
         user_message: str
     ) -> TurnPackage:
         
-        # プロンプト構築
-        prompt = f"""あなたは探究学習のメンターAIです。
-        
-選択された発話アクト: {selected_acts}
-支援タイプ: {support_type}
-学習者の状態:
-- 目標: {state.goal}
-- ブロッカー: {', '.join(state.blockers) if state.blockers else 'なし'}
-- 不確実性: {', '.join(state.uncertainties) if state.uncertainties else 'なし'}
-
-ユーザーのメッセージ: {user_message}
-
-上記の情報を基に、選択された発話アクトを自然に組み合わせた応答を生成してください。
-Socratic（問いかけ中心）なアプローチを優先し、必要最小限の情報提供に留めてください。
-
-応答形式（JSON）:
-{{
-    "natural_reply": "自然な応答文",
-    "followups": ["フォローアップ1", "フォローアップ2", "フォローアップ3"]
-}}"""
+        # プロンプト構築（prompt.pyから生成）
+        prompt = generate_response_prompt(selected_acts, support_type, state, user_message)
         
         try:
             messages = [
