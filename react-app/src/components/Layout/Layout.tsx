@@ -1,5 +1,5 @@
 // react-app/src/components/Layout/Layout.tsx
-import React, { useState, useMemo, memo, useCallback } from 'react';
+import React, { useState, useMemo, memo, useCallback, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -38,6 +38,8 @@ const drawerWidth = 280;
 const tabletDrawerWidth = 240;
 const collapsedDrawerWidth = 64;
 const chatSidebarWidthDefault = 400;
+const chatSidebarWidthMin = 320;
+const chatSidebarWidthMax = 720;
 
 interface LayoutContextType {
   sidebarOpen: boolean;
@@ -79,6 +81,14 @@ const Layout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+  const [chatWidth, setChatWidth] = useState<number>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('chat-sidebar-width') : null;
+    const n = saved ? parseInt(saved, 10) : chatSidebarWidthDefault;
+    return isNaN(n) ? chatSidebarWidthDefault : Math.min(chatSidebarWidthMax, Math.max(chatSidebarWidthMin, n));
+  });
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(chatWidth);
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
   const handleSidebarToggle = () => setSidebarOpen(!sidebarOpen);
@@ -93,6 +103,35 @@ const Layout: React.FC = () => {
     setUserMenuAnchor(event.currentTarget);
   };
   const handleUserMenuClose = () => setUserMenuAnchor(null);
+  // リサイズ用ハンドラ
+  const onResizeMouseDown = (e: React.MouseEvent) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = chatWidth;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  };
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = startXRef.current - e.clientX;
+      const next = Math.min(chatSidebarWidthMax, Math.max(chatSidebarWidthMin, startWidthRef.current + delta));
+      setChatWidth(next);
+    };
+    const onMouseUp = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      try { localStorage.setItem('chat-sidebar-width', String(chatWidth)); } catch {}
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [chatWidth]);
 
   // AI応答の送信処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
@@ -297,7 +336,7 @@ const Layout: React.FC = () => {
         </Box>
 
         {/* Main content */}
-        <Box component="main" sx={{ flexGrow: 1, width: { xs: '100%', sm: (() => { const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth; const rightWidth = (isHydrated && isChatOpen) ? chatSidebarWidthDefault : 0; return `calc(100% - ${leftWidth}px - ${rightWidth}px)`; })() }, minHeight: '100vh', transition: 'width 0.3s ease' }}>
+        <Box component="main" sx={{ flexGrow: 1, width: { xs: '100%', sm: (() => { const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth; const rightWidth = (isHydrated && isChatOpen) ? chatWidth : 0; const handleWidth = (!isMobile && isHydrated && isChatOpen) ? 6 : 0; return `calc(100% - ${leftWidth}px - ${rightWidth + handleWidth}px)`; })() }, height: '100vh', overflow: 'auto', transition: 'width 0.12s ease' }}>
           {/* モバイル用のメニューボタン */}
           <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1 }}>
             <IconButton color="primary" onClick={handleDrawerToggle} sx={{ mb: 1 }}>
@@ -313,7 +352,11 @@ const Layout: React.FC = () => {
         {/* Right Chat Sidebar */}
         <AnimatePresence>
           {isHydrated && isChatOpen && (
-            <Box component={motion.div} initial={{ width: 0 }} animate={{ width: chatSidebarWidthDefault }} exit={{ width: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }} sx={{ width: chatSidebarWidthDefault, minHeight: '100vh', backgroundColor: 'background.paper', borderLeft: 1, borderColor: 'divider', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', position: isMobile ? 'fixed' : 'relative', right: isMobile ? 0 : 'auto', top: isMobile ? 0 : 'auto', zIndex: isMobile ? 1200 : 'auto', overflow: 'hidden' }} className="chat-sidebar">
+            <>
+            {!isMobile && (
+              <Box onMouseDown={onResizeMouseDown} sx={{ width: 6, height: '100vh', cursor: 'col-resize', backgroundColor: 'transparent', '&:hover': { backgroundColor: 'action.hover' } }} title="チャット幅をドラッグで調整" />
+            )}
+            <Box component={motion.div} initial={{ width: 0 }} animate={{ width: isMobile ? '100%' : chatWidth }} exit={{ width: 0 }} transition={{ duration: 0.2, ease: 'easeInOut' }} sx={{ width: isMobile ? '100%' : chatWidth, height: '100vh', backgroundColor: 'background.paper', borderLeft: 1, borderColor: 'divider', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', position: isMobile ? 'fixed' : 'relative', right: isMobile ? 0 : 'auto', top: isMobile ? 0 : 'auto', zIndex: isMobile ? 1200 : 'auto', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="chat-sidebar">
               {/* Chat Header */}
               <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
@@ -336,6 +379,7 @@ const Layout: React.FC = () => {
                 />
               </Box>
             </Box>
+            </>
           )}
         </AnimatePresence>
 
