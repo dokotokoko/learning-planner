@@ -147,3 +147,6 @@ Thumbs.db
 *.srl
 
 certs/**
+
+# ChatGPTとの会話ログなど
+logs_chat/
