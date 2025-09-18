@@ -1,4 +1,4 @@
-"""
+        """
 対話エージェントの統合制御モジュール（Phase 1: モック版）
 すべてのコンポーネントを統合して対話フローを制御
 """
@@ -150,22 +150,19 @@ class ConversationOrchestrator:
         user_id: Optional[int],
         conversation_id: Optional[str]
     ) -> StateSnapshot:
+        """状態抽出フェーズ（会話履歴ベース）"""
         
-        # プロジェクト情報のログ出力（デバッグ用）
-        if project_context:
-            logger.info(f"プロジェクト情報: theme={project_context.get('theme')}, "
-                       f"question={project_context.get('question')}, "
-                       f"id={project_context.get('id')}")
-        else:
-            logger.warning("プロジェクト情報が提供されていません")
+        # プロジェクト情報は使用しない（会話履歴から推測）
+        logger.info("会話履歴ベースの状態抽出を開始")
         
         # モックモードの場合はヒューリスティック処理を使用
         use_llm = not self.use_mock and self.llm_client is not None
         
         state = self.state_extractor.extract_from_history(
             conversation_history,
-            project_context,
+            None,  # プロジェクト情報は渡さない
             use_llm=use_llm,
+            minimal_mode=True  # 必須フィールドに限定
             mock_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
         )
         
@@ -174,20 +171,15 @@ class ConversationOrchestrator:
         state.conversation_id = conversation_id
         state.turn_index = len(conversation_history)
         
-        # プロジェクト情報が確実に設定されているか確認
-        if project_context:
-            if not state.project_context:
-                state.project_context = project_context
-            if not state.project_id:
-                state.project_id = project_context.get('id')
-            # goalが空でthemeがある場合は設定
-            if not state.goal and project_context.get('theme'):
-                state.goal = project_context['theme']
-                if project_context.get('question'):
-                    state.goal = f"{project_context['theme']} - {project_context['question']}"
+        # 会話履歴から目標を推測（簡易実装）
+        if not state.goal and conversation_history:
+            # 最初のユーザーメッセージから目標を推測
+            for msg in conversation_history:
+                if msg.get('sender') == 'user':
+                    state.goal = msg['message'][:100]  # 最初の100文字を暫定的な目標とする
+                    break
         
-        logger.info(f"状態抽出完了: goal={state.goal}, blockers={len(state.blockers)}, "
-                   f"project_id={state.project_id}")
+        logger.info(f"状態抽出完了: goal={state.goal}, blockers={len(state.blockers)}")
         
         return state
     
@@ -201,10 +193,9 @@ class ConversationOrchestrator:
         conversation_history: List[Dict[str, str]]
     ) -> Optional[ProjectPlan]:
         
-        # プロジェクト情報がない場合はスキップ
-        if not state.project_context:
-            logger.info("プロジェクト情報がないため、計画思考フェーズをスキップ")
-            return None
+        # 会話履歴ベースモードでは計画思考をスキップ
+        logger.info("会話履歴ベースモードのため、計画思考フェーズをスキップ")
+        return None
         
         # モックモードの場合はルールベース処理を使用
         use_llm = not self.use_mock and self.llm_client is not None
@@ -358,6 +349,7 @@ class ConversationOrchestrator:
                 {"role": "user", "content": prompt}
             ]
             
+            response = self.llm_client.generate_response(messages)
             response = self.llm_client.generate_response(messages)
             result = json.loads(response)
             
