@@ -17,156 +17,50 @@ class learning_plannner():
         
         self.client = OpenAI(api_key=api_key)
 
-    def generate_response(self, prompt, user_input):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": user_input}
-            ]
-        )
-        return response.choices[0].message.content
-    
-    def make_object_from_interest(self, interest:str):
-        #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{system_prompt}"}]
-
-        #DBから取得した興味関心を渡して応答を取得
-        messages.append({
-            "role": "user",
-            "content": f"{interest}。"
-            #"content": f"{interest}. Please ask a question to turn this interest into a concrete goal."
-        })
-
-        final_response = None #最終的な決定（目標）を保持する変数を作成
-
-        #LLMとの対話を開始
-        for i in range(2):
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages
-            )
-
-            got_response = response.choices[0].message.content
-            print(f"AI Planner: {got_response}")
-
-            messages.append({
-                "role": "assistant",
-                "content": got_response
-            })
-
-            final_response = got_response
-
-            #最終ラウンド以外の場合は、ユーザーからの応答を受け取る
-            if i < 2:
-                user_input =  input("You： ")
-                messages.append({
-                    "role": "user",
-                    "content": user_input
-                })
+    def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7, max_tokens: int = None) -> str:
+        """
+        統合された対話関数（履歴ベース）
         
-        return final_response
-    
-    def make_goal_from_object(self, object:str):
-        #対話履歴の初期化
-        messages=[{"role": "developer", "content": f"{system_prompt}"}]
-
-        #DBから取得した興味関心を渡して応答を取得
-        messages.append({
-            "role": "user",
-            "content": f"{object}。この目的を元に探究学習の目標を言語化するサポートになる質問をしてください。"
-            #"content": f"{interest}. Please ask a question to turn this interest into a concrete goal."
-        })
-
-        final_response = None #最終的な決定（目標）を保持する変数を作成
-
-        #LLMとの対話を開始
-        for i in range(2):
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages
-            )
-
-            got_response = response.choices[0].message.content
-            print(f"AI Planner: {got_response}")
-
-            messages.append({
-                "role": "assistant",
-                "content": got_response
-            })
-
-            final_response = got_response
-
-            #最終ラウンド以外の場合は、ユーザーからの応答を受け取る
-            if i < 2:
-                user_input =  input("You： ")
-                messages.append({
-                    "role": "user",
-                    "content": user_input
-                })
+        Args:
+            messages: 必須。[{"role": "system/user/assistant", "content": "..."}]
+            temperature: 応答の創造性（0.0-1.0）
+            max_tokens: 最大トークン数
+            
+        Returns:
+            str: 生成された応答テキスト
+        """
+        request_params = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature
+        }
         
-        return final_response
-    
-    #LLMで学習計画を自動作成する関数
-    def make_learning_plan(self, goal:str):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "developer", "content": f"{system_prompt}"},
-                {
-                    "role": "user",
-                    "content": f"{goal}。この目標に取り組む3ステップの学習計画を提案してください。"
-                    #"content": f"{goal}. Please propose a 3-step study plan for this learning goal. Additionally, summarize it in 3 simple and concise bullet points for easy reading."
-                }
-            ]
-        )
+        if max_tokens is not None:
+            request_params["max_tokens"] = max_tokens
+            
+        response = self.client.chat.completions.create(**request_params)
 
         return response.choices[0].message.content
     
-    #学習記録を元にアドバイスを自動作成する
-    def get_advise(self, log:str):
+    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
+        """
+        WebSearch機能付きレスポンス生成
         
-        #対話履歴の初期化
-        messages=[{"role": "developer", "content": system_prompt}]
-
-        messages.append({"role": "user", "content": f"{log}。Please advise to user's today's learning and encourage."})
-
-        response = self.client.chat.completions.create(
-            model = self.model,
-            messages=messages
-        )
-
-        #作成したアドバイスを記録する
-        messages.append({"role": "assistant", "content": response.choices[0].message.content})
-
-        return response.choices[0].message.content
-
-    def handle_general_inquiry(self, user_input: str, history: list = None):
-        if history is None:
-            messages = [{"role": "system", "content": system_prompt}]
-        else:
-            messages = history
-        
-        messages.append({"role": "user", "content": user_input})
-
-        response = self.client.chat.completions.create(
+        Args:
+            messages: メッセージ履歴
+            
+        Returns:
+            WebSearch結果を含むLLMからの応答
+        """
+        input_items = self._to_input_items(messages)
+        resp = self.client.responses.create(
             model=self.model,
-            messages=messages
+            input=input_items,
+            tools=[{"type": "web_search_preview"}],
+            store=True,
         )
-        
-        assistant_response = response.choices[0].message.content
-        messages.append({"role": "assistant", "content": assistant_response})
-        
-        return assistant_response, messages
-
-    def generate_response_with_history(self, messages: list):
-        """対話履歴を考慮してLLMから応答を生成"""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages
-        )
-        return response.choices[0].message.content
-
+        return resp.output_text
+    
     def _to_input_items(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Chat Completionsの messages([{role, content:str|list}]) を
@@ -183,20 +77,3 @@ class learning_plannner():
                 parts = [{"type": "input_text", "text": str(c)}]
             items.append({"role": m["role"], "content": parts})
         return items
-
-    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
-        """
-        DBから復元した会話履歴（system→過去→今回user）をそのまま渡す版。
-        例: [{"role":"system","content":"..."},
-             {"role":"user","content":"..."},
-             {"role":"assistant","content":"..."},
-             {"role":"user","content":"..."}]
-        """
-        input_items = self._to_input_items(messages)
-        resp = self.client.responses.create(
-            model=self.model,
-            input=input_items,
-            tools=[{"type": "web_search_preview"}],  # "web_search" → "web_search_preview"に修正
-            store=True,
-        )
-        return resp.output_text

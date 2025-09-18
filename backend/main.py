@@ -29,6 +29,30 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from module.llm_api import learning_plannner
 from prompt.prompt import system_prompt
 
+# 並列処理・非同期処理統合のためのインポート
+from backend.async_helpers import (
+    AsyncDatabaseHelper,
+    AsyncProjectContextBuilder,
+    parallel_fetch_context_and_history,
+    parallel_save_chat_logs
+)
+from module.async_llm_api import get_async_llm_client
+from backend.optimized_endpoints import optimized_chat_with_ai
+from backend.optimized_conversation_agent import optimized_chat_with_conversation_agent
+
+# Phase 1: プール機能インポート（既存システムとの完全互換性保持）
+try:
+    from backend.phase1_llm_system import (
+        get_phase1_manager,
+        safe_generate_response,
+        log_system_status
+    )
+    PHASE1_AVAILABLE = True
+    logger.info("✅ Phase 1プール機能モジュールが利用可能です")
+except ImportError as e:
+    PHASE1_AVAILABLE = False
+    logger.info(f"ℹ️ Phase 1プール機能は無効です: {e}")
+
 # ロギング設定（デバッグ用）
 logging.basicConfig(
     level=logging.INFO,  # DEBUG用にINFOレベルに変更
@@ -343,6 +367,10 @@ class AdminUserCreate(BaseModel):
 llm_client = None
 supabase: Client = None
 # memory_manager: MemoryManager = None  # 使用しない
+async_llm_client = None  # 非同期LLMクライアント
+
+# Phase 1: プール管理システム（既存のllm_clientは完全に維持）
+phase1_llm_manager = None  # Phase 1 プール管理システム（追加）
 
 # Phase 1: 対話エージェント
 conversation_orchestrator = None
@@ -350,7 +378,7 @@ conversation_orchestrator = None
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化（最適化版）"""
-    global llm_client, supabase, conversation_orchestrator
+    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client
     
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
@@ -364,6 +392,31 @@ async def startup_event():
         
         # LLMクライアント初期化
         llm_client = learning_plannner()
+        
+        # === Phase 1: プール管理システム初期化（追加）===
+        if PHASE1_AVAILABLE:
+            try:
+                # Phase 1システムの初期化（既存のllm_clientを使用）
+                phase1_llm_manager = await get_phase1_manager()
+                await phase1_llm_manager.initialize(existing_legacy_client=llm_client)
+                
+                # 初期化状況をログ出力
+                if os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true":
+                    logger.info("✅ Phase 1: プール機能が有効化されました")
+                else:
+                    logger.info("ℹ️ Phase 1: プール機能は無効です（既存システムを使用）")
+                    
+            except Exception as e:
+                logger.error(f"⚠️ Phase 1初期化エラー（既存システムで継続）: {e}")
+                phase1_llm_manager = None
+        
+        # 非同期LLMクライアントの初期化
+        try:
+            async_llm_client = get_async_llm_client(pool_size=10)
+            logger.info("✅ 非同期LLMクライアント初期化完了")
+        except Exception as e:
+            logger.error(f"❌ 非同期LLMクライアント初期化エラー: {e}")
+            async_llm_client = None
         
         # Phase 1: 対話エージェント初期化
         if ENABLE_CONVERSATION_AGENT and CONVERSATION_AGENT_AVAILABLE:
@@ -626,14 +679,44 @@ async def chat_with_ai(
     current_user: int = Depends(get_current_user_cached)
 ):
     """AIとのチャット（最適化版）"""
-    try:
-        validate_supabase()
+    # 最適化フラグ（環境変数で制御可能）
+    use_optimized = os.environ.get("USE_OPTIMIZED_CHAT", "true").lower() == "true"
+    
+    if use_optimized and async_llm_client:
+        # 最適化版を使用
+        result = await optimized_chat_with_ai(
+            chat_data=chat_data,
+            current_user=current_user,
+            supabase=supabase,
+            llm_client=llm_client,
+            conversation_orchestrator=conversation_orchestrator,
+            ENABLE_CONVERSATION_AGENT=ENABLE_CONVERSATION_AGENT,
+            MAX_CHAT_MESSAGE_LENGTH=MAX_CHAT_MESSAGE_LENGTH
+        )
         
-        if llm_client is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="LLMクライアントが初期化されていません"
-            )
+        # 既存のChatResponseモデルに変換
+        return ChatResponse(
+            response=result.response,
+            timestamp=result.timestamp,
+            token_usage=result.token_usage,
+            context_metadata=result.context_metadata,
+            support_type=result.support_type,
+            selected_acts=result.selected_acts,
+            state_snapshot=result.state_snapshot,
+            project_plan=result.project_plan,
+            decision_metadata=result.decision_metadata,
+            metrics=result.metrics
+        )
+    else:
+        # 既存の処理にフォールバック
+        try:
+            validate_supabase()
+            
+            if llm_client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="LLMクライアントが初期化されていません"
+                )
         
         # conversationを取得または作成
         # page_idが送られてきた場合はそれを使用、なければpageを使用
@@ -830,19 +913,64 @@ async def chat_with_ai(
                 
             except Exception as e:
                 logger.error(f"❌ 対話エージェント処理エラー、従来処理にフォールバック: {e}")
-                # エラー時は従来の処理にフォールバック
-                response = llm_client.generate_response_with_history(messages)
+                
+                # Phase 1システムが利用可能かチェック（フォールバック処理）
+                fallback_use_phase1 = (
+                    PHASE1_AVAILABLE and
+                    phase1_llm_manager is not None and 
+                    phase1_llm_manager._initialized and
+                    os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true"
+                )
+                
+                if fallback_use_phase1:
+                    try:
+                        # Phase 1システムでフォールバック処理
+                        response = await phase1_llm_manager.generate_response(messages)
+                        logger.debug("✅ Phase 1システムでフォールバック処理完了")
+                    except Exception as phase1_fallback_error:
+                        logger.warning(f"⚠️ Phase 1フォールバックもエラー、最終的に既存システム使用: {phase1_fallback_error}")
+                        # 最終フォールバック: 既存処理を実行
+                        response = llm_client.generate_response(messages)
+                else:
+                    # エラー時は従来の処理にフォールバック（既存コード保持）
+                    response = llm_client.generate_response(messages)
+                
                 ai_context_data = {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "has_project_context": bool(project_context),
-                    "conversation_agent_error": str(e)
+                    "conversation_agent_error": str(e),
+                    "fallback_phase1_used": fallback_use_phase1 if 'fallback_use_phase1' in locals() else False
                 }
         else:
-            # 従来の処理
-            response = llm_client.generate_response_with_history(messages)
+            # === Phase 1: 拡張LLM処理（既存処理を完全保持）===
+            
+            # Phase 1システムが利用可能かチェック
+            use_phase1 = (
+                PHASE1_AVAILABLE and
+                phase1_llm_manager is not None and 
+                phase1_llm_manager._initialized and
+                os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true"
+            )
+            
+            if use_phase1:
+                try:
+                    # Phase 1システムを使用（プール機能付き）
+                    response = await phase1_llm_manager.generate_response(messages)
+                    logger.debug("✅ Phase 1システムで処理完了")
+                    
+                except Exception as phase1_error:
+                    logger.warning(f"⚠️ Phase 1システムエラー、既存システムにフォールバック: {phase1_error}")
+                    # フォールバック: 既存処理を実行
+                    response = llm_client.generate_response(messages)
+                    
+            else:
+                # 従来の処理（既存コード完全保持）
+                response = llm_client.generate_response(messages)
+            
             ai_context_data = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "has_project_context": bool(project_context)
+                "has_project_context": bool(project_context),
+                "phase1_used": use_phase1 if 'use_phase1' in locals() else False
             }
         
         # トークン使用量を計算（使用しない）
@@ -871,21 +999,21 @@ async def chat_with_ai(
         
         # トークン使用履歴を記録（使用しない）
         
-        return ChatResponse(
-            response=response,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            token_usage=token_usage,
-            context_metadata=context_metadata,
-            **agent_payload
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Chat API Error: {str(e)}")
-        print(f"Error type: {type(e)}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        handle_database_error(e, "AI応答の生成")
+            return ChatResponse(
+                response=response,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                token_usage=token_usage,
+                context_metadata=context_metadata,
+                **agent_payload
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Chat API Error: {str(e)}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            handle_database_error(e, "AI応答の生成")
 
 @app.get("/chat/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(
@@ -1398,7 +1526,23 @@ async def generate_theme_suggestions(
             {"role": "user", "content": user_prompt}
         ]
         
-        response = llm_client.generate_response_with_history(messages)
+        # Phase 1統合: テーマ深掘り機能でもプール機能を使用
+        use_phase1_theme = (
+            PHASE1_AVAILABLE and
+            phase1_llm_manager is not None and 
+            phase1_llm_manager._initialized and
+            os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true"
+        )
+        
+        if use_phase1_theme:
+            try:
+                response = await phase1_llm_manager.generate_response(messages)
+                logger.debug("✅ テーマ深掘り機能でPhase 1システム使用")
+            except Exception as theme_phase1_error:
+                logger.warning(f"⚠️ テーマ深掘り機能Phase 1エラー、既存システム使用: {theme_phase1_error}")
+                response = llm_client.generate_response(messages)
+        else:
+            response = llm_client.generate_response(messages)
         
         # 応答のパース（最適化：効率的な正規表現）
         import re
@@ -1889,7 +2033,7 @@ async def chat_with_conversation_agent(
     current_user: int = Depends(get_current_user_cached)
 ):
     """
-    対話エージェント検証用エンドポイント
+    対話エージェント検証用エンドポイント（最適化版）
     
     通常の /chat エンドポイントから分離された、conversation_agent の機能を
     独立して検証するための専用エンドポイントです。
@@ -1900,10 +2044,41 @@ async def chat_with_conversation_agent(
     - モック/実モードの切り替え可能
     - エラーハンドリングの強化
     """
-    start_time = time.time()
+    use_optimized = os.environ.get("USE_OPTIMIZED_AGENT", "true").lower() == "true"
     
-    try:
-        validate_supabase()
+    if use_optimized:
+        result = await optimized_chat_with_conversation_agent(
+            request=request,
+            current_user=current_user,
+            supabase=supabase,
+            llm_client=llm_client,
+            conversation_orchestrator=conversation_orchestrator,
+            CONVERSATION_AGENT_AVAILABLE=CONVERSATION_AGENT_AVAILABLE,
+            ENABLE_CONVERSATION_AGENT=ENABLE_CONVERSATION_AGENT
+        )
+        
+        # 既存のConversationAgentResponseモデルに変換
+        return ConversationAgentResponse(
+            response=result.response,
+            timestamp=result.timestamp,
+            support_type=result.support_type,
+            selected_acts=result.selected_acts,
+            state_snapshot=result.state_snapshot,
+            project_plan=result.project_plan,
+            decision_metadata=result.decision_metadata,
+            metrics=result.metrics,
+            debug_info=result.debug_info,
+            conversation_id=result.conversation_id,
+            history_count=result.history_count,
+            error=result.error,
+            warning=result.warning
+        )
+    else:
+        # 既存の処理にフォールバック
+        start_time = time.time()
+        
+        try:
+            validate_supabase()
         
         # エージェントの可用性チェック
         if not CONVERSATION_AGENT_AVAILABLE:
@@ -2105,26 +2280,26 @@ async def chat_with_conversation_agent(
                 warning="エージェント処理中にエラーが発生しました",
                 conversation_id=conversation_id,
                 history_count=len(conversation_history) if 'conversation_history' in locals() else 0
-            )
+                )
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ エンドポイントエラー: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ エンドポイントエラー: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        return ConversationAgentResponse(
-            response="システムエラーが発生しました。",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            support_type="error",
-            selected_acts=[],
-            state_snapshot={},
-            decision_metadata={},
-            metrics={"error": "system_error", "processing_time_ms": int((time.time() - start_time) * 1000)},
-            error=f"System error: {str(e)}",
-            history_count=0
-        )
+            return ConversationAgentResponse(
+                response="システムエラーが発生しました。",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                support_type="error",
+                selected_acts=[],
+                state_snapshot={},
+                decision_metadata={},
+                metrics={"error": "system_error", "processing_time_ms": int((time.time() - start_time) * 1000)},
+                error=f"System error: {str(e)}",
+                history_count=0
+            )
 
 @app.get("/conversation-agent/status")
 async def get_conversation_agent_status(
@@ -2313,6 +2488,108 @@ async def cleanup_test_users():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"テストユーザー削除でエラーが発生しました: {str(e)}"
         )
+
+# =============================================
+# Phase 1: メトリクス・監視エンドポイント
+# =============================================
+
+@app.get("/metrics/llm-system")
+async def get_llm_system_metrics(
+    current_user: int = Depends(get_current_user_cached)
+):
+    """Phase 1 LLMシステムのメトリクス取得"""
+    try:
+        if PHASE1_AVAILABLE and phase1_llm_manager and phase1_llm_manager._initialized:
+            metrics = phase1_llm_manager.get_metrics()
+            health = phase1_llm_manager.health_check()
+            
+            return {
+                "phase1_system": {
+                    "metrics": metrics,
+                    "health": health,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                "legacy_system": {
+                    "available": llm_client is not None,
+                    "class": llm_client.__class__.__name__ if llm_client else None
+                }
+            }
+        else:
+            return {
+                "phase1_system": {
+                    "status": "not_initialized" if PHASE1_AVAILABLE else "not_available",
+                    "message": "Phase 1システムが初期化されていません" if PHASE1_AVAILABLE else "Phase 1システムが利用不可です"
+                },
+                "legacy_system": {
+                    "available": llm_client is not None,
+                    "status": "active",
+                    "message": "既存システムのみ動作中"
+                }
+            }
+            
+    except Exception as e:
+        logger.error(f"メトリクス取得エラー: {e}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+@app.get("/debug/llm-system")
+async def debug_llm_system(
+    current_user: int = Depends(get_current_user_cached)
+):
+    """Phase 1 LLMシステムのデバッグ情報"""
+    debug_info = {
+        "environment_variables": {
+            "ENABLE_LLM_POOL": os.environ.get("ENABLE_LLM_POOL", "false"),
+            "LLM_POOL_SIZE": os.environ.get("LLM_POOL_SIZE", "5"),
+            "LLM_POOL_TIMEOUT": os.environ.get("LLM_POOL_TIMEOUT", "30.0"),
+            "LLM_AUTO_FALLBACK": os.environ.get("LLM_AUTO_FALLBACK", "true"),
+            "LLM_POOL_DEBUG": os.environ.get("LLM_POOL_DEBUG", "false")
+        },
+        "system_status": {
+            "phase1_available": PHASE1_AVAILABLE,
+            "phase1_manager_exists": phase1_llm_manager is not None,
+            "phase1_initialized": phase1_llm_manager._initialized if phase1_llm_manager else False,
+            "legacy_client_exists": llm_client is not None,
+            "current_time": datetime.now(timezone.utc).isoformat()
+        }
+    }
+    
+    # メトリクス情報を追加
+    if PHASE1_AVAILABLE and phase1_llm_manager and phase1_llm_manager._initialized:
+        try:
+            debug_info["detailed_metrics"] = phase1_llm_manager.get_metrics()
+            debug_info["health_check"] = phase1_llm_manager.health_check()
+        except Exception as e:
+            debug_info["metrics_error"] = str(e)
+    
+    return debug_info
+
+@app.post("/admin/llm-system/log-status")
+async def log_llm_system_status(
+    current_user: int = Depends(get_current_user_cached)
+):
+    """LLMシステムの状態をログに出力（管理者用）"""
+    try:
+        if PHASE1_AVAILABLE:
+            log_system_status()
+            return {
+                "message": "Phase 1システム状態をログに出力しました",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        else:
+            logger.info("📊 LLMシステム状態: Phase 1は利用不可、既存システムのみ動作中")
+            return {
+                "message": "Phase 1は利用不可、既存システムのみ動作中",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    except Exception as e:
+        logger.error(f"ログ出力エラー: {e}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
 
 if __name__ == "__main__":
     # 本番環境用の設定

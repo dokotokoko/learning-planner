@@ -81,7 +81,7 @@ class ProjectPlanner:
             {"role": "user", "content": prompt}
         ]
         
-        response = self.llm_client.generate_response_with_history(messages)
+        response = self.llm_client.generate_response(messages)
         
         # JSON解析と検証
         try:
