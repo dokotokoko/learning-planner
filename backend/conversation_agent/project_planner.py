@@ -5,96 +5,37 @@ AIエージェントが探究学習プロジェクトに対して最適な計画
 
 import json
 import logging
+import sys
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from .schema import StateSnapshot, ProjectPlan, NextAction, Milestone
+
+# prompt.pyへのパスを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from prompt.prompt import PLAN_GENERATION_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class ProjectPlanner:
     """プロジェクト計画思考エンジン"""
-    
-    # プロジェクト計画生成用プロンプトテンプレート
-    PLAN_GENERATION_PROMPT = """あなたは探究学習の専門家AIです。生徒のプロジェクト情報と状態を分析し、最適な学習計画を立ててください。
 
-## 生徒の状態
-ゴール: {goal}
-目的: {purpose}
-
-## プロジェクト情報
-テーマ: {theme}
-問い: {question}
-仮説: {hypothesis}
-
-## 会話履歴の要約
-{conversation_summary}
-
-## 要求される計画要素
-
-1. 北極星（最重要指標）- このプロジェクトで最も重要な成果指標
-2. 北極星の測定方法 - どのように成果を測定するか
-3. 重要なマイルストーン（3-5個）- ゴール達成までの重要な節目
-4. 今取るべき行動（5個以内）- 緊急度と重要度を考慮した最優先行動
-5. 戦略的アプローチ - 全体的な進め方
-6. リスク要因 - 想定される障害やリスク
-
-## 出力形式（JSON）
-{{
-  "north_star": "最重要指標（具体的で測定可能）",
-  "north_star_metric": "測定方法",
-  "milestones": [
-    {{
-      "title": "マイルストーン名",
-      "description": "詳細説明",
-      "target_date": "目標時期（相対的表現）",
-      "success_criteria": ["成功基準1", "成功基準2"],
-      "order": 1
-    }}
-  ],
-  "next_actions": [
-    {{
-      "action": "具体的な行動",
-      "urgency": 緊急度(1-5),
-      "importance": 重要度(1-5),
-      "reason": "理由",
-      "expected_outcome": "期待される成果"
-    }}
-  ],
-  "strategic_approach": "戦略的アプローチ",
-  "risk_factors": ["リスク1", "リスク2"]
-}}
-
-注意事項:
-- 高校生レベルに適した実行可能な計画にする
-- 緊急度×重要度が高い順にnext_actionsを並べる
-- 具体的で測定可能な指標を設定する
-- 探究学習の本質（問いを立て、仮説を検証する）を重視する
-"""
-
+    # <summary>ProjectPlannerクラスを初期化します。</summary>
+    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
     def __init__(self, llm_client=None):
-        """
-        Args:
-            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
-        """
         self.llm_client = llm_client
     
+    # <summary>プロジェクト計画を生成します。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <arg name="use_llm">LLMを使用するか。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def generate_project_plan(
         self,
         state: StateSnapshot,
         conversation_history: List[Dict[str, str]],
         use_llm: bool = True
     ) -> ProjectPlan:
-        """
-        プロジェクト計画を生成
-        
-        Args:
-            state: 学習者の状態
-            conversation_history: 会話履歴
-            use_llm: LLMを使用するか
-            
-        Returns:
-            ProjectPlan: 生成されたプロジェクト計画
-        """
         
         if use_llm and self.llm_client:
             try:
@@ -105,12 +46,15 @@ class ProjectPlanner:
         else:
             return self._generate_rule_based(state)
     
+    # <summary>LLMを使用して計画を生成します。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def _generate_with_llm(
         self,
         state: StateSnapshot,
         conversation_history: List[Dict[str, str]]
     ) -> ProjectPlan:
-        """LLMを使用した計画生成"""
         
         # プロジェクト情報の抽出
         project_context = state.project_context or {}
@@ -122,7 +66,7 @@ class ProjectPlanner:
         conversation_summary = self._summarize_conversation(conversation_history)
         
         # プロンプト生成
-        prompt = self.PLAN_GENERATION_PROMPT.format(
+        prompt = PLAN_GENERATION_PROMPT.format(
             goal=state.goal or theme,
             purpose=state.purpose or question,
             theme=theme,
@@ -148,8 +92,10 @@ class ProjectPlanner:
             logger.error(f"LLM計画応答のJSON解析エラー: {e}")
             raise
     
+    # <summary>ルールベースで計画を生成します（フォールバック用）。</summary>
+    # <arg name="state">学習者の状態。</arg>
+    # <returns>生成されたプロジェクト計画。</returns>
     def _generate_rule_based(self, state: StateSnapshot) -> ProjectPlan:
-        """ルールベースの計画生成（フォールバック用）"""
         
         project_context = state.project_context or {}
         theme = project_context.get('theme', '探究プロジェクト')
@@ -237,8 +183,10 @@ class ProjectPlanner:
             confidence=0.6
         )
     
+    # <summary>計画データを検証しProjectPlanオブジェクトを作成します。</summary>
+    # <arg name="plan_dict">計画データの辞書。</arg>
+    # <returns>検証済みのProjectPlanオブジェクト。</returns>
     def _validate_and_create_plan(self, plan_dict: Dict[str, Any]) -> ProjectPlan:
-        """計画データの検証とProjectPlanオブジェクト作成"""
         
         # 必須フィールドの確認
         required_fields = ['north_star', 'north_star_metric', 'milestones', 'next_actions', 'strategic_approach']
@@ -284,8 +232,10 @@ class ProjectPlanner:
             confidence=0.8
         )
     
+    # <summary>会話履歴を要約します。</summary>
+    # <arg name="conversation_history">会話履歴のリスト。</arg>
+    # <returns>要約された会話履歴の文字列。</returns>
     def _summarize_conversation(self, conversation_history: List[Dict[str, str]]) -> str:
-        """会話履歴を要約"""
         
         if not conversation_history:
             return "会話履歴なし"
@@ -301,13 +251,17 @@ class ProjectPlanner:
         
         return "\n".join(summary_lines)
     
+    # <summary>フィードバックに基づいて計画を更新します。</summary>
+    # <arg name="original_plan">元のプロジェクト計画。</arg>
+    # <arg name="feedback">フィードバック文字列。</arg>
+    # <arg name="conversation_history">会話履歴。</arg>
+    # <returns>更新されたプロジェクト計画。</returns>
     def update_plan_based_on_feedback(
         self,
         original_plan: ProjectPlan,
         feedback: str,
         conversation_history: List[Dict[str, str]]
     ) -> ProjectPlan:
-        """フィードバックに基づいて計画を更新"""
         
         # TODO: Phase 2で実装 - フィードバックに基づく計画の動的更新
         logger.info(f"計画更新要求: {feedback}")
@@ -315,8 +269,11 @@ class ProjectPlanner:
         # 現在は元の計画をそのまま返す
         return original_plan
     
+    # <summary>計画の質を評価します。</summary>
+    # <arg name="plan">評価するプロジェクト計画。</arg>
+    # <arg name="state">学習者の状態。</arg>
+    # <returns>計画の質スコア（0.0-1.0）。</returns>
     def calculate_plan_score(self, plan: ProjectPlan, state: StateSnapshot) -> float:
-        """計画の質を評価"""
         
         score = 0.0
         

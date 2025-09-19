@@ -39,12 +39,28 @@ class learning_plannner():
             request_params["max_tokens"] = max_tokens
             
         response = self.client.chat.completions.create(**request_params)
+
         return response.choices[0].message.content
     
-    def generate_response_with_history(self, messages: list):
-        """後方互換性のためのラッパー関数"""
-        return self.generate_response(messages)
-
+    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
+        """
+        WebSearch機能付きレスポンス生成
+        
+        Args:
+            messages: メッセージ履歴
+            
+        Returns:
+            WebSearch結果を含むLLMからの応答
+        """
+        input_items = self._to_input_items(messages)
+        resp = self.client.responses.create(
+            model=self.model,
+            input=input_items,
+            tools=[{"type": "web_search_preview"}],
+            store=True,
+        )
+        return resp.output_text
+    
     def _to_input_items(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Chat Completionsの messages([{role, content:str|list}]) を
@@ -61,20 +77,3 @@ class learning_plannner():
                 parts = [{"type": "input_text", "text": str(c)}]
             items.append({"role": m["role"], "content": parts})
         return items
-
-    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
-        """
-        DBから復元した会話履歴（system→過去→今回user）をそのまま渡す版。
-        例: [{"role":"system","content":"..."},
-             {"role":"user","content":"..."},
-             {"role":"assistant","content":"..."},
-             {"role":"user","content":"..."}]
-        """
-        input_items = self._to_input_items(messages)
-        resp = self.client.responses.create(
-            model=self.model,
-            input=input_items,
-            tools=[{"type": "web_search_preview"}],  # "web_search" → "web_search_preview"に修正
-            store=True,
-        )
-        return resp.output_text

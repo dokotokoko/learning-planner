@@ -9,6 +9,7 @@ import { useThemeStore } from './stores/themeStore';
 // 重要なページは静的インポート（初期ロードに必要）
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import ChatPage from './pages/ChatPage';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
@@ -17,22 +18,10 @@ import LoadingScreen from './components/LoadingScreen';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const StepPage = lazy(() => import('./pages/StepPage'));
 const GeneralInquiryPage = lazy(() => import('./pages/GeneralInquiryPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const ProjectPage = lazy(() => import('./pages/ProjectPage'));
 const MemoPage = lazy(() => import('./pages/MemoPage'));
 const MultiMemoPage = lazy(() => import('./pages/MultiMemoPage'));
-const FrameworkGamesPage = lazy(() => import('./pages/FrameworkGamesPage'));
 const NotificationDemoPage = lazy(() => import('./pages/NotificationDemoPage'));
-
-// FrameworkGamesコンポーネントはすべて遅延ローディング
-const FiveWhysGame = lazy(() => import('./components/FrameworkGames/FiveWhysGame'));
-const LogicTreeGame = lazy(() => import('./components/FrameworkGames/LogicTreeGame'));
-const HMWGame = lazy(() => import('./components/FrameworkGames/HMWGame'));
-const ImpactFeasibilityGame = lazy(() => import('./components/FrameworkGames/ImpactFeasibilityGame'));
-const SpeedStormingGame = lazy(() => import('./components/FrameworkGames/SpeedStormingGame'));
-const GalleryWalkGame = lazy(() => import('./components/FrameworkGames/GalleryWalkGame'));
-const MindMapGame = lazy(() => import('./components/FrameworkGames/MindMapGame'));
-const IkigaiGame = lazy(() => import('./components/FrameworkGames/IkigaiGame'));
 const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
 const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTestPage'));
 
@@ -74,7 +63,7 @@ function App() {
         dark: '#00406B',
       },
       background: {
-        default: isDarkMode ? '#121212' : '#f8f9fa',
+        default: '#E0F2F7', // 例: 明るい水色
         paper: isDarkMode ? '#1e1e1e' : '#ffffff',
       },
     },
@@ -159,7 +148,7 @@ function App() {
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/dashboard" replace /> : 
+                  user ? <Navigate to="/chat" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -172,7 +161,8 @@ function App() {
               />
               
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route index element={<Navigate to="/chat" replace />} />
+                <Route path="chat" element={<ChatPage />} />
                 <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
@@ -180,23 +170,13 @@ function App() {
                 <Route path="step/:stepNumber" element={<LazyWrapper><StepPage /></LazyWrapper>} />
                 <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
                 <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
-                <Route path="profile" element={<LazyWrapper><ProfilePage /></LazyWrapper>} />
-                <Route path="framework-games" element={<LazyWrapper><FrameworkGamesPage /></LazyWrapper>} />
                 {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
                 <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
-                <Route path="framework-games/5-whys" element={<LazyWrapper><FiveWhysGame /></LazyWrapper>} />
-                <Route path="framework-games/logic-tree" element={<LazyWrapper><LogicTreeGame /></LazyWrapper>} />
-                <Route path="framework-games/hmw" element={<LazyWrapper><HMWGame /></LazyWrapper>} />
-                <Route path="framework-games/impact-feasibility" element={<LazyWrapper><ImpactFeasibilityGame /></LazyWrapper>} />
-                <Route path="framework-games/speed-storming" element={<LazyWrapper><SpeedStormingGame /></LazyWrapper>} />
-                <Route path="framework-games/gallery-walk" element={<LazyWrapper><GalleryWalkGame /></LazyWrapper>} />
-                <Route path="framework-games/mind-map" element={<LazyWrapper><MindMapGame /></LazyWrapper>} />
-                <Route path="framework-games/ikigai" element={<LazyWrapper><IkigaiGame /></LazyWrapper>} />
                 <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
                 <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
               </Route>
               
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/chat" replace />} />
             </Routes>
           </AnimatePresence>
         </Router>
