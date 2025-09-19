@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from backend.async_helpers import (
+from async_helpers import (
     AsyncDatabaseHelper,
     AsyncProjectContextBuilder,
     parallel_fetch_context_and_history,
@@ -96,7 +96,7 @@ async def optimized_chat_with_conversation_agent(
         if conversation_orchestrator is None:
             try:
                 # 動的インポートで初期化を試みる
-                from backend.conversation_agent import ConversationOrchestrator
+                from conversation_agent import ConversationOrchestrator
                 temp_orchestrator = ConversationOrchestrator(
                     llm_client=llm_client,
                     use_mock=request.mock_mode

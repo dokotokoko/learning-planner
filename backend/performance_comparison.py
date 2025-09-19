@@ -11,8 +11,8 @@ from typing import List, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from module.llm_api import learning_plannner
-from backend.llm_pool_manager import get_llm_pool
-from backend.load_balancer import get_load_balancer, LoadBalanceStrategy
+from llm_pool_manager import get_llm_pool
+from load_balancer import get_load_balancer, LoadBalanceStrategy
 
 logger = logging.getLogger(__name__)
 

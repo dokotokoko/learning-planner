@@ -10,7 +10,7 @@ import logging
 from typing import List, Dict, Any, Optional, Callable
 from enum import Enum
 from dataclasses import dataclass, field
-from backend.llm_pool_manager import LLMConnectionPool, get_llm_pool
+from llm_pool_manager import LLMConnectionPool, get_llm_pool
 
 logger = logging.getLogger(__name__)
 

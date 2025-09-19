@@ -129,8 +129,6 @@ class AsyncLearningPlanner(learning_plannner):
                         
                         yield content
                 
-                return full_content
-                
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

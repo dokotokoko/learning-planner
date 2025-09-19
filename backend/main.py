@@ -30,19 +30,26 @@ from module.llm_api import learning_plannner
 from prompt.prompt import system_prompt
 
 # 並列処理・非同期処理統合のためのインポート
-from backend.async_helpers import (
+from async_helpers import (
     AsyncDatabaseHelper,
     AsyncProjectContextBuilder,
     parallel_fetch_context_and_history,
     parallel_save_chat_logs
 )
 from module.async_llm_api import get_async_llm_client
-from backend.optimized_endpoints import optimized_chat_with_ai
-from backend.optimized_conversation_agent import optimized_chat_with_conversation_agent
+from optimized_endpoints import optimized_chat_with_ai
+from conversation_agent.optimized_conversation_agent import optimized_chat_with_conversation_agent
+
+# ロギング設定（デバッグ用）
+logging.basicConfig(
+    level=logging.INFO,  # DEBUG用にINFOレベルに変更
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Phase 1: プール機能インポート（既存システムとの完全互換性保持）
 try:
-    from backend.phase1_llm_system import (
+    from phase1_llm_system import (
         get_phase1_manager,
         safe_generate_response,
         log_system_status
@@ -53,12 +60,7 @@ except ImportError as e:
     PHASE1_AVAILABLE = False
     logger.info(f"ℹ️ Phase 1プール機能は無効です: {e}")
 
-# ロギング設定（デバッグ用）
-logging.basicConfig(
-    level=logging.INFO,  # DEBUG用にINFOレベルに変更
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+
 
 # =====================
 # Config/Feature flags
@@ -78,7 +80,7 @@ RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("CHAT_RATE_LIMIT_MAX", "20"))
 # Phase 1: AI対話エージェント機能のインポート
 try:
     # 同じディレクトリ内のconversation_agentモジュールからインポート
-    from backend.conversation_agent import ConversationOrchestrator
+    from conversation_agent import ConversationOrchestrator
     CONVERSATION_AGENT_AVAILABLE = True
     logger.info("対話エージェント機能が利用可能です")
 except ImportError:
@@ -717,89 +719,90 @@ async def chat_with_ai(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="LLMクライアントが初期化されていません"
                 )
+            
+            # 独立したAIチャットセッション（ページ非依存）
+            conversation_id = await get_or_create_global_chat_session(current_user)
         
-        # 独立したAIチャットセッション（ページ非依存）
-        conversation_id = await get_or_create_global_chat_session(current_user)
-        
-        # プロジェクト情報はDBから取得せず、会話履歴から推測する方針に変更
-        project_context = None
-        project = None
-        project_id = None
-        
-        logger.info(f"📝 独立 AIチャットモード - ページ非依存セッション")
-        
-        # 過去の対話履歴を取得（最適化：20-30メッセージに制限）
-        history_limit = 30  # 履歴取得を最小限に抑える
-        history_response = supabase.table("chat_logs").select("id, sender, message, created_at").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
-        conversation_history = history_response.data if history_response.data is not None else []
+            # プロジェクト情報はDBから取得せず、会話履歴から推測する方針に変更
+            project_context = None
+            project = None
+            project_id = None
+            
+            logger.info(f"📝 独立 AIチャットモード - ページ非依存セッション")
+            
+            # 過去の対話履歴を取得（最適化：20-30メッセージに制限）
+            history_limit = 30  # 履歴取得を最小限に抑える
+            history_response = supabase.table("chat_logs").select("id, sender, message, created_at").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
+            conversation_history = history_response.data if history_response.data is not None else []
 
-        if conversation_history is None:
-            # エラーログを残す
-            print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
-        
-        # メッセージの準備
-        # システムプロンプトとメッセージを準備（プロジェクト情報は含めない）
-        messages = [{"role": "system", "content": system_prompt}]
-        if conversation_history:  # None または空リストのチェック
-            for history_msg in conversation_history:
-                role = "user" if history_msg["sender"] == "user" else "assistant"
-                messages.append({"role": role, "content": history_msg["message"]})
+            if conversation_history is None:
+                # エラーログを残す
+                print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
+            
+            # メッセージの準備
+            # システムプロンプトとメッセージを準備（プロジェクト情報は含めない）
+            messages = [{"role": "system", "content": system_prompt}]
+            if conversation_history:  # None または空リストのチェック
+                for history_msg in conversation_history:
+                    role = "user" if history_msg["sender"] == "user" else "assistant"
+                    messages.append({"role": role, "content": history_msg["message"]})
 
-        user_message = chat_data.message
-        
-        # Guard: message size limit to protect backend/LLM
-        if user_message is not None and len(user_message) > MAX_CHAT_MESSAGE_LENGTH:
-            raise HTTPException(status_code=400, detail="Message too long")
+            user_message = chat_data.message
+            
+            # Guard: message size limit to protect backend/LLM
+            if user_message is not None and len(user_message) > MAX_CHAT_MESSAGE_LENGTH:
+                raise HTTPException(status_code=400, detail="Message too long")
 
-        messages.append({"role": "user", "content": user_message})
-        context_metadata = None
-        
-        # 保存用のcontext_data作成（独立設計版）
-        context_data_dict = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "session_type": "global_chat",  # 独立チャットセッション
-            "independent": True  # ページ非依存のフラグ
-        }
-        
-        # ユーザーメッセージをDBに保存（独立チャット版）
-        user_message_data = {
-            "user_id": current_user,
-            "page": "global_chat",  # 独立チャットの統一タグ
-            "sender": "user",
-            "message": chat_data.message,
-            "conversation_id": conversation_id,
-            "context_data": json.dumps(context_data_dict, ensure_ascii=False)
-        }
-        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
-        
-        # 従来の処理
-        response = llm_client.generate_response(messages)
-        ai_context_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # トークン使用量を計算（使用しない）
-        token_usage = None
-        
-        ai_message_data = {
-            "user_id": current_user,
-            "page": "global_chat",  # 独立チャットの統一タグ
-            "sender": "assistant",
-            "message": response,
-            "conversation_id": conversation_id,
-            "context_data": json.dumps(ai_context_data, ensure_ascii=False)
-        }
-        await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
-        
-        # conversationの最終更新時刻を更新
-        try:
-            await update_conversation_timestamp(conversation_id)
-        except Exception as e:
-            # タイムスタンプ更新エラーは警告ログのみ（チャット自体は正常に処理）
-            logger.warning(f"conversation timestamp update failed: {e}")
-        
-        # トークン使用履歴を記録（使用しない）
-        
+            messages.append({"role": "user", "content": user_message})
+            context_metadata = None
+            
+            # 保存用のcontext_data作成（独立設計版）
+            context_data_dict = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_type": "global_chat",  # 独立チャットセッション
+                "independent": True  # ページ非依存のフラグ
+            }
+            
+            # ユーザーメッセージをDBに保存（独立チャット版）
+            user_message_data = {
+                "user_id": current_user,
+                "page": "global_chat",  # 独立チャットの統一タグ
+                "sender": "user",
+                "message": chat_data.message,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps(context_data_dict, ensure_ascii=False)
+            }
+            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
+            
+            # agent_payloadを初期化
+            agent_payload = {}
+            
+            # 従来の処理
+            response = llm_client.generate_response(messages)
+            ai_context_data = {
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # トークン使用量を計算（使用しない）
+            token_usage = None
+            
+            ai_message_data = {
+                "user_id": current_user,
+                "page": "global_chat",  # 独立チャットの統一タグ
+                "sender": "assistant",
+                "message": response,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps(ai_context_data, ensure_ascii=False)
+            }
+            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
+            
+            # conversationの最終更新時刻を更新
+            try:
+                await update_conversation_timestamp(conversation_id)
+            except Exception as e:
+                # タイムスタンプ更新エラーは警告ログのみ（チャット自体は正常に処理）
+                logger.warning(f"conversation timestamp update failed: {e}")
+            
             return ChatResponse(
                 response=response,
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -1852,219 +1855,212 @@ async def chat_with_conversation_agent(
     else:
         # 既存の処理にフォールバック
         start_time = time.time()
-        
+
         try:
             validate_supabase()
-        
-        # エージェントの可用性チェック
-        if not CONVERSATION_AGENT_AVAILABLE:
-            return ConversationAgentResponse(
-                response="対話エージェント機能は現在利用できません。モジュールがインポートされていません。",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                support_type="error",
-                selected_acts=[],
-                state_snapshot={},
-                decision_metadata={},
-                metrics={"error": "module_not_available"},
-                error="ConversationAgent module not available",
-                history_count=0
-            )
-        
-        if conversation_orchestrator is None:
-            # オーケストレーターを初期化（リクエストごとに初期化可能）
-            try:
-                temp_orchestrator = ConversationOrchestrator(
-                    llm_client=llm_client,
-                    use_mock=request.mock_mode
-                )
-                logger.info(f"✅ 対話エージェント一時初期化完了（mock={request.mock_mode}）")
-            except Exception as e:
-                logger.error(f"❌ 対話エージェント初期化エラー: {e}")
+
+            # エージェントの可用性チェック
+            if not CONVERSATION_AGENT_AVAILABLE:
                 return ConversationAgentResponse(
-                    response="対話エージェントの初期化に失敗しました。",
+                    response="対話エージェント機能は現在利用できません。モジュールがインポートされていません。",
                     timestamp=datetime.now(timezone.utc).isoformat(),
                     support_type="error",
                     selected_acts=[],
                     state_snapshot={},
                     decision_metadata={},
-                    metrics={"error": "initialization_failed"},
-                    error=f"Initialization error: {str(e)}",
+                    metrics={"error": "module_not_available"},
+                    error="ConversationAgent module not available",
                     history_count=0
                 )
-        else:
-            temp_orchestrator = conversation_orchestrator
-        
-        # ページIDの決定
-        page_id = request.page_id or (f"project-{request.project_id}" if request.project_id else "general")
-        
-        # conversationの取得または作成
-        conversation_id = await get_or_create_conversation(current_user, page_id)
-        
-        # プロジェクト情報の取得
-        project_context = None
-        if request.project_id:
-            # モックモードの場合はダミーのプロジェクト情報を使用
-            if request.mock_mode:
-                project_context = {
-                    "theme": "AI技術の教育への応用",
-                    "question": "AIを活用した個別最適化学習システムはどのように学習効果を向上させるか？",
-                    "hypothesis": "AIが学習者の理解度と学習パターンを分析することで、個別に最適化された学習経験を提供し、学習効果を向上させる",
-                    "id": request.project_id
-                }
-                logger.info(f"✅ モックプロジェクト情報使用: {project_context['theme']}")
-            else:
+
+            # オーケストレーターの用意
+            if conversation_orchestrator is None:
                 try:
-                    project_result = supabase.table('projects').select('*').eq('id', request.project_id).eq('user_id', current_user).execute()
-                    if project_result.data:
-                        project = project_result.data[0]
-                        project_context = {
-                            "theme": project.get('theme'),
-                            "question": project.get('question'),
-                            "hypothesis": project.get('hypothesis'),
-                            "id": request.project_id
-                        }
-                        logger.info(f"✅ プロジェクト情報取得成功: {project['theme']}")
+                    temp_orchestrator = ConversationOrchestrator(
+                        llm_client=llm_client,
+                        use_mock=request.mock_mode
+                    )
+                    logger.info(f"✅ 対話エージェント一時初期化完了（mock={request.mock_mode}）")
                 except Exception as e:
-                    logger.warning(f"⚠️ プロジェクト情報取得失敗: {e}")
-        
-        # 対話履歴の取得
-        conversation_history = []
-        if request.include_history:
+                    logger.error(f"❌ 対話エージェント初期化エラー: {e}")
+                    return ConversationAgentResponse(
+                        response="対話エージェントの初期化に失敗しました。",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        support_type="error",
+                        selected_acts=[],
+                        state_snapshot={},
+                        decision_metadata={},
+                        metrics={"error": "initialization_failed"},
+                        error=f"Initialization error: {str(e)}",
+                        history_count=0
+                    )
+            else:
+                temp_orchestrator = conversation_orchestrator
+
+            # ページIDの決定
+            page_id = request.page_id or (f"project-{request.project_id}" if request.project_id else "general")
+
+            # conversationの取得または作成
+            conversation_id = await get_or_create_conversation(current_user, page_id)
+
+            # プロジェクト情報の取得
+            project_context = None
+            if request.project_id:
+                if request.mock_mode:
+                    project_context = {
+                        "theme": "AI技術の教育への応用",
+                        "question": "AIを活用した個別最適化学習システムはどのように学習効果を向上させるか？",
+                        "hypothesis": "AIが学習者の理解度と学習パターンを分析することで、個別に最適化された学習経験を提供し、学習効果を向上させる",
+                        "id": request.project_id
+                    }
+                    logger.info(f"✅ モックプロジェクト情報使用: {project_context['theme']}")
+                else:
+                    try:
+                        project_result = supabase.table('projects').select('*').eq('id', request.project_id).eq('user_id', current_user).execute()
+                        if project_result.data:
+                            project = project_result.data[0]
+                            project_context = {
+                                "theme": project.get('theme'),
+                                "question": project.get('question'),
+                                "hypothesis": project.get('hypothesis'),
+                                "id": request.project_id
+                            }
+                            logger.info(f"✅ プロジェクト情報取得成功: {project['theme']}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ プロジェクト情報取得失敗: {e}")
+
+            # 対話履歴の取得
+            conversation_history = []
+            if request.include_history:
+                try:
+                    history_response = supabase.table("chat_logs").select(
+                        "id, sender, message, created_at, context_data"
+                    ).eq(
+                        "conversation_id", conversation_id
+                    ).order(
+                        "created_at", desc=False
+                    ).limit(
+                        request.history_limit
+                    ).execute()
+
+                    if history_response.data:
+                        conversation_history = [
+                            {"sender": msg["sender"], "message": msg["message"]}
+                            for msg in history_response.data
+                        ]
+                        logger.info(f"📜 対話履歴取得: {len(conversation_history)}件")
+                except Exception as e:
+                    logger.warning(f"⚠️ 対話履歴取得エラー: {e}")
+
+            # 対話エージェントで処理（内側の try/except）
             try:
-                history_response = supabase.table("chat_logs").select(
-                    "id, sender, message, created_at, context_data"
-                ).eq(
-                    "conversation_id", conversation_id
-                ).order(
-                    "created_at", desc=False
-                ).limit(
-                    request.history_limit
-                ).execute()
-                
-                if history_response.data:
-                    conversation_history = [
-                        {
-                            "sender": msg["sender"],
-                            "message": msg["message"]
-                        }
-                        for msg in history_response.data
-                    ]
-                    logger.info(f"📜 対話履歴取得: {len(conversation_history)}件")
-            except Exception as e:
-                logger.warning(f"⚠️ 対話履歴取得エラー: {e}")
-        
-        # 対話エージェントで処理
-        try:
-            agent_start = time.time()
-            
-            agent_result = temp_orchestrator.process_turn(
-                user_message=request.message,
-                conversation_history=conversation_history,
-                project_context=project_context,
-                user_id=current_user,
-                conversation_id=conversation_id
-            )
-            
-            agent_time = time.time() - agent_start
-            
-            # デバッグ情報の構築
-            debug_info = None
-            if request.debug_mode:
-                debug_info = {
-                    "processing_time_ms": int(agent_time * 1000),
-                    "mock_mode": request.mock_mode,
-                    "history_items": len(conversation_history),
-                    "has_project_context": bool(project_context),
-                    "conversation_id": conversation_id,
-                    "page_id": page_id,
-                    "raw_state": agent_result.get("state_snapshot", {}),
-                    "raw_decision": agent_result.get("decision_metadata", {}),
-                    "raw_metrics": agent_result.get("metrics", {})
-                }
-            
-            # 応答をデータベースに保存（ユーザーメッセージ）
-            user_message_data = {
-                "user_id": current_user,
-                "page": page_id,
-                "sender": "user",
-                "message": request.message,
-                "conversation_id": conversation_id,
-                "context_data": json.dumps({
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "agent_endpoint": True,
-                    "project_id": request.project_id
-                }, ensure_ascii=False)
-            }
-            await asyncio.to_thread(
-                lambda: supabase.table("chat_logs").insert(user_message_data).execute()
-            )
-            
-            # 応答をデータベースに保存（AIメッセージ）
-            ai_message_data = {
-                "user_id": current_user,
-                "page": page_id,
-                "sender": "assistant",
-                "message": agent_result["response"],
-                "conversation_id": conversation_id,
-                "context_data": json.dumps({
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "agent_endpoint": True,
-                    "support_type": agent_result.get("support_type"),
-                    "selected_acts": agent_result.get("selected_acts"),
-                    "state_snapshot": agent_result.get("state_snapshot", {}),
-                    "project_plan": agent_result.get("project_plan"),
-                    "decision_metadata": agent_result.get("decision_metadata", {}),
-                    "metrics": agent_result.get("metrics", {})
-                }, ensure_ascii=False)
-            }
-            await asyncio.to_thread(
-                lambda: supabase.table("chat_logs").insert(ai_message_data).execute()
-            )
-            
-            # conversationのタイムスタンプ更新
-            await update_conversation_timestamp(conversation_id)
-            
-            # レスポンスの構築
-            return ConversationAgentResponse(
-                response=agent_result["response"],
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                support_type=agent_result.get("support_type", "unknown"),
-                selected_acts=agent_result.get("selected_acts", []),
-                state_snapshot=agent_result.get("state_snapshot", {}),
-                project_plan=agent_result.get("project_plan"),
-                decision_metadata=agent_result.get("decision_metadata", {}),
-                metrics=agent_result.get("metrics", {}),
-                debug_info=debug_info,
-                conversation_id=conversation_id,
-                history_count=len(conversation_history)
-            )
-            
-        except Exception as e:
-            logger.error(f"❌ 対話エージェント処理エラー: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            return ConversationAgentResponse(
-                response="申し訳ございません。対話処理中にエラーが発生しました。",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                support_type="error",
-                selected_acts=[],
-                state_snapshot={},
-                decision_metadata={},
-                metrics={"error": "processing_failed"},
-                error=f"Processing error: {str(e)}",
-                warning="エージェント処理中にエラーが発生しました",
-                conversation_id=conversation_id,
-                history_count=len(conversation_history) if 'conversation_history' in locals() else 0
+                agent_start = time.time()
+
+                agent_result = temp_orchestrator.process_turn(
+                    user_message=request.message,
+                    conversation_history=conversation_history,
+                    project_context=project_context,
+                    user_id=current_user,
+                    conversation_id=conversation_id
                 )
-                
+
+                agent_time = time.time() - agent_start
+
+                # デバッグ情報の構築
+                debug_info = None
+                if request.debug_mode:
+                    debug_info = {
+                        "processing_time_ms": int(agent_time * 1000),
+                        "mock_mode": request.mock_mode,
+                        "history_items": len(conversation_history),
+                        "has_project_context": bool(project_context),
+                        "conversation_id": conversation_id,
+                        "page_id": page_id,
+                        "raw_state": agent_result.get("state_snapshot", {}),
+                        "raw_decision": agent_result.get("decision_metadata", {}),
+                        "raw_metrics": agent_result.get("metrics", {})
+                    }
+
+                # 応答をDB保存（ユーザーメッセージ）
+                user_message_data = {
+                    "user_id": current_user,
+                    "page": page_id,
+                    "sender": "user",
+                    "message": request.message,
+                    "conversation_id": conversation_id,
+                    "context_data": json.dumps({
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "agent_endpoint": True,
+                        "project_id": request.project_id
+                    }, ensure_ascii=False)
+                }
+                await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
+
+                # 応答をDB保存（AIメッセージ）
+                ai_message_data = {
+                    "user_id": current_user,
+                    "page": page_id,
+                    "sender": "assistant",
+                    "message": agent_result["response"],
+                    "conversation_id": conversation_id,
+                    "context_data": json.dumps({
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "agent_endpoint": True,
+                        "support_type": agent_result.get("support_type"),
+                        "selected_acts": agent_result.get("selected_acts"),
+                        "state_snapshot": agent_result.get("state_snapshot", {}),
+                        "project_plan": agent_result.get("project_plan"),
+                        "decision_metadata": agent_result.get("decision_metadata", {}),
+                        "metrics": agent_result.get("metrics", {})
+                    }, ensure_ascii=False)
+                }
+                await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
+
+                # conversation のタイムスタンプ更新
+                await update_conversation_timestamp(conversation_id)
+
+                # レスポンス
+                return ConversationAgentResponse(
+                    response=agent_result["response"],
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    support_type=agent_result.get("support_type", "unknown"),
+                    selected_acts=agent_result.get("selected_acts", []),
+                    state_snapshot=agent_result.get("state_snapshot", {}),
+                    project_plan=agent_result.get("project_plan"),
+                    decision_metadata=agent_result.get("decision_metadata", {}),
+                    metrics=agent_result.get("metrics", {}),
+                    debug_info=debug_info,
+                    conversation_id=conversation_id,
+                    history_count=len(conversation_history)
+                )
+
+            except Exception as e:
+                logger.error(f"❌ 対話エージェント処理エラー: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+                return ConversationAgentResponse(
+                    response="申し訳ございません。対話処理中にエラーが発生しました。",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    support_type="error",
+                    selected_acts=[],
+                    state_snapshot={},
+                    decision_metadata={},
+                    metrics={"error": "processing_failed"},
+                    error=f"Processing error: {str(e)}",
+                    warning="エージェント処理中にエラーが発生しました",
+                    conversation_id=conversation_id,
+                    history_count=len(conversation_history)
+                )
+
+        # ← ここからは外側 try に対する except 群（インデントを1段戻す）
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"❌ エンドポイントエラー: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            
+
             return ConversationAgentResponse(
                 response="システムエラーが発生しました。",
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -2076,6 +2072,7 @@ async def chat_with_conversation_agent(
                 error=f"System error: {str(e)}",
                 history_count=0
             )
+
 
 @app.get("/conversation-agent/status")
 async def get_conversation_agent_status(
@@ -2092,7 +2089,7 @@ async def get_conversation_agent_status(
             "available": CONVERSATION_AGENT_AVAILABLE,
             "enabled": ENABLE_CONVERSATION_AGENT,
             "initialized": conversation_orchestrator is not None,
-            "module_path": "backend.conversation_agent",
+            "module_path": "conversation_agent",
             "environment": {
                 "ENABLE_CONVERSATION_AGENT": os.environ.get("ENABLE_CONVERSATION_AGENT", "false"),
                 "mode": "mock" if conversation_orchestrator and hasattr(conversation_orchestrator, 'use_mock') else "unknown"

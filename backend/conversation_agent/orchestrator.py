@@ -1,4 +1,4 @@
-        """
+"""
 対話エージェントの統合制御モジュール（Phase 1: モック版）
 すべてのコンポーネントを統合して対話フローを制御
 """
@@ -162,7 +162,7 @@ class ConversationOrchestrator:
             conversation_history,
             None,  # プロジェクト情報は渡さない
             use_llm=use_llm,
-            minimal_mode=True  # 必須フィールドに限定
+            minimal_mode=True,  # 必須フィールドに限定
             mock_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
         )
         
@@ -349,7 +349,6 @@ class ConversationOrchestrator:
                 {"role": "user", "content": prompt}
             ]
             
-            response = self.llm_client.generate_response(messages)
             response = self.llm_client.generate_response(messages)
             result = json.loads(response)
             

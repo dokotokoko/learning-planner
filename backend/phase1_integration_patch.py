@@ -17,7 +17,7 @@ Phase 1 統合パッチ - 既存main.pyへの安全な統合
 # =====================================
 IMPORT_PATCH = """
 # Phase 1: プール機能インポート（既存インポートの後に追加）
-from backend.phase1_llm_system import (
+from phase1_llm_system import (
     get_phase1_manager,
     safe_generate_response,
     log_system_status

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, Depends, status
 from pydantic import BaseModel
 
-from backend.async_helpers import (
+from async_helpers import (
     AsyncDatabaseHelper,
     AsyncProjectContextBuilder,
     parallel_fetch_context_and_history,
@@ -37,7 +37,6 @@ class OptimizedChatResponse(BaseModel):
     decision_metadata: Optional[Dict[str, Any]] = None
     metrics: Optional[Dict[str, Any]] = None
     performance_metrics: Optional[Dict[str, Any]] = None  # パフォーマンス指標を追加
-
 
 async def optimized_chat_with_ai(
     chat_data,
@@ -93,8 +92,8 @@ async def optimized_chat_with_ai(
         context_builder = AsyncProjectContextBuilder(db_helper)
         async_llm = get_async_llm_client()
         
-        # ページIDの決定
-        page_id = chat_data.page_id or chat_data.page or "general"
+        # ページIDの決定（ChatMessageからpage関連フィールドが削除されたため固定値を使用）
+        page_id = "general"
         
         # ====================
         # Step 1: 並列データ取得
@@ -180,7 +179,7 @@ async def optimized_chat_with_ai(
         user_context_data = build_context_data(
             project_id=project_id,
             project=project,
-            memo_content=chat_data.memo_content
+            #memo_content=chat_data.memo_content
         )
         
         ai_context_data = build_ai_context_data(
@@ -311,14 +310,14 @@ def build_message_history(
 
 def build_context_data(
     project_id: Optional[int],
-    project: Optional[Dict[str, Any]],
-    memo_content: Optional[str]
+    project: Optional[Dict[str, Any]]
+    #memo_content: Optional[str]
 ) -> Dict[str, Any]:
     """コンテキストデータを構築"""
     context_data = {"timestamp": datetime.now(timezone.utc).isoformat()}
     
-    if memo_content:
-        context_data["memo_content"] = memo_content[:500]
+    #if memo_content:
+    #   context_data["memo_content"] = memo_content[:500]
     
     if project_id:
         context_data["project_id"] = project_id
