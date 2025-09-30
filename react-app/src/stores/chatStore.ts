@@ -129,14 +129,40 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
-      // メッセージ管理
+      // メッセージ管理（重複防止機能付き）
       addMessage: (projectId: string, message: ChatMessage) => {
-        set((state) => ({
-          messageHistory: {
-            ...state.messageHistory,
-            [projectId]: [...(state.messageHistory[projectId] || []), message],
-          },
-        }));
+        set((state) => {
+          const existingMessages = state.messageHistory[projectId] || [];
+          
+          // 重複チェック：同じID、または同じ内容・役割・近い時間のメッセージがあれば追加しない
+          const isDuplicate = existingMessages.some(msg => {
+            // IDが同じ場合は重複
+            if (msg.id === message.id) return true;
+            
+            // 同じ役割・内容で、タイムスタンプが1秒以内なら重複とみなす
+            if (msg.role === message.role && msg.content === message.content) {
+              const msgTime = msg.timestamp instanceof Date ? msg.timestamp.getTime() : 0;
+              const newMsgTime = message.timestamp instanceof Date ? message.timestamp.getTime() : 0;
+              const timeDiff = Math.abs(msgTime - newMsgTime);
+              return timeDiff < 1000; // 1秒以内
+            }
+            
+            return false;
+          });
+          
+          // 重複がなければ追加
+          if (!isDuplicate) {
+            return {
+              messageHistory: {
+                ...state.messageHistory,
+                [projectId]: [...existingMessages, message],
+              },
+            };
+          }
+          
+          // 重複の場合は何も変更しない
+          return state;
+        });
       },
 
       getMessages: (projectId: string) => {

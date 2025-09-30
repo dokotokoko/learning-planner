@@ -326,9 +326,13 @@ const AIChat: React.FC<AIChatProps> = ({
 
 
 
-  // メッセージ送信処理
+  // メッセージ送信処理（二重送信防止付き）
+  const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isLoading || isSendingRef.current) return;
+    
+    // 二重送信防止フラグ
+    isSendingRef.current = true;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -437,6 +441,7 @@ const AIChat: React.FC<AIChatProps> = ({
       setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
     } finally {
       setIsLoading(false);
+      isSendingRef.current = false; // 二重送信防止フラグをリセット
       inputRef.current?.focus();
     }
   };
