@@ -260,6 +260,7 @@ class MemoSave(BaseModel):
 class MemoResponse(BaseModel):
     id: int
     page_id: str
+    title: Optional[str] = ""
     content: str
     updated_at: str
 
@@ -294,6 +295,9 @@ class MultiMemoCreate(BaseModel):
 class MultiMemoUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    version: Optional[int] = None
+    requestId: Optional[str] = None
+    seq: Optional[int] = None
 
 class MultiMemoResponse(BaseModel):
     id: int
@@ -897,6 +901,7 @@ async def get_memo_by_page_id(
                 return MemoResponse(
                     id=memo["id"],
                     page_id=page_id,
+                    title=memo.get("title") or "",
                     content=memo.get("content") or "",
                     updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
                 )
@@ -905,6 +910,7 @@ async def get_memo_by_page_id(
                 return MemoResponse(
                     id=0,
                     page_id=page_id,
+                    title="",
                     content="",
                     updated_at=datetime.now(timezone.utc).isoformat()
                 )
@@ -913,6 +919,7 @@ async def get_memo_by_page_id(
             return MemoResponse(
                 id=0,
                 page_id=page_id,
+                title="",
                 content="",
                 updated_at=datetime.now(timezone.utc).isoformat()
             )
@@ -934,7 +941,8 @@ async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
             MemoResponse(
                 id=memo["id"],
                 page_id=str(memo["id"]),  # memo_idをpage_idとして使用
-                content=memo["content"] or "",
+                title=memo.get("title") or "",
+                content=memo.get("content") or "",
                 updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
             )
             for memo in result.data

@@ -27,8 +27,8 @@ const GeneralInquiryPage: React.FC = () => {
     }
   }, [user, isChatOpen, toggleChat]);
 
-  // 自動保存機能
-  const handleAutoSave = async (content: string) => {
+  // 手動保存機能
+  const handleSave = async (content: string) => {
     try {
       const userId = user?.id;
       if (!userId) {
@@ -231,8 +231,7 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
           memoPlaceholder="相談したい内容や疑問をメモしてください..."
           chatPlaceholder="AIに相談してください..."
           onMessageSend={handleAIMessage}
-          onAutoSave={handleAutoSave}
-          autoSaveDelay={2000}
+          onSave={handleSave}
         />
 
         {/* AIチャット */}

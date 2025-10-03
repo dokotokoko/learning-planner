@@ -81,7 +81,17 @@ const MemoPage: React.FC = () => {
   // メモの初期コンテンツを計算（導出値）
   const initialMemoContent = useMemo(() => {
     if (!memo) return '';
-    return memo.title ? `${memo.title}\n\n${memo.content}` : memo.content;
+    
+    // デバッグ用ログ出力
+    console.log('MemoPage: Loading existing memo');
+    console.log('Title:', memo.title);
+    console.log('Content:', memo.content);
+    
+    // DBのタイトルとコンテンツを結合して表示
+    if (memo.title && memo.title.trim()) {
+      return memo.content ? `${memo.title}\n${memo.content}` : memo.title;
+    }
+    return memo.content || '';
   }, [memo]);
   
   // 現在のメモコンテンツを保持（エディター内部で管理、ページ離脱時の保存用）
@@ -167,11 +177,12 @@ const MemoPage: React.FC = () => {
   const syncMemoToStore = useCallback((memoData: Memo) => {
     if (!projectId || !memoId) return;
     
-    const combinedContent = memoData.title 
-      ? `${memoData.title}\n\n${memoData.content}` 
-      : memoData.content;
-    const lines = combinedContent.split('\n');
-    const currentTitle = lines.length > 0 ? lines[0] : '';
+    // DBのタイトルとコンテンツを結合して表示用コンテンツを作成
+    const combinedContent = memoData.title && memoData.title.trim() 
+      ? (memoData.content ? `${memoData.title}\n${memoData.content}` : memoData.title)
+      : (memoData.content || '');
+    
+    const currentTitle = memoData.title || '';
     
     // コンテンツを保持
     currentMemoContentRef.current = combinedContent;
@@ -196,7 +207,7 @@ const MemoPage: React.FC = () => {
       
       const data = await response.json();
       setMemo(data);
-      updateStoreWithMemoData(data);
+      syncMemoToStore(data);
       
       // バージョン情報を保存
       setCurrentVersion(data.version || 0);
@@ -230,9 +241,9 @@ const MemoPage: React.FC = () => {
               
               if (shouldRestore) {
                 // 復元フラグを立てて再マウントを促す
-                const restoredMemo = { ...data, content: localBackup, title: '' };
+                const restoredMemo = { ...data, content: localBackup };
                 setMemo(restoredMemo);
-                updateStoreWithMemoData(restoredMemo);
+                syncMemoToStore(restoredMemo);
                 console.log('🔄 LocalStorageからメモを復元しました');
                 return;
               }
@@ -275,7 +286,7 @@ const MemoPage: React.FC = () => {
     if (projectId && memoId) {
       setIsLoading(true);
       
-      // fetchMemoを内部で定義（updateStoreWithMemoDataを参照できる）
+      // fetchMemoを内部で定義
       const fetchMemoLocal = async () => {
         try {
           const token = localStorage.getItem('auth-token');
@@ -511,13 +522,27 @@ const MemoPage: React.FC = () => {
   const handleSave = useCallback((content: string) => {
     if (!memoId) return;
     
-    // タイトルと本文を分離
-    const lines = content.split('\n');
-    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                            (lines.length === 1 && !lines[0].trim() ? '' : content);
+    // 改行コードを正規化（Windows CRLF → Unix LF）
+    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    enqueueSave(extractedTitle, extractedContent);
+    // APIの期待する形式に合わせてタイトルと本文を分離
+    const lines = normalizedContent.split('\n');
+    const title = lines.length > 0 ? lines[0].trim() : '';
+    // 2行目以降をそのまま保持（空行も含む）
+    const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
+    
+    // デバッグログ
+    console.log('Save Debug:', {
+      originalContent: content,
+      normalizedContent: normalizedContent,
+      splitLines: lines,
+      title: title,
+      bodyContent: bodyContent,
+      bodyContentLength: bodyContent.length,
+      bodyContentDisplay: bodyContent.replace(/\n/g, '\\n')
+    });
+    
+    enqueueSave(title, bodyContent);
   }, [memoId, enqueueSave]);
 
   // 即座に保存する関数（ページ離脱時用）
@@ -525,14 +550,15 @@ const MemoPage: React.FC = () => {
     const content = currentMemoContentRef.current;
     if (!memoId || !content) return;
     
-    // contentからタイトルと本文を分離
-    const lines = content.split('\n');
-    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                            (lines.length === 1 && !lines[0].trim() ? '' : content);
+    // 改行コードを正規化（Windows CRLF → Unix LF）
+    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    // 即座にキューに追加
-    enqueueSave(extractedTitle, extractedContent);
+    // APIの期待する形式に合わせてタイトルと本文を分離
+    const lines = normalizedContent.split('\n');
+    const title = lines.length > 0 ? lines[0].trim() : '';
+    const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
+    
+    enqueueSave(title, bodyContent);
   }, [memoId, enqueueSave]);
 
   // メモ内容の変更処理（エディターから呼ばれるイベントハンドラ）
@@ -544,14 +570,12 @@ const MemoPage: React.FC = () => {
     // LocalStorageバックアップ
     saveToLocalStorage(newContent);
     
-    // タイトルと本文を分離
+    // 1行目を自動的にタイトルとして抽出（表示用）
     const lines = newContent.split('\n');
-    const extractedTitle = lines.length > 0 && lines[0].trim() ? lines[0] : '';
-    const extractedContent = lines.length > 1 ? lines.slice(1).join('\n').replace(/^\n+/, '') : 
-                            (lines.length === 1 && !lines[0].trim() ? '' : newContent);
+    const extractedTitle = lines.length > 0 ? lines[0].trim() : '';
     
     // ストア更新（イベントハンドラ内なので安全）
-    updateMemoContent(extractedTitle, extractedContent);
+    updateMemoContent(extractedTitle, newContent);
     if (projectId && memoId) {
       setCurrentMemo(projectId, memoId, extractedTitle, newContent);
     }
@@ -757,7 +781,7 @@ const MemoPage: React.FC = () => {
                     </Box>
                   </Tooltip>
                 ) : hasUnsavedChanges ? (
-                  <Tooltip title="未保存の変更があります（自動保存待機中）">
+                  <Tooltip title="未保存の変更があります">
                     <Box sx={{ display: 'flex', alignItems: 'center', color: 'warning.main' }}>
                       <SavingIcon sx={{ fontSize: 16, mr: 0.5 }} />
                       <Typography variant="caption">

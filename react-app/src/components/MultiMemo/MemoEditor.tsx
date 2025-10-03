@@ -20,7 +20,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ClearIcon from '@mui/icons-material/Clear';
 import ReactMarkdown from 'react-markdown';
-import { debounce } from 'lodash';
 
 import { MultiMemo } from './MultiMemoManager';
 
@@ -29,7 +28,6 @@ export interface MemoEditorProps {
   projectId?: number;
   onSave: (payload: Partial<MultiMemo>) => Promise<void>;
   onCancel?: () => void;
-  autoSaveDelay?: number; // default 2000ms
   enablePreview?: boolean; // default true
   availableTags?: string[]; // 既存タグの候補
 }
@@ -43,20 +41,33 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
   projectId,
   onSave,
   onCancel,
-  autoSaveDelay = 2000,
   enablePreview = true,
   availableTags = [],
 }) => {
-  // 統合されたMarkdown形式のstate（タイトルは1行目）
-  const [markdown, setMarkdown] = useState(() => {
-    if (!memo) return '';
-    const title = memo.title || '';
-    const content = memo.content || '';
-    return title ? `# ${title}\n\n${content}` : content;
-  });
-  
-  const [tags, setTags] = useState<string[]>(memo?.tags ?? []);
+  const [markdown, setMarkdown] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+
+  // memo propの変更を監視してstateを更新する
+  useEffect(() => {
+    if (memo) {
+      // 既存メモの読み込み
+      const title = memo.title || '';
+      const content = memo.content || '';
+      
+      // 保存ロジック（1行目がtitle）と対称的に、titleとcontentを改行で結合して表示
+      const fullText = title && content ? `${title}\n${content}` : title || content;
+      
+      setMarkdown(fullText);
+      setTags(memo.tags ?? []);
+      setDirty(false); // 初期読み込み時は「未保存」ではない
+    } else {
+      // 新規メモの場合
+      setMarkdown('');
+      setTags([]);
+      setDirty(false);
+    }
+  }, [memo]); // memoオブジェクトが変更されたときにこのフックを実行
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [saving, setSaving] = useState(false);
   
@@ -99,39 +110,33 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
     el.style.height = `${el.scrollHeight}px`;
   }, [markdown]);
 
-  // 自動保存（既存メモのみ）
-  const debouncedAutoSave = useCallback(
-    debounce(async () => {
-      if (!isNew && dirty) {
-        const { title, content } = extractTitleAndContent(markdown);
-        if (!title.trim()) return; // タイトルがない場合は自動保存しない
-        
-        try {
-          setSaving(true);
-          await onSave({
-            id: memo?.id,
-            title: title.trim(),
-            content,
-            tags: [...new Set([...tags, ...contentHashtags])],
-            project_id: projectId,
-            created_at: memo?.created_at,
-            updated_at: new Date().toISOString(),
-          });
-          setDirty(false);
-        } catch (err) {
-          console.error('Auto-save error:', err);
-        } finally {
-          setSaving(false);
+  // キーボードショートカット (Ctrl+S / Cmd+S) の設定
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (dirty) {
+          handleSave();
         }
       }
-    }, autoSaveDelay),
-    [markdown, tags, dirty, isNew, autoSaveDelay, memo, onSave, projectId, contentHashtags]
-  );
+    };
 
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dirty, markdown, tags]);
+
+  // ページ離脱時の警告
   useEffect(() => {
-    if (dirty) debouncedAutoSave();
-    return debouncedAutoSave.cancel;
-  }, [debouncedAutoSave, dirty]);
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirty) {
+        e.preventDefault();
+        e.returnValue = '保存されていない変更があります。本当にページを離れますか？';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [dirty]);
 
   // 手動保存
   const handleSave = async () => {
@@ -164,11 +169,16 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
 
   // クリア機能
   const handleClear = () => {
-    if (confirm('入力内容をクリアしますか？')) {
-      setMarkdown('');
-      setTags([]);
-      setDirty(true);
+    if (dirty) {
+      if (!confirm('保存されていない変更があります。本当にクリアしますか？')) {
+        return;
+      }
+    } else if (!confirm('入力内容をクリアしますか？')) {
+      return;
     }
+    setMarkdown('');
+    setTags([]);
+    setDirty(false);
   };
 
   const { title } = extractTitleAndContent(markdown);
@@ -186,8 +196,8 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
             <ClearIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title="保存">
-          <IconButton onClick={handleSave} size="small" color="primary" disabled={saving}>
+        <Tooltip title={dirty ? "保存 (Ctrl+S)" : "変更なし"}>
+          <IconButton onClick={handleSave} size="small" color={dirty ? "primary" : "default"} disabled={saving || !dirty}>
             <SaveIcon />
           </IconButton>
         </Tooltip>
@@ -333,20 +343,28 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
       <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
         <Box>
           {/* 保存状態表示 */}
-          {!isNew && (
-            <Typography variant="caption" color={dirty ? 'warning.main' : 'success.main'}>
-              {saving
-                ? '保存中...'
-                : dirty
-                ? '未保存の変更があります'
-                : '保存済み'}
-            </Typography>
-          )}
+          <Typography variant="caption" color={dirty ? 'warning.main' : 'success.main'}>
+            {saving
+              ? '保存中...'
+              : dirty
+              ? '未保存の変更があります'
+              : isNew ? '新規メモ' : '保存済み'}
+          </Typography>
         </Box>
         
         <Stack direction="row" spacing={1}>
           {onCancel && (
-            <Button variant="outlined" startIcon={<CancelIcon />} onClick={onCancel}>
+            <Button 
+              variant="outlined" 
+              startIcon={<CancelIcon />} 
+              onClick={() => {
+                if (dirty) {
+                  const confirmed = confirm('保存されていない変更があります。本当にキャンセルしますか？');
+                  if (!confirmed) return;
+                }
+                onCancel();
+              }}
+            >
               キャンセル
             </Button>
           )}
@@ -354,7 +372,7 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
             variant="contained"
             startIcon={<SaveIcon />}
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !dirty}
           >
             {saving ? '保存中...' : '保存'}
           </Button>
