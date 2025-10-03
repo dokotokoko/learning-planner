@@ -45,8 +45,7 @@ interface MemoChatProps {
   onMessageSend?: (message: string, memoContent: string) => Promise<string>;
   sidebarOpen?: boolean;
   onSidebarToggle?: () => void;
-  onAutoSave?: (content: string) => Promise<void>;
-  autoSaveDelay?: number;
+  onSave?: (content: string) => Promise<void>;
 }
 
 const MemoChat: React.FC<MemoChatProps> = ({
@@ -59,8 +58,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
   onMessageSend,
   sidebarOpen = true,
   onSidebarToggle,
-  onAutoSave,
-  autoSaveDelay = 2000,
+  onSave,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -74,10 +72,10 @@ const MemoChat: React.FC<MemoChatProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedContent, setLastSavedContent] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const memoRef = useRef<HTMLDivElement>(null);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 初期メッセージの設定
   useEffect(() => {
@@ -91,48 +89,39 @@ const MemoChat: React.FC<MemoChatProps> = ({
     }
   }, [initialMessage]);
 
-  // コンポーネントのアンマウント時にタイマーをクリア
+  // キーボードショートカット (Ctrl+S / Cmd+S) の設定
   useEffect(() => {
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (hasUnsavedChanges && onSave) {
+          handleMemoSave();
+        }
       }
     };
-  }, []);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasUnsavedChanges, memoContent]);
+
+  // ページ離脱時の警告
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '保存されていない変更があります。本当にページを離れますか？';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // チャット自動スクロール
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 自動保存の実行
-  const performAutoSave = useCallback(async (content: string) => {
-    if (!onAutoSave || content === lastSavedContent) return;
-    
-    setIsSaving(true);
-    setSaveError(null);
-    
-    try {
-      await onAutoSave(content);
-      setLastSavedContent(content);
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-      setSaveError('自動保存に失敗しました');
-    } finally {
-      setIsSaving(false);
-    }
-  }, [onAutoSave, lastSavedContent]);
-
-  // デバウンスされた自動保存
-  const debouncedAutoSave = useCallback((content: string) => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-    
-    autoSaveTimerRef.current = setTimeout(() => {
-      performAutoSave(content);
-    }, autoSaveDelay);
-  }, [performAutoSave, autoSaveDelay]);
 
   // メモ内容変更時の処理
   const handleMemoChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -140,28 +129,43 @@ const MemoChat: React.FC<MemoChatProps> = ({
     setMemoContent(content);
     onMemoChange?.(content);
     
-    // 自動保存をトリガー
-    if (onAutoSave) {
-      debouncedAutoSave(content);
+    // 未保存フラグを設定
+    if (content !== lastSavedContent) {
+      setHasUnsavedChanges(true);
+    } else {
+      setHasUnsavedChanges(false);
     }
   };
 
   // メモクリア
   const handleMemoClear = () => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm('保存されていない変更があります。本当にクリアしますか？');
+      if (!confirmed) return;
     }
     setMemoContent('');
     onMemoChange?.('');
     setSaveError(null);
+    setHasUnsavedChanges(false);
   };
 
   // 手動保存
   const handleMemoSave = async () => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
+    if (!onSave || !hasUnsavedChanges) return;
+    
+    setIsSaving(true);
+    setSaveError(null);
+    
+    try {
+      await onSave(memoContent);
+      setLastSavedContent(memoContent);
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('Save failed:', error);
+      setSaveError('保存に失敗しました');
+    } finally {
+      setIsSaving(false);
     }
-    await performAutoSave(memoContent);
   };
 
   // メッセージ送信
@@ -293,8 +297,13 @@ const MemoChat: React.FC<MemoChatProps> = ({
                     <ClearIcon />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="メモを保存" arrow>
-                  <IconButton onClick={handleMemoSave} size="small" color="primary">
+                <Tooltip title={hasUnsavedChanges ? "メモを保存 (Ctrl+S)" : "変更なし"} arrow>
+                  <IconButton 
+                    onClick={handleMemoSave} 
+                    size="small" 
+                    color={hasUnsavedChanges ? "primary" : "default"}
+                    disabled={!hasUnsavedChanges || !onSave}
+                  >
                     <SaveIcon />
                   </IconButton>
                 </Tooltip>
@@ -563,8 +572,13 @@ const MemoChat: React.FC<MemoChatProps> = ({
               <ClearIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="メモを保存" arrow>
-            <IconButton onClick={handleMemoSave} size="small" color="primary">
+          <Tooltip title={hasUnsavedChanges ? "メモを保存 (Ctrl+S)" : "変更なし"} arrow>
+            <IconButton 
+              onClick={handleMemoSave} 
+              size="small" 
+              color={hasUnsavedChanges ? "primary" : "default"}
+              disabled={!hasUnsavedChanges || !onSave}
+            >
               <SaveIcon />
             </IconButton>
           </Tooltip>

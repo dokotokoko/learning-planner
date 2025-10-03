@@ -81,6 +81,12 @@ const MemoPage: React.FC = () => {
   // メモの初期コンテンツを計算（導出値）
   const initialMemoContent = useMemo(() => {
     if (!memo) return '';
+    
+    // デバッグ用ログ出力
+    console.log('MemoPage: Loading existing memo');
+    console.log('Title:', memo.title);
+    console.log('Content:', memo.content);
+    
     // DBのタイトルとコンテンツを結合して表示
     if (memo.title && memo.title.trim()) {
       return memo.content ? `${memo.title}\n${memo.content}` : memo.title;
@@ -516,10 +522,25 @@ const MemoPage: React.FC = () => {
   const handleSave = useCallback((content: string) => {
     if (!memoId) return;
     
+    // 改行コードを正規化（Windows CRLF → Unix LF）
+    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
     // APIの期待する形式に合わせてタイトルと本文を分離
-    const lines = content.split('\n');
+    const lines = normalizedContent.split('\n');
     const title = lines.length > 0 ? lines[0].trim() : '';
+    // 2行目以降をそのまま保持（空行も含む）
     const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
+    
+    // デバッグログ
+    console.log('Save Debug:', {
+      originalContent: content,
+      normalizedContent: normalizedContent,
+      splitLines: lines,
+      title: title,
+      bodyContent: bodyContent,
+      bodyContentLength: bodyContent.length,
+      bodyContentDisplay: bodyContent.replace(/\n/g, '\\n')
+    });
     
     enqueueSave(title, bodyContent);
   }, [memoId, enqueueSave]);
@@ -529,8 +550,11 @@ const MemoPage: React.FC = () => {
     const content = currentMemoContentRef.current;
     if (!memoId || !content) return;
     
+    // 改行コードを正規化（Windows CRLF → Unix LF）
+    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
     // APIの期待する形式に合わせてタイトルと本文を分離
-    const lines = content.split('\n');
+    const lines = normalizedContent.split('\n');
     const title = lines.length > 0 ? lines[0].trim() : '';
     const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
     
@@ -757,7 +781,7 @@ const MemoPage: React.FC = () => {
                     </Box>
                   </Tooltip>
                 ) : hasUnsavedChanges ? (
-                  <Tooltip title="未保存の変更があります（自動保存待機中）">
+                  <Tooltip title="未保存の変更があります">
                     <Box sx={{ display: 'flex', alignItems: 'center', color: 'warning.main' }}>
                       <SavingIcon sx={{ fontSize: 16, mr: 0.5 }} />
                       <Typography variant="caption">

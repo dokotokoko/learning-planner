@@ -403,7 +403,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
   const handleCreateMemo = () => {
     setViewMode('memo-create');
     setSelectedMemo(null);
-    setMemoContent('新しいメモ\n\nここに内容を書いてください。');
+    setMemoContent('新しいメモ\n※改行して1行開ける\nここに内容を書いてください。');
   };
 
   // 戻るボタンハンドラー
@@ -706,26 +706,6 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                 <>
                   {/* メモ詳細/編集 */}
                   <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                    <Button
-                      variant="contained"
-                      startIcon={<SaveIcon />}
-                      onClick={saveMemo}
-                      disabled={isSaving}
-                      size="small"
-                    >
-                      保存
-                    </Button>
-                    {viewMode === 'memo-detail' && (
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => selectedMemo && deleteMemo(selectedMemo.id)}
-                        size="small"
-                      >
-                        削除
-                      </Button>
-                    )}
                   </Box>
 
                   <Paper sx={{ p: 2, height: 'calc(100vh - 280px)' }}>
