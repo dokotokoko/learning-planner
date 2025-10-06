@@ -231,7 +231,7 @@ class ConversationOrchestrator:
         
         # 文脈に基づく調整
         if self.support_type_history:
-            effectiveness_scores = {}  # Phase 2で実装
+            effectiveness_scores = {}  # v2(LLM統合版)で実装
             support_type = self.support_typer.adjust_for_context(
                 support_type,
                 self.support_type_history[-5:],

@@ -1,4 +1,4 @@
-# ✅ Phase 1 統合完了レポート
+# ✅ LLMプール統合完了レポート
 
 ## 📊 実装完了状況
 
@@ -7,7 +7,7 @@
 1. **完全後方互換性**
    - 既存のAPI・動作を一切変更なし
    - デフォルトは既存システムのみ動作
-   - Phase 1機能は完全にオプション
+   - LLMプール機能は完全にオプション
 
 2. **プール管理システム**
    - 5-10個のLLMクライアントを並列管理
@@ -33,19 +33,22 @@
 
 | ファイル | 変更箇所 | 変更内容 |
 |---------|----------|----------|
-| **main.py** | line 32-43 | Phase 1モジュールインポート追加 |
+| **main.py** | line 32-43 | LLMプールモジュールインポート追加 |
 | **main.py** | line 360-361 | グローバル変数 `phase1_llm_manager` 追加 |
 | **main.py** | line 369 | startup_event の global 宣言更新 |
-| **main.py** | line 384-399 | Phase 1システム初期化処理追加 |
+| **main.py** | line 384-399 | LLMプールシステム初期化処理追加 |
 | **main.py** | line 867-893 | 対話エージェントフォールバック拡張 |
 | **main.py** | line 895-918 | chat_with_ai メイン処理拡張 |
 | **main.py** | line 1479-1495 | テーマ深掘り機能拡張 |
 | **main.py** | line 2395-2495 | メトリクス・監視エンドポイント追加 |
 
-### 📁 新規作成ファイル
+### 📁 新規作成ファイル (リファクタリング中)
+
+> [!NOTE]
+> ファイル名・変数名に含まれる `phase1` は、今後のリファクタリングで `llm_pool` などに変更予定です。
 
 1. **`backend/phase1_llm_system.py`**
-   - Phase 1 LLMマネージャー本体
+   - LLMプールマネージャー本体
    - プール管理・メトリクス・フォールバック機能
 
 2. **`backend/phase1_integration_patch.py`**
@@ -53,10 +56,10 @@
    - トラブルシューティングガイド
 
 3. **`.env.phase1.example`**
-   - Phase 1用環境変数テンプレート
+   - LLMプール用環境変数テンプレート
    - 段階的導入スケジュール例
 
-4. **`backend/PHASE1_INTEGRATION_COMPLETE.md`**
+4. **`backend/LLM_POOL_INTEGRATION_REPORT.md`**
    - 統合完了レポート（本ファイル）
 
 ## 🚀 導入手順
@@ -71,7 +74,7 @@ uvicorn backend.main:app --reload
 curl "http://localhost:8000/debug/llm-system" \
   -H "Authorization: Bearer YOUR_TOKEN"
 
-# 期待する結果:
+# 期待する結果 (キー名はリファクタリング前のものです):
 # {
 #   "system_status": {
 #     "phase1_available": true,
@@ -110,7 +113,7 @@ LLM_POOL_SIZE=8-10
 
 ### パフォーマンス改善
 
-| 項目 | 既存システム | Phase 1システム | 改善率 |
+| 項目 | 既存システム | LLMプールシステム | 改善率 |
 |------|-------------|----------------|--------|
 | **同時処理能力** | 1-2人 | 8-10人 | **400-500%向上** |
 | **平均応答時間** | 15-20秒 | 3-5秒 | **70-80%短縮** |
@@ -148,7 +151,7 @@ curl -X POST "http://localhost:8000/admin/llm-system/log-status" -H "Authorizati
 
 ```mermaid
 graph TD
-    A[リクエスト] --> B{Phase 1有効?}
+    A[リクエスト] --> B{LLMプール有効?}
     B -->|Yes| C[プール処理]
     B -->|No| F[既存システム]
     C --> D{成功?}
@@ -167,14 +170,14 @@ ENABLE_LLM_POOL=false
 
 サービス再起動で既存システムのみに戻る
 
-## 🎯 次のステップ (Phase 2準備)
+## 🎯 次のステップ (v2/高度化対応 準備)
 
 ### 現在完了
 - ✅ プール管理システム
 - ✅ 基本的な負荷分散
 - ✅ フォールバック機能
 
-### Phase 2で実装予定
+### v2で実装予定
 - 🔄 高度な負荷分散戦略
 - 🔄 Redis キャッシュ統合
 - 🔄 自動スケーリング
@@ -189,7 +192,7 @@ ENABLE_LLM_POOL=false
 curl "http://localhost:8000/debug/llm-system" -H "Authorization: Bearer TOKEN"
 
 # 2. ログ確認
-tail -f logs/app.log | grep -E "(Phase 1|プール|フォールバック)"
+tail -f logs/app.log | grep -E "(LLMプール|フォールバック)"
 
 # 3. 環境変数確認
 env | grep LLM_
@@ -197,7 +200,7 @@ env | grep LLM_
 
 ## 🎉 完了確認
 
-Phase 1 統合は以下の条件で **完了** です:
+LLMプール統合は以下の条件で **完了** です:
 
 - ✅ サービスが正常に起動する
 - ✅ `/debug/llm-system` でシステム状態が確認できる

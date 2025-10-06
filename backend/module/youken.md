@@ -240,6 +240,6 @@ class ConversationMetrics:
 - ✅ Safety Gate が未成年配慮/個人情報誘導を抑制
 
 ## 次のステップ
-1. Phase 1の実装開始（state_extractor.pyから）
+1. コア機能の実装開始（state_extractor.pyから）
 2. モックLLMでの基本フロー確認
 3. 既存APIとの統合テスト実施

@@ -39,6 +39,8 @@ from async_helpers import (
 from module.async_llm_api import get_async_llm_client
 from optimized_endpoints import optimized_chat_with_ai
 from conversation_agent.optimized_conversation_agent import optimized_chat_with_conversation_agent
+from backend.repositories.chat_repository import ChatRepository
+from backend.services.chat_service import ChatService
 
 # ロギング設定（デバッグ用）
 logging.basicConfig(
@@ -47,18 +49,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Phase 1: プール機能インポート（既存システムとの完全互換性保持）
-try:
-    from phase1_llm_system import (
-        get_phase1_manager,
-        safe_generate_response,
-        log_system_status
-    )
-    PHASE1_AVAILABLE = True
-    logger.info("✅ Phase 1プール機能モジュールが利用可能です")
-except ImportError as e:
-    PHASE1_AVAILABLE = False
-    logger.info(f"ℹ️ Phase 1プール機能は無効です: {e}")
+# LLMプール管理システムのインポート
+from llm_manager import (
+    get_llm_manager,
+    safe_generate_response,
+    log_system_status
+)
+logger.info("✅ LLMプール管理システムを初期化")
 
 
 
@@ -169,223 +166,31 @@ async def chat_rate_limiter(request: Request, current_user: int = Depends(securi
 
     dq.append(now)
 
-# === Pydanticモデル ===
-# （元のモデルをそのまま継承）
-
-# 認証関連
-class UserLogin(BaseModel):
-    username: str
-    access_code: str
-
-class UserRegister(BaseModel):
-    username: str
-    password: str
-    confirm_password: str
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    message: str
-
-# 学習プロセス関連のモデルは削除済み（使用しない）
-
-# チャット関連
-class ChatMessage(BaseModel):
-    message: str
-    context: Optional[str] = None
-    # ページ依存フィールドを削除（独立設計のため）
-    # page: Optional[str] = "general"  # 削除
-    # page_id: Optional[str] = None     # 削除  
-    # memo_content: Optional[str] = None # 削除
-
-class ChatResponse(BaseModel):
-    response: str
-    timestamp: str
-    token_usage: Optional[Dict[str, Any]] = None
-    context_metadata: Optional[Dict[str, Any]] = None
-    # Conversation agent metadata (optional)
-    support_type: Optional[str] = None
-    selected_acts: Optional[List[str]] = None
-    state_snapshot: Optional[Dict[str, Any]] = None
-    project_plan: Optional[Dict[str, Any]] = None
-    decision_metadata: Optional[Dict[str, Any]] = None
-    metrics: Optional[Dict[str, Any]] = None
-
-# Conversation Agent専用モデル（検証用）
-class ConversationAgentRequest(BaseModel):
-    """対話エージェント検証用リクエストモデル"""
-    message: str
-    project_id: Optional[int] = None
-    page_id: Optional[str] = None
-    include_history: bool = True
-    history_limit: int = 50
-    debug_mode: bool = False  # デバッグ情報を含めるか
-    mock_mode: bool = True  # モックモードで動作するか
-
-class ConversationAgentResponse(BaseModel):
-    """対話エージェント検証用レスポンスモデル"""
-    response: str
-    timestamp: str
-    # エージェント固有のメタデータ
-    support_type: str
-    selected_acts: List[str]
-    state_snapshot: Dict[str, Any]
-    project_plan: Optional[Dict[str, Any]]
-    decision_metadata: Dict[str, Any]
-    metrics: Dict[str, Any]
-    # デバッグ情報
-    debug_info: Optional[Dict[str, Any]] = None
-    # 履歴情報
-    conversation_id: Optional[str] = None
-    history_count: int = 0
-    # エラー情報
-    error: Optional[str] = None
-    warning: Optional[str] = None
-
-class ChatHistoryResponse(BaseModel):
-    id: int
-    page: str
-    sender: str
-    message: str
-    context_data: Optional[str]
-    created_at: str
-
-# ConversationResponse は削除（chat_conversationsテーブルを使用しないため）
-
-# メモ関連
-class MemoSave(BaseModel):
-    page_id: str
-    content: str
-
-class MemoResponse(BaseModel):
-    id: int
-    page_id: str
-    title: Optional[str] = ""
-    content: str
-    updated_at: str
-
-# 学習振り返り関連（ステップ機能削除により不要）
-
-# プロジェクト関連
-class ProjectCreate(BaseModel):
-    theme: str
-    question: Optional[str] = None
-    hypothesis: Optional[str] = None
-
-class ProjectUpdate(BaseModel):
-    theme: Optional[str] = None
-    question: Optional[str] = None
-    hypothesis: Optional[str] = None
-
-class ProjectResponse(BaseModel):
-    id: int
-    theme: str
-    question: Optional[str]
-    hypothesis: Optional[str]
-    created_at: str
-    updated_at: str
-    memo_count: int
-
-# マルチメモ関連
-class MultiMemoCreate(BaseModel):
-    title: str
-    content: str
-    project_id: Optional[int] = None
-
-class MultiMemoUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    version: Optional[int] = None
-    requestId: Optional[str] = None
-    seq: Optional[int] = None
-
-class MultiMemoResponse(BaseModel):
-    id: int
-    title: str
-    content: str
-    tags: List[str]
-    project_id: Optional[int]
-    created_at: str
-    updated_at: str
-
-# テーマ深掘り関連
-class ThemeDeepDiveRequest(BaseModel):
-    theme: str
-    parent_theme: str
-    depth: int
-    path: List[str]
-    user_interests: List[str] = []
-
-class ThemeDeepDiveResponse(BaseModel):
-    suggestions: List[str]
-    context_info: Dict[str, Any]
-
-# クエスト関連
-class QuestResponse(BaseModel):
-    id: int
-    title: str
-    description: str
-    category: str
-    difficulty: int
-    points: int
-    required_evidence: str
-    icon_name: Optional[str]
-    is_active: bool
-    created_at: str
-    updated_at: str
-
-class UserQuestResponse(BaseModel):
-    id: int
-    user_id: int
-    quest_id: int
-    status: str
-    progress: int
-    quest: QuestResponse
-    started_at: Optional[str]
-    completed_at: Optional[str]
-    created_at: str
-    updated_at: str
-
-class QuestSubmissionCreate(BaseModel):
-    description: str
-    file_url: Optional[str] = None
-    reflection_data: Optional[Dict[str, Any]] = None
-
-class QuestSubmissionResponse(BaseModel):
-    id: int
-    user_quest_id: int
-    quest_id: int
-    description: str
-    file_url: Optional[str]
-    reflection_data: Optional[Dict[str, Any]]
-    status: str
-    points_awarded: int
-    submitted_at: str
-
-class UserQuestStart(BaseModel):
-    quest_id: int
-
-# 管理者関連
-class AdminUserCreate(BaseModel):
-    username: str
-    password: str
+from .schemas import (
+    UserLogin, UserRegister, UserResponse, ChatMessage, ChatResponse,
+    ConversationAgentRequest, ConversationAgentResponse, ChatHistoryResponse,
+    MemoSave, MemoResponse, ProjectCreate, ProjectUpdate, ProjectResponse,
+    MultiMemoCreate, MultiMemoUpdate, MultiMemoResponse, ThemeDeepDiveRequest,
+    ThemeDeepDiveResponse, QuestResponse, UserQuestResponse, QuestSubmissionCreate,
+    QuestSubmissionResponse, UserQuestStart, AdminUserCreate
+)
 
 # === グローバル変数 ===
 llm_client = None
-supabase: Client = None
-# memory_manager: MemoryManager = None  # 使用しない
 async_llm_client = None  # 非同期LLMクライアント
+supabase: Client = None
 
-# Phase 1: プール管理システム（既存のllm_clientは完全に維持）
-phase1_llm_manager = None  # Phase 1 プール管理システム（追加）
+# LLMプール管理システム
+llm_manager = None
 
-# Phase 1: 対話エージェント
+# 対話エージェント管理
 conversation_orchestrator = None
+chat_service: ChatService = None
 
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化（最適化版）"""
-    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client
+    global llm_client, supabase, conversation_orchestrator, llm_manager, async_llm_client, chat_service
     
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
@@ -397,25 +202,17 @@ async def startup_event():
             
         supabase = create_client(supabase_url, supabase_key)
         
-        # LLMクライアント初期化
-        llm_client = learning_plannner()
+        # LLMクライアント初期化（プール管理システムを使用）
+        llm_client = learning_plannner()  # 互換性のため初期化
         
-        # === Phase 1: プール管理システム初期化（追加）===
-        if PHASE1_AVAILABLE:
-            try:
-                # Phase 1システムの初期化（既存のllm_clientを使用）
-                phase1_llm_manager = await get_phase1_manager()
-                await phase1_llm_manager.initialize(existing_legacy_client=llm_client)
-                
-                # 初期化状況をログ出力
-                if os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true":
-                    logger.info("✅ Phase 1: プール機能が有効化されました")
-                else:
-                    logger.info("ℹ️ Phase 1: プール機能は無効です（既存システムを使用）")
-                    
-            except Exception as e:
-                logger.error(f"⚠️ Phase 1初期化エラー（既存システムで継続）: {e}")
-                phase1_llm_manager = None
+        # LLMプール管理システムの初期化
+        try:
+            llm_manager = await get_llm_manager()
+            await llm_manager.initialize(existing_legacy_client=llm_client)
+            logger.info("✅ LLMプール管理システム初期化完了")
+        except Exception as e:
+            logger.error(f"❌ LLMプール管理システム初期化エラー: {e}")
+            raise
         
         # 非同期LLMクライアントの初期化
         try:
@@ -425,12 +222,12 @@ async def startup_event():
             logger.error(f"❌ 非同期LLMクライアント初期化エラー: {e}")
             async_llm_client = None
         
-        # Phase 1: 対話エージェント初期化
+        # 対話エージェント初期化 (v1/モック版)
         if ENABLE_CONVERSATION_AGENT and CONVERSATION_AGENT_AVAILABLE:
             try:
                 conversation_orchestrator = ConversationOrchestrator(
                     llm_client=llm_client,
-                    use_mock=True  # Phase 1ではモックモード
+                    use_mock=True  # v1(モック版)ではモックモード
                 )
                 logger.info("✅ 対話エージェント初期化完了（モックモード）")
             except Exception as e:
@@ -443,11 +240,13 @@ async def startup_event():
                 logger.info("⚠️ 対話エージェント機能は無効です（環境変数ENABLE_CONVERSATION_AGENT=false）")
             if not CONVERSATION_AGENT_AVAILABLE:
                 logger.info("⚠️ 対話エージェントモジュールが利用不可です")
-        
-        # メモリ管理システム初期化（使用しない）
-        # global memory_manager
-        # memory_manager = MemoryManager(model="gpt-4.1-nano", max_messages=100)
-        
+
+        # --- New Service Initialization ---
+        chat_repo = ChatRepository(supabase=supabase)
+        chat_service = ChatService(llm_service=llm_client, repository=chat_repo)
+        logger.info("✅ Legacy Chat Service and Repository initialized.")
+        # --- End New Service Initialization ---
+
         logger.info("アプリケーション初期化完了（最適化版）")
         
     except Exception as e:
@@ -524,12 +323,6 @@ def validate_supabase():
     if not supabase:
         raise HTTPException(status_code=500, detail="データベース接続が初期化されていません")
 
-@lru_cache(maxsize=100)
-def get_cached_result(table: str, user_id: int, cache_key: str):
-    """簡単なクエリ結果キャッシュ"""
-    # 実装は省略（実際の使用時に追加）
-    pass
-
 def handle_database_error(error: Exception, operation: str):
     """データベースエラーのハンドリング"""
     error_detail = f"{operation}でエラーが発生しました: {str(error)}"
@@ -542,40 +335,9 @@ def handle_database_error(error: Exception, operation: str):
         detail=error_detail
     )
 
-async def get_or_create_global_chat_session(user_id: int) -> str:
-    """独立したグローバルAIチャットセッションを取得または作成"""
-    try:
-        # ユーザーのグローバルチャットセッションを探す
-        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", "global_chat").execute()
-        
-        if existing_conv.data:
-            return existing_conv.data[0]["id"]
-        else:
-            # 新しいグローバルチャットセッションを作成
-            new_conv_data = {
-                "user_id": user_id,
-                "title": "AIチャットセッション",
-                "page_id": "global_chat"  # 独立セッションの統一ID
-            }
-            new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
-            return new_conv.data[0]["id"] if new_conv.data else None
-    except Exception as e:
-        logger.error(f"グローバルチャットセッション取得/作成エラー: {e}")
-        raise
 
-async def update_conversation_timestamp(conversation_id: str):
-    """conversationの最終更新時刻を更新"""
-    try:
-        await asyncio.to_thread(
-            lambda: supabase.table("chat_conversations").update({
-                "updated_at": datetime.now().isoformat()
-            }).eq("id", conversation_id).execute()
-        )
-    except Exception as e:
-        logger.error(f"conversation timestamp更新エラー: {e}")
 
 # === エンドポイント実装 ===
-
 @app.get("/")
 async def root():
     """ヘルスチェックエンドポイント（最適化版）"""
@@ -588,7 +350,7 @@ async def health_check():
 
 @app.post("/auth/login", response_model=UserResponse)
 async def login(user_data: UserLogin):
-    """ユーザーログイン（最適化版）"""
+    """ユーザーログイン"""
     validate_supabase()
     
     try:
@@ -632,7 +394,7 @@ async def login(user_data: UserLogin):
 
 @app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserRegister):
-    """ユーザー新規登録（最適化版）"""
+    """ユーザー新規登録"""
     validate_supabase()
     
     try:
@@ -714,114 +476,17 @@ async def chat_with_ai(
             metrics=result.metrics
         )
     else:
-        # 既存の処理にフォールバック
-        try:
-            validate_supabase()
-            
-            if llm_client is None:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="LLMクライアントが初期化されていません"
-                )
-            
-            # 独立したAIチャットセッション（ページ非依存）
-            conversation_id = await get_or_create_global_chat_session(current_user)
-        
-            # プロジェクト情報はDBから取得せず、会話履歴から推測する方針に変更
-            project_context = None
-            project = None
-            project_id = None
-            
-            logger.info(f"📝 独立 AIチャットモード - ページ非依存セッション")
-            
-            # 過去の対話履歴を取得（最適化：20-30メッセージに制限）
-            history_limit = 30  # 履歴取得を最小限に抑える
-            history_response = supabase.table("chat_logs").select("id, sender, message, created_at").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(history_limit).execute()
-            conversation_history = history_response.data if history_response.data is not None else []
-
-            if conversation_history is None:
-                # エラーログを残す
-                print(f"Warning: conversation_history is None for conversation_id: {conversation_id}")
-            
-            # メッセージの準備
-            # システムプロンプトとメッセージを準備（プロジェクト情報は含めない）
-            messages = [{"role": "system", "content": system_prompt}]
-            if conversation_history:  # None または空リストのチェック
-                for history_msg in conversation_history:
-                    role = "user" if history_msg["sender"] == "user" else "assistant"
-                    messages.append({"role": role, "content": history_msg["message"]})
-
-            user_message = chat_data.message
-            
-            # Guard: message size limit to protect backend/LLM
-            if user_message is not None and len(user_message) > MAX_CHAT_MESSAGE_LENGTH:
-                raise HTTPException(status_code=400, detail="Message too long")
-
-            messages.append({"role": "user", "content": user_message})
-            context_metadata = None
-            
-            # 保存用のcontext_data作成（独立設計版）
-            context_data_dict = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "session_type": "global_chat",  # 独立チャットセッション
-                "independent": True  # ページ非依存のフラグ
-            }
-            
-            # ユーザーメッセージをDBに保存（独立チャット版）
-            user_message_data = {
-                "user_id": current_user,
-                "page": "global_chat",  # 独立チャットの統一タグ
-                "sender": "user",
-                "message": chat_data.message,
-                "conversation_id": conversation_id,
-                "context_data": json.dumps(context_data_dict, ensure_ascii=False)
-            }
-            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
-            
-            # agent_payloadを初期化
-            agent_payload = {}
-            
-            # 従来の処理
-            response = llm_client.generate_response(messages)
-            ai_context_data = {
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-            
-            # トークン使用量を計算（使用しない）
-            token_usage = None
-            
-            ai_message_data = {
-                "user_id": current_user,
-                "page": "global_chat",  # 独立チャットの統一タグ
-                "sender": "assistant",
-                "message": response,
-                "conversation_id": conversation_id,
-                "context_data": json.dumps(ai_context_data, ensure_ascii=False)
-            }
-            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
-            
-            # conversationの最終更新時刻を更新
-            try:
-                await update_conversation_timestamp(conversation_id)
-            except Exception as e:
-                # タイムスタンプ更新エラーは警告ログのみ（チャット自体は正常に処理）
-                logger.warning(f"conversation timestamp update failed: {e}")
-            
-            return ChatResponse(
-                response=response,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                token_usage=token_usage,
-                context_metadata=context_metadata,
-                **agent_payload
+        # Fallback to the legacy (but now refactored) chat flow
+        logger.warning("⚠️ Optimized chat path not available, using legacy service fallback.")
+        if not chat_service:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Legacy Chat Service is not initialized."
             )
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Chat API Error: {str(e)}")
-            print(f"Error type: {type(e)}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
-            handle_database_error(e, "AI応答の生成")
+        return await chat_service.handle_legacy_chat(
+            chat_data=chat_data,
+            current_user=current_user
+        )
 
 @app.get("/chat/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(
@@ -2278,33 +1943,24 @@ async def cleanup_test_users():
 async def get_llm_system_metrics(
     current_user: int = Depends(get_current_user_cached)
 ):
-    """Phase 1 LLMシステムのメトリクス取得"""
+    """LLMシステムのメトリクス取得"""
     try:
-        if PHASE1_AVAILABLE and phase1_llm_manager and phase1_llm_manager._initialized:
-            metrics = phase1_llm_manager.get_metrics()
-            health = phase1_llm_manager.health_check()
+        if llm_manager and llm_manager._initialized:
+            metrics = llm_manager.get_metrics()
+            health = llm_manager.health_check()
             
             return {
-                "phase1_system": {
+                "llm_system": {
                     "metrics": metrics,
                     "health": health,
                     "timestamp": datetime.now(timezone.utc).isoformat()
-                },
-                "legacy_system": {
-                    "available": llm_client is not None,
-                    "class": llm_client.__class__.__name__ if llm_client else None
                 }
             }
         else:
             return {
-                "phase1_system": {
-                    "status": "not_initialized" if PHASE1_AVAILABLE else "not_available",
-                    "message": "Phase 1システムが初期化されていません" if PHASE1_AVAILABLE else "Phase 1システムが利用不可です"
-                },
-                "legacy_system": {
-                    "available": llm_client is not None,
-                    "status": "active",
-                    "message": "既存システムのみ動作中"
+                "llm_system": {
+                    "status": "not_initialized",
+                    "message": "LLMプールシステムが初期化されていません"
                 }
             }
             
@@ -2319,29 +1975,26 @@ async def get_llm_system_metrics(
 async def debug_llm_system(
     current_user: int = Depends(get_current_user_cached)
 ):
-    """Phase 1 LLMシステムのデバッグ情報"""
+    """LLMシステムのデバッグ情報"""
     debug_info = {
         "environment_variables": {
-            "ENABLE_LLM_POOL": os.environ.get("ENABLE_LLM_POOL", "false"),
-            "LLM_POOL_SIZE": os.environ.get("LLM_POOL_SIZE", "5"),
+            "LLM_POOL_SIZE": os.environ.get("LLM_POOL_SIZE", "10"),
             "LLM_POOL_TIMEOUT": os.environ.get("LLM_POOL_TIMEOUT", "30.0"),
             "LLM_AUTO_FALLBACK": os.environ.get("LLM_AUTO_FALLBACK", "true"),
             "LLM_POOL_DEBUG": os.environ.get("LLM_POOL_DEBUG", "false")
         },
         "system_status": {
-            "phase1_available": PHASE1_AVAILABLE,
-            "phase1_manager_exists": phase1_llm_manager is not None,
-            "phase1_initialized": phase1_llm_manager._initialized if phase1_llm_manager else False,
-            "legacy_client_exists": llm_client is not None,
+            "llm_manager_exists": llm_manager is not None,
+            "llm_manager_initialized": llm_manager._initialized if llm_manager else False,
             "current_time": datetime.now(timezone.utc).isoformat()
         }
     }
     
     # メトリクス情報を追加
-    if PHASE1_AVAILABLE and phase1_llm_manager and phase1_llm_manager._initialized:
+    if llm_manager and llm_manager._initialized:
         try:
-            debug_info["detailed_metrics"] = phase1_llm_manager.get_metrics()
-            debug_info["health_check"] = phase1_llm_manager.health_check()
+            debug_info["detailed_metrics"] = llm_manager.get_metrics()
+            debug_info["health_check"] = llm_manager.health_check()
         except Exception as e:
             debug_info["metrics_error"] = str(e)
     
@@ -2353,18 +2006,11 @@ async def log_llm_system_status(
 ):
     """LLMシステムの状態をログに出力（管理者用）"""
     try:
-        if PHASE1_AVAILABLE:
-            log_system_status()
-            return {
-                "message": "Phase 1システム状態をログに出力しました",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        else:
-            logger.info("📊 LLMシステム状態: Phase 1は利用不可、既存システムのみ動作中")
-            return {
-                "message": "Phase 1は利用不可、既存システムのみ動作中",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+        log_system_status()
+        return {
+            "message": "LLMシステム状態をログに出力しました",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
     except Exception as e:
         logger.error(f"ログ出力エラー: {e}")
         return {

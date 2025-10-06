@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect} from 'react';
 import {
   Container,
   Typography,
@@ -6,36 +6,21 @@ import {
   Button,
   Box,
   Paper,
-  Grid,
   Card,
   CardContent,
-  CardActionArea,
-  IconButton,
   Chip,
   CircularProgress,
   Alert,
   Fade,
-  Grow,
-  Divider,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Stepper,
   Step,
   StepLabel,
-  Zoom,
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  ArrowForward as ArrowForwardIcon,
   ArrowBack as ArrowBackIcon,
   Refresh as RefreshIcon,
   School as SchoolIcon,
-  Psychology as PsychologyIcon,
   Edit as EditIcon,
-  CheckCircle as CheckCircleIcon,
-  RadioButtonUnchecked as RadioButtonUncheckedIcon,
   AccountTree as TreeIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';

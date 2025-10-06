@@ -523,23 +523,47 @@ const MemoPage: React.FC = () => {
     if (!memoId) return;
     
     // 改行コードを正規化（Windows CRLF → Unix LF）
-    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const normalizedContent = content
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\u2028/g, '\n')  // Line Separator
+      .replace(/\u2029/g, '\n'); // Paragraph Separator
     
-    // APIの期待する形式に合わせてタイトルと本文を分離
-    const lines = normalizedContent.split('\n');
-    const title = lines.length > 0 ? lines[0].trim() : '';
-    // 2行目以降をそのまま保持（空行も含む）
-    const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
+    // 最初の改行位置を手動で探す（split処理を使わない）
+    const firstNewlineIndex = normalizedContent.indexOf('\n');
     
-    // デバッグログ
-    console.log('Save Debug:', {
+    let title = '';
+    let bodyContent = '';
+    
+    if (firstNewlineIndex === -1) {
+      // 改行がない場合（1行のみ）
+      title = normalizedContent.trim();
+      bodyContent = '';
+    } else {
+      // 改行がある場合
+      title = normalizedContent.substring(0, firstNewlineIndex).trim();
+      // 最初の改行の次の文字から最後まで（2行目以降すべて）
+      bodyContent = normalizedContent.substring(firstNewlineIndex + 1);
+    }
+    
+    // デバッグログ（詳細版）
+    console.log('Save Debug (Alternative Split):', {
       originalContent: content,
+      originalLength: content.length,
       normalizedContent: normalizedContent,
-      splitLines: lines,
+      normalizedLength: normalizedContent.length,
+      firstNewlineIndex: firstNewlineIndex,
       title: title,
+      titleLength: title.length,
       bodyContent: bodyContent,
       bodyContentLength: bodyContent.length,
-      bodyContentDisplay: bodyContent.replace(/\n/g, '\\n')
+      bodyContentDisplay: bodyContent.replace(/\n/g, '\\n'),
+      // 文字コードレベルでの確認
+      charCodes: Array.from(normalizedContent.slice(0, 50)).map(c => ({
+        char: c,
+        code: c.charCodeAt(0),
+        hex: '0x' + c.charCodeAt(0).toString(16)
+      }))
     });
     
     enqueueSave(title, bodyContent);
@@ -551,12 +575,28 @@ const MemoPage: React.FC = () => {
     if (!memoId || !content) return;
     
     // 改行コードを正規化（Windows CRLF → Unix LF）
-    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const normalizedContent = content
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\u2028/g, '\n')  // Line Separator
+      .replace(/\u2029/g, '\n'); // Paragraph Separator
     
-    // APIの期待する形式に合わせてタイトルと本文を分離
-    const lines = normalizedContent.split('\n');
-    const title = lines.length > 0 ? lines[0].trim() : '';
-    const bodyContent = lines.length > 1 ? lines.slice(1).join('\n') : '';
+    // 最初の改行位置を手動で探す（split処理を使わない）
+    const firstNewlineIndex = normalizedContent.indexOf('\n');
+    
+    let title = '';
+    let bodyContent = '';
+    
+    if (firstNewlineIndex === -1) {
+      // 改行がない場合（1行のみ）
+      title = normalizedContent.trim();
+      bodyContent = '';
+    } else {
+      // 改行がある場合
+      title = normalizedContent.substring(0, firstNewlineIndex).trim();
+      // 最初の改行の次の文字から最後まで（2行目以降すべて）
+      bodyContent = normalizedContent.substring(firstNewlineIndex + 1);
+    }
     
     enqueueSave(title, bodyContent);
   }, [memoId, enqueueSave]);

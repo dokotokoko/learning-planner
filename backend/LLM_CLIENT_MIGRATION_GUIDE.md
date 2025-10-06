@@ -164,7 +164,7 @@ LLM_POOL_SIZE=15
 - 同時処理: 10-15倍向上
 - 可用性: 99.5%以上
 
-### Phase 3: アダプティブ最適化（自動調整）
+### Step 3: アダプティブ最適化（自動調整）
 ```env
 LOAD_BALANCE_STRATEGY=adaptive
 AUTO_SCALING=true
