@@ -40,6 +40,9 @@ from module.async_llm_api import get_async_llm_client
 from optimized_endpoints import optimized_chat_with_ai
 from conversation_agent.optimized_conversation_agent import optimized_chat_with_conversation_agent
 
+# 探究学習APIルーターのインポート
+from inquiry_api import router as inquiry_router
+
 # ロギング設定（デバッグ用）
 logging.basicConfig(
     level=logging.INFO,  # DEBUG用にINFOレベルに変更
@@ -107,6 +110,9 @@ app = FastAPI(
     docs_url="/docs",  # 本番では無効化を検討
     redoc_url="/redoc"  # 本番では無効化を検討
 )
+
+# 探究学習APIルーターを登録
+app.include_router(inquiry_router)
 
 # パフォーマンス最適化ミドルウェア
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # レスポンス圧縮
