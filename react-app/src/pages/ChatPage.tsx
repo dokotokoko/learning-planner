@@ -45,7 +45,6 @@ const ChatPage: React.FC = () => {
         body: JSON.stringify({
           message: message,
           memo_content: memoContent,
-          page_id: 'main-chat',
         }),
       });
 
@@ -86,7 +85,6 @@ const ChatPage: React.FC = () => {
       {/* Chat Content */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         <AIChat
-          pageId="main-chat"
           title="AIアシスタント"
           persistentMode={true}
           loadHistoryFromDB={true}

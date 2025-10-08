@@ -8,7 +8,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI, OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import system_prompt
+from prompt.prompt import dev_system_prompt, system_prompt
 from module.llm_api import learning_plannner
 
 

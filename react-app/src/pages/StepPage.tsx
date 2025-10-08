@@ -128,7 +128,6 @@ const ReviewStepPage: React.FC<{ handleAIMessage: (message: string, workContent:
 
         <Box sx={{ width: '350px', display: 'flex', flexDirection: 'column' }}>
           <AIChat 
-            pageId="step-5"
             title="パス整理AI"
             initialMessage={AI_INITIAL_MESSAGE}
             onMessageSend={async (message) => {
@@ -1159,7 +1158,6 @@ AIアシスタントが社会との繋がりを見つけることをサポート
         ) : (
           /* Step2以降のワークスペース */
           <WorkspaceWithAI
-            pageId={`step-${currentStep}`}
             title={content?.title || 'ワークスペース'}
             description={content?.description}
             placeholder={content?.workPlaceholder || 'ここに内容を入力してください...'}

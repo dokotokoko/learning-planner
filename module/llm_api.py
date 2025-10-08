@@ -2,7 +2,7 @@ import os
 from typing import List, Dict, Any
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import system_prompt
+from prompt.prompt import system_prompt, dev_system_prompt
 
 class learning_plannner():
     def __init__(self):

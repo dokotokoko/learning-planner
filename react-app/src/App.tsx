@@ -24,6 +24,7 @@ const MultiMemoPage = lazy(() => import('./pages/MultiMemoPage'));
 const NotificationDemoPage = lazy(() => import('./pages/NotificationDemoPage'));
 const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
 const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTestPage'));
+const InquiryExplorer = lazy(() => import('./components/InquiryExplorer/InquiryExplorer'));
 
 // import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 
@@ -160,6 +161,24 @@ function App() {
                 } 
               />
               
+              {/* InquiryExplorer - サイドバーなしのフルスクリーン */}
+              <Route 
+                path="/inquiry-explorer" 
+                element={
+                  <ProtectedRoute>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ height: '100vh' }}
+                    >
+                      <LazyWrapper><InquiryExplorer /></LazyWrapper>
+                    </motion.div>
+                  </ProtectedRoute>
+                } 
+              />
+
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<Navigate to="/chat" replace />} />
                 <Route path="chat" element={<ChatPage />} />

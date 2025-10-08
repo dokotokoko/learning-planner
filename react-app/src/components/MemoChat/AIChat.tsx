@@ -35,7 +35,7 @@ interface Message {
 }
 
 interface AIChatProps {
-  pageId: string;
+  isDashboard?: boolean;  // ダッシュボードかどうかのフラグ
   title: string;
   initialMessage?: string;
   initialAIResponse?: string;
@@ -57,7 +57,7 @@ interface AIChatProps {
 }
 
 const AIChat: React.FC<AIChatProps> = ({
-  pageId,
+  isDashboard = false,
   initialMessage,
   initialAIResponse,
   memoContent = '',
@@ -77,7 +77,7 @@ const AIChat: React.FC<AIChatProps> = ({
   persistentMode = false,
 }) => {
   // 統一されたメッセージ管理フックを使用
-  const { messages, addMessage, setMessages, clearMessages } = useAIChatMessages(pageId);
+  const { messages, addMessage, setMessages, clearMessages } = useAIChatMessages();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -91,8 +91,8 @@ const AIChat: React.FC<AIChatProps> = ({
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
 
-  // 初期化管理用のref（pageIdのみで管理、autoStartは除外）
-  const initializationKeyRef = useRef(pageId);
+  // 初期化管理用のref
+  const initializationKeyRef = useRef('initialized');
   
   // タイマー管理用
   const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
@@ -147,16 +147,16 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
-    if (forceRefresh || (!persistentMode && initializationKeyRef.current !== pageId)) {
+    if (forceRefresh) {
       clearMessages();
       setHistoryLoaded(false);
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
-      initializationKeyRef.current = pageId;
+      initializationKeyRef.current = 'initialized';
       return true; // クリアが実行されたことを示す
     }
     return false;
-  }, [forceRefresh, pageId, persistentMode, clearMessages]);
+  }, [forceRefresh, clearMessages]);
 
   // ストア同期関数（カスタムフックで管理されるため不要）
   const syncMessagesFromStore = useCallback(() => {
@@ -175,6 +175,20 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // 対話履歴読み込み関数（イベント駆動）
   const loadChatHistory = useCallback(async () => {
+    // ページリロードの検出
+    // performance.navigation.type === 1 はリロード
+    // performance.getEntriesByType('navigation')でも判定可能
+    const isPageReload = performance.navigation?.type === 1 || 
+                        (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
+    
+    // リロード時は履歴読み込みフラグをリセットして最新データを取得
+    if (isPageReload && historyLoaded) {
+      setHistoryLoaded(false);
+      // リロード時は既存のメッセージをクリアして最新を取得
+      clearMessages();
+      return; // 次のレンダリングサイクルで再度呼ばれる
+    }
+    
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
@@ -194,10 +208,8 @@ const AIChat: React.FC<AIChatProps> = ({
       if (!userId) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      // グローバルチャット履歴を取得（pageIdに関係なく独立）
-      const historyUrl = pageId.includes('dashboard') 
-        ? `${apiBaseUrl}/chat/history?page=dashboard` 
-        : `${apiBaseUrl}/chat/history`; // pageパラメータを除去
+      // グローバルチャット履歴を取得
+      const historyUrl = `${apiBaseUrl}/chat/history`;
       const response = await fetch(historyUrl, {
         headers: {
           'Authorization': `Bearer ${userId}`,
@@ -214,8 +226,8 @@ const AIChat: React.FC<AIChatProps> = ({
           timestamp: item.created_at ? new Date(item.created_at) : new Date(),
         }));
 
-        // ダッシュボードの場合は空の履歴（バックエンドで制御済み）
-        if (pageId.includes('dashboard')) {
+        // ダッシュボードの場合は空の履歴
+        if (isDashboard) {
           // ダッシュボードは初期メッセージのみ表示
           const initialMessage: Message = {
             id: `initial-${Date.now()}`,
@@ -225,7 +237,7 @@ const AIChat: React.FC<AIChatProps> = ({
           };
           setMessages([initialMessage]);
         } else {
-          // その他のページは全てグローバル履歴を表示
+          // その他は全てグローバル履歴を表示
           setMessages(historyMessages);
         }
         
@@ -240,12 +252,12 @@ const AIChat: React.FC<AIChatProps> = ({
       console.error('対話履歴の読み込みエラー:', error);
       setHistoryLoaded(true); // エラーでも処理を続行
     }
-  }, [pageId, loadHistoryFromDB, historyLoaded]);
+  }, [isDashboard, loadHistoryFromDB, historyLoaded, clearMessages, setMessages]);
 
   // 初期メッセージ設定関数（イベント駆動）
   const loadInitialMessages = useCallback(async () => {
-    // 履歴読み込みが有効で、ダッシュボード系のページの場合は履歴読み込み処理に任せる
-    if (loadHistoryFromDB && (pageId.includes('dashboard') || pageId.includes('general-'))) {
+    // 履歴読み込みが有効で、ダッシュボードの場合は履歴読み込み処理に任せる
+    if (loadHistoryFromDB && isDashboard) {
       return;
     }
     
@@ -257,43 +269,14 @@ const AIChat: React.FC<AIChatProps> = ({
     
     const initialMessages: Message[] = [];
     
-    // Step2以降の場合、LocalStorageから初期AI応答を取得（ユーザー固有）
-    if ((pageId === 'step-2' || pageId === 'step-3' || pageId === 'step-4') && autoStart) {
-      const stepNumber = pageId.replace('step-', '');
-      
-      // ユーザーIDを取得
-      let userId = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (userId) {
-        const savedInitialResponse = localStorage.getItem(`user-${userId}-step${stepNumber}-initial-ai-response`);
-        if (savedInitialResponse) {
-          initialMessages.push({
-            id: `initial-response-${Date.now()}`,
-            role: 'assistant',
-            content: savedInitialResponse,
-            timestamp: new Date(),
-          });
-        } else if (initialAIResponse) {
-          // LocalStorageにない場合は、propsから設定
-          initialMessages.push({
-            id: `initial-response-${Date.now()}`,
-            role: 'assistant',
-            content: initialAIResponse,
-            timestamp: new Date(),
-          });
-        }
-      }
+    // autoStartの場合、初期AI応答を設定
+    if (autoStart && initialAIResponse) {
+      initialMessages.push({
+        id: `initial-response-${Date.now()}`,
+        role: 'assistant',
+        content: initialAIResponse,
+        timestamp: new Date(),
+      });
     } else {
       // デフォルトの初期メッセージを表示
       initialMessages.push({
@@ -307,9 +290,9 @@ const AIChat: React.FC<AIChatProps> = ({
     if (initialMessages.length > 0) {
       setMessages(initialMessages);
       // 初期化完了を記録
-      initializationKeyRef.current = pageId;
+      initializationKeyRef.current = 'initialized';
     }
-  }, [initialMessage, initialAIResponse, pageId, loadHistoryFromDB, historyLoaded, messages.length, autoStart]);
+  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart]);
 
   // 自動スクロール処理（イベント駆動）
   const previousMessageCountRef = useRef(0);
@@ -389,7 +372,6 @@ const AIChat: React.FC<AIChatProps> = ({
             credentials: 'include',
             body: JSON.stringify({
               message: userMessage.content,
-              // pageIdを送信しない（グローバルチャットのため）
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
             }),
           });
@@ -530,6 +512,17 @@ const AIChat: React.FC<AIChatProps> = ({
     addMessage(initialMsg);
   };
 
+  // コンポーネントマウント時のリセット処理
+  useEffect(() => {
+    // コンポーネントが新規マウントされた場合（リロード含む）
+    // historyLoadedフラグをリセットして最新データの取得を可能にする
+    const isFirstMount = !historyLoaded && messages.length === 0;
+    if (isFirstMount && loadHistoryFromDB) {
+      // 初回マウント時は履歴読み込みフラグをリセット
+      setHistoryLoaded(false);
+    }
+  }, []); // 空の依存配列で初回マウント時のみ実行
+
   // 初期化とクリーンアップ
   useEffect(() => {
     const wasCleared = clearMessagesIfNeeded();
@@ -541,7 +534,7 @@ const AIChat: React.FC<AIChatProps> = ({
         loadInitialMessages();
       }
     }
-  }, [pageId, forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
+  }, [forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
 
   // スクロール処理の設定
   useEffect(() => {
@@ -800,7 +793,7 @@ const AIChat: React.FC<AIChatProps> = ({
             isOpen={isHistoryOpen}
             onClose={() => setIsHistoryOpen(false)}
             onSessionSelect={handleSessionSelect}
-            currentPageId={pageId}
+            currentPageId="general"
           />
         )}
       </AnimatePresence>
@@ -809,7 +802,7 @@ const AIChat: React.FC<AIChatProps> = ({
       {enableSmartNotifications && (
         <SmartNotificationManager 
           ref={notificationManagerRef}
-          pageId={pageId}
+          pageId="general"
         />
       )}
     </Box>
