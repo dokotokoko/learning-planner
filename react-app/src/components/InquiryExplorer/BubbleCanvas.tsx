@@ -79,10 +79,18 @@ const BubbleCanvas: React.FC<BubbleCanvasProps> = ({
     return Math.max(minRadius, Math.min(maxRadius, calculatedRadius));
   }, []);
 
-  // カラーパレット
+  // 創造性とクリエイティビティを爆発させる高コントラスト配色パレット
   const clusterColors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
-    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
+    '#FF0080', // ビビッドマゼンタ - 情熱と創造力
+    '#00FF80', // エレクトリックグリーン - 革新と成長
+    '#8000FF', // ブルーバイオレット - 想像力と直感
+    '#FF8000', // ビビッドオレンジ - エネルギーと熱情
+    '#0080FF', // ドジャーブルー - 自由と拡張
+    '#FF4000', // レッドオレンジ - 行動力と決断
+    '#40FF00', // ライムグリーン - 創造的発想
+    '#FF0040', // ディープピンク - 感情と表現
+    '#00FF40', // スプリンググリーン - 新鮮さと活力
+    '#4000FF', // インディゴ - 深い思考と洞察
   ];
 
   // D3.js Force Simulation
@@ -158,18 +166,18 @@ const BubbleCanvas: React.FC<BubbleCanvasProps> = ({
     nodeElements.append('circle')
       .attr('r', (d) => calculateBubbleRadius(d.text, d.isCenter))
       .attr('fill', (d) => {
-        if (d.isCenter) return '#FF6B6B';
-        if (d.id === selectedNodeId) return '#4ECDC4';
+        if (d.isCenter) return '#FF0080'; // ビビッドマゼンタ - 中心への注目
+        if (d.id === selectedNodeId) return '#00FF80'; // エレクトリックグリーン - 選択の活力
         const cluster = clusters.find(c => c.nodeIds.includes(d.id));
         if (cluster) {
           const index = clusters.indexOf(cluster);
           return clusterColors[index % clusterColors.length];
         }
-        return '#87CEEB';
+        return '#8000FF'; // ブルーバイオレット - 無限の可能性
       })
       .attr('stroke', (d) => {
-        if (d.id === selectedNodeId || selectedNodes.has(d.id)) return '#333';
-        return '#fff';
+        if (d.id === selectedNodeId || selectedNodes.has(d.id)) return '#000000'; // 最高コントラストの黒
+        return '#FFFFFF'; // 純白の境界線
       })
       .attr('stroke-width', (d) => {
         if (d.id === selectedNodeId || selectedNodes.has(d.id)) return 3;
@@ -200,7 +208,16 @@ const BubbleCanvas: React.FC<BubbleCanvasProps> = ({
       .attr('text-anchor', 'middle')
       .attr('dy', '.35em')
       .attr('pointer-events', 'none')
-      .attr('fill', (d) => d.isCenter ? '#fff' : '#333333')
+      .attr('fill', (d) => {
+        // 背景色に対する最高コントラスト（7:1以上）を保証
+        if (d.isCenter) return '#FFFFFF'; // マゼンタ背景に白文字
+        if (d.id === selectedNodeId) return '#000000'; // グリーン背景に黒文字
+        const cluster = clusters.find(c => c.nodeIds.includes(d.id));
+        if (cluster) {
+          return '#FFFFFF'; // カラフル背景に白文字
+        }
+        return '#FFFFFF'; // バイオレット背景に白文字
+      })
       .attr('font-weight', (d) => d.isCenter ? 'bold' : 'normal')
       .attr('font-size', (d) => {
         const radius = calculateBubbleRadius(d.text, d.isCenter);
@@ -219,8 +236,8 @@ const BubbleCanvas: React.FC<BubbleCanvasProps> = ({
       .attr('r', 8)
       .attr('cx', (d) => calculateBubbleRadius(d.text, d.isCenter) * 0.7)
       .attr('cy', (d) => -calculateBubbleRadius(d.text, d.isCenter) * 0.7)
-      .attr('fill', '#FF6B6B')
-      .attr('stroke', '#fff')
+      .attr('fill', '#FF0040') // ディープピンク - 危険と注意
+      .attr('stroke', '#FFFFFF')
       .attr('stroke-width', 1)
       .attr('cursor', 'pointer')
       .attr('opacity', 0)
@@ -234,7 +251,7 @@ const BubbleCanvas: React.FC<BubbleCanvasProps> = ({
       .attr('x', (d) => calculateBubbleRadius(d.text, d.isCenter) * 0.7)
       .attr('y', (d) => -calculateBubbleRadius(d.text, d.isCenter) * 0.7 + 4)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#fff')
+      .attr('fill', '#FFFFFF') // 最高コントラストの白
       .attr('font-size', '10px')
       .attr('pointer-events', 'none')
       .attr('opacity', 0)

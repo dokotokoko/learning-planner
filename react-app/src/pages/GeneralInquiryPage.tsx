@@ -254,7 +254,6 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
               }}
             >
               <AIChat
-                pageId="general-inquiry"
                 title="AI相談アシスタント"
                 onClose={toggleChat}
                 persistentMode={true}

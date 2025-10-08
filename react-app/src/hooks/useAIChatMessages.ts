@@ -12,8 +12,9 @@ interface Message {
  * AIチャットのメッセージ管理を統一するカスタムフック
  * chatStoreとローカルstateの同期を一元管理
  */
-export const useAIChatMessages = (pageId: string) => {
+export const useAIChatMessages = () => {
   const { getMessages, addMessage: addToStore, clearMessages: clearStore } = useChatStore();
+  const GLOBAL_CHAT_KEY = 'global'; // グローバルチャットの統一キー
   
   // メッセージを正規化してtimestampをDateオブジェクトに変換
   const normalizeMessages = (msgs: Message[]): Message[] => {
@@ -35,19 +36,19 @@ export const useAIChatMessages = (pageId: string) => {
   };
   
   const [messages, setMessages] = useState<Message[]>(() => {
-    const storeMessages = getMessages(pageId);
+    const storeMessages = getMessages(GLOBAL_CHAT_KEY);
     return sortMessages(normalizeMessages(storeMessages));
   });
   
   // storeのメッセージとローカルを同期
   useEffect(() => {
-    const storeMessages = getMessages(pageId);
+    const storeMessages = getMessages(GLOBAL_CHAT_KEY);
     if (storeMessages.length !== messages.length) {
       const normalized = normalizeMessages(storeMessages);
       const sorted = sortMessages(normalized);
       setMessages(sorted);
     }
-  }, [pageId, getMessages]);
+  }, [getMessages]);
   
   // メッセージ追加（ストアとローカル両方を更新、重複防止付き）
   const addMessage = useCallback((message: Message) => {
@@ -82,8 +83,8 @@ export const useAIChatMessages = (pageId: string) => {
     });
     
     // ストアにも保存（ストア側でも重複チェックされる）
-    addToStore(pageId, normalizedMessage);
-  }, [pageId, addToStore]);
+    addToStore(GLOBAL_CHAT_KEY, normalizedMessage);
+  }, [addToStore]);
   
   // メッセージ一括設定
   const setAllMessages = useCallback((newMessages: Message[]) => {
@@ -93,17 +94,17 @@ export const useAIChatMessages = (pageId: string) => {
     setMessages(sorted);
     
     // 必要に応じてストアも更新
-    clearStore(pageId);
+    clearStore(GLOBAL_CHAT_KEY);
     sorted.forEach(msg => {
-      addToStore(pageId, msg);
+      addToStore(GLOBAL_CHAT_KEY, msg);
     });
-  }, [pageId, clearStore, addToStore]);
+  }, [clearStore, addToStore]);
   
   // メッセージクリア
   const clearMessages = useCallback(() => {
     setMessages([]);
-    clearStore(pageId);
-  }, [pageId, clearStore]);
+    clearStore(GLOBAL_CHAT_KEY);
+  }, [clearStore]);
   
   return {
     messages,  // 常に正規化・ソート済みのメッセージを返す

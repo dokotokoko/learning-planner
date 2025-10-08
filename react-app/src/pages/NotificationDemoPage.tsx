@@ -255,7 +255,6 @@ const NotificationDemoPage: React.FC = () => {
               </Typography>
               <Box sx={{ height: 'calc(100% - 40px)' }}>
                 <AIChat
-                  pageId="notification-demo"
                   title="通知デモ"
                   initialMessage={AI_INITIAL_MESSAGE}
                   enableSmartNotifications={true}

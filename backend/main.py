@@ -222,7 +222,6 @@ class ConversationAgentRequest(BaseModel):
     """対話エージェント検証用リクエストモデル"""
     message: str
     project_id: Optional[int] = None
-    page_id: Optional[str] = None
     include_history: bool = True
     history_limit: int = 50
     debug_mode: bool = False  # デバッグ情報を含めるか
@@ -250,7 +249,6 @@ class ConversationAgentResponse(BaseModel):
 
 class ChatHistoryResponse(BaseModel):
     id: int
-    page: str
     sender: str
     message: str
     context_data: Optional[str]
@@ -260,12 +258,10 @@ class ChatHistoryResponse(BaseModel):
 
 # メモ関連
 class MemoSave(BaseModel):
-    page_id: str
     content: str
 
 class MemoResponse(BaseModel):
     id: int
-    page_id: str
     title: Optional[str] = ""
     content: str
     updated_at: str
@@ -549,24 +545,23 @@ def handle_database_error(error: Exception, operation: str):
     )
 
 async def get_or_create_global_chat_session(user_id: int) -> str:
-    """独立したグローバルAIチャットセッションを取得または作成"""
+    """ユーザーのAIチャットセッションを取得または作成"""
     try:
-        # ユーザーのグローバルチャットセッションを探す
-        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", "global_chat").execute()
+        # ユーザーのチャットセッションを探す
+        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).execute()
         
         if existing_conv.data:
             return existing_conv.data[0]["id"]
         else:
-            # 新しいグローバルチャットセッションを作成
+            # 新しいチャットセッションを作成
             new_conv_data = {
                 "user_id": user_id,
-                "title": "AIチャットセッション",
-                "page_id": "global_chat"  # 独立セッションの統一ID
+                "title": "AIチャットセッション"
             }
             new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
             return new_conv.data[0]["id"] if new_conv.data else None
     except Exception as e:
-        logger.error(f"グローバルチャットセッション取得/作成エラー: {e}")
+        logger.error(f"チャットセッション取得/作成エラー: {e}")
         raise
 
 async def update_conversation_timestamp(conversation_id: str):
@@ -773,10 +768,9 @@ async def chat_with_ai(
                 "independent": True  # ページ非依存のフラグ
             }
             
-            # ユーザーメッセージをDBに保存（独立チャット版）
+            # ユーザーメッセージをDBに保存
             user_message_data = {
                 "user_id": current_user,
-                "page": "global_chat",  # 独立チャットの統一タグ
                 "sender": "user",
                 "message": chat_data.message,
                 "conversation_id": conversation_id,
@@ -798,7 +792,6 @@ async def chat_with_ai(
             
             ai_message_data = {
                 "user_id": current_user,
-                "page": "global_chat",  # 独立チャットの統一タグ
                 "sender": "assistant",
                 "message": response,
                 "conversation_id": conversation_id,
@@ -831,30 +824,23 @@ async def chat_with_ai(
 
 @app.get("/chat/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(
-    page: Optional[str] = None,
     limit: Optional[int] = 50,
     before: Optional[str] = None,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """対話履歴取得（グローバル履歴ベース）"""
+    """対話履歴取得"""
     try:
         validate_supabase()
         
-        # ダッシュボードの場合は空の履歴を返す
-        if page == "dashboard":
-            return []
+        # 全履歴を取得
+        query = supabase.table("chat_logs").select("id, sender, message, context_data, created_at").eq("user_id", current_user)
         
-        # その他のページは全て最新のグローバル履歴を返す
-        query = supabase.table("chat_logs").select("id, page, sender, message, context_data, created_at").eq("user_id", current_user)
-        
-        # pageフィルタを削除（全履歴を取得）
         query = query.order("created_at", desc=False).limit(limit or 50)
         result = query.execute()
         
         items = [
             ChatHistoryResponse(
                 id=item["id"],
-                page=item["page"] or "general",
                 sender=item["sender"],
                 message=item["message"],
                 context_data=item.get("context_data"),
@@ -887,26 +873,24 @@ async def save_memo(
     except Exception as e:
         handle_database_error(e, "メモの保存")
 
-@app.get("/memos/{page_id}", response_model=MemoResponse)
-async def get_memo_by_page_id(
-    page_id: str,
+@app.get("/memos/{memo_id}", response_model=MemoResponse)
+async def get_memo_by_id(
+    memo_id: str,
     current_user: int = Depends(get_current_user_cached)
 ):
-    """ページIDベースのメモ取得（レガシー対応）"""
+    """メモIDベースのメモ取得"""
     try:
         validate_supabase()
         
-        # page_memosテーブルが存在しないため、memosテーブルからpage_id相当のものを検索
-        # page_idが数値の場合はmemo_idとして扱う
+        # memo_idが数値の場合はmemosテーブルから取得
         try:
-            memo_id = int(page_id)
-            result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("id", memo_id).eq("user_id", current_user).execute()
+            id_value = int(memo_id)
+            result = supabase.table("memos").select("id, title, content, updated_at, created_at").eq("id", id_value).eq("user_id", current_user).execute()
             
             if result.data:
                 memo = result.data[0]
                 return MemoResponse(
                     id=memo["id"],
-                    page_id=page_id,
                     title=memo.get("title") or "",
                     content=memo.get("content") or "",
                     updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()
@@ -915,16 +899,14 @@ async def get_memo_by_page_id(
                 # メモが存在しない場合は空のメモを返す
                 return MemoResponse(
                     id=0,
-                    page_id=page_id,
                     title="",
                     content="",
                     updated_at=datetime.now(timezone.utc).isoformat()
                 )
         except ValueError:
-            # page_idが数値でない場合は空のメモを返す
+            # memo_idが数値でない場合は空のメモを返す
             return MemoResponse(
                 id=0,
-                page_id=page_id,
                 title="",
                 content="",
                 updated_at=datetime.now(timezone.utc).isoformat()
@@ -946,7 +928,6 @@ async def get_all_memos(current_user: int = Depends(get_current_user_cached)):
         return [
             MemoResponse(
                 id=memo["id"],
-                page_id=str(memo["id"]),  # memo_idをpage_idとして使用
                 title=memo.get("title") or "",
                 content=memo.get("content") or "",
                 updated_at=memo.get("updated_at") or memo.get("created_at") or datetime.now(timezone.utc).isoformat()

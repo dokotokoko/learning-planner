@@ -29,7 +29,6 @@ import AIChat from './AIChat';
 
 
 interface WorkspaceWithAIProps {
-  pageId: string;
   title: string;
   description?: string;
   placeholder: string;
@@ -61,7 +60,6 @@ interface WorkspaceWithAIProps {
 }
 
 const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
-  pageId,
   title,
   description,
   placeholder,
@@ -102,8 +100,8 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
   
   const workspaceRef = useRef<HTMLDivElement>(null);
   
-  // AIChatコンポーネントのインスタンスを保持するためのキー（固定化してメモ帳状態の影響を除去）
-  const aiChatKey = `${pageId}-stable`;
+  // AIChatコンポーネントのインスタンスを保持するためのキー
+  const aiChatKey = 'ai-chat-stable';
 
   // AIチャットを開く
   const handleOpenAI = useCallback(() => {
@@ -163,7 +161,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
       }
 
       if (userId) {
-        localStorage.setItem(`user-${userId}-memo-${pageId}`, memoContent);
+        localStorage.setItem(`user-${userId}-memo-workspace`, memoContent);
         setMemoSaved(true);
         setTimeout(() => setMemoSaved(false), 2000);
       }
@@ -188,7 +186,7 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
       }
 
       if (userId) {
-        localStorage.removeItem(`user-${userId}-memo-${pageId}`);
+        localStorage.removeItem(`user-${userId}-memo-workspace`);
       }
     };
 
@@ -209,12 +207,12 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
       }
 
       if (userId) {
-        const savedMemo = localStorage.getItem(`user-${userId}-memo-${pageId}`);
+        const savedMemo = localStorage.getItem(`user-${userId}-memo-workspace`);
         if (savedMemo) {
           setMemoContent(savedMemo);
         }
       }
-    }, [pageId]);
+    }, []);
 
         return (
       <Box sx={{ 
@@ -441,7 +439,6 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                     >
                                           <AIChat
                       key={aiChatKey}
-                      pageId={pageId}
                       title={aiButtonText}
                       initialMessage={initialMessage}
                       initialAIResponse={initialAIResponse}
@@ -483,7 +480,6 @@ const WorkspaceWithAI: React.FC<WorkspaceWithAIProps> = ({
                   <Box sx={{ height: '100%', position: 'relative' }}>
                     <AIChat
                       key={aiChatKey}
-                      pageId={pageId}
                       title={aiButtonText}
                       initialMessage={initialMessage}
                       initialAIResponse={initialAIResponse}
