@@ -36,6 +36,16 @@ export const useAIChatMessages = () => {
   };
   
   const [messages, setMessages] = useState<Message[]>(() => {
+    // リロード検出: performance APIを使用
+    const isPageReload = performance.navigation?.type === 1 || 
+                        (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
+    
+    // リロード時はストアから読み込まず、空配列で初期化（DBから取得するため）
+    if (isPageReload) {
+      return [];
+    }
+    
+    // 通常のナビゲーション時はストアから復元
     const storeMessages = getMessages(GLOBAL_CHAT_KEY);
     return sortMessages(normalizeMessages(storeMessages));
   });

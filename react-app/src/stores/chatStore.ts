@@ -181,11 +181,13 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'chat-storage',
-      // 永続化する項目（メッセージ履歴を追加）
+      // 永続化する項目
+      // 注: messageHistoryは意図的に永続化から除外
+      // リロード時は常にDBから最新の履歴を取得するため
       partialize: (state) => ({
         isChatOpen: state.isChatOpen,
         currentProjectId: state.currentProjectId,
-        messageHistory: state.messageHistory,
+        // messageHistory: state.messageHistory, // 永続化から除外（DBから取得）
       }),
       onRehydrateStorage: () => (state) => {
         // persistの復元が完了したらフラグを立てる

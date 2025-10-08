@@ -175,6 +175,20 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // 対話履歴読み込み関数（イベント駆動）
   const loadChatHistory = useCallback(async () => {
+    // ページリロードの検出
+    // performance.navigation.type === 1 はリロード
+    // performance.getEntriesByType('navigation')でも判定可能
+    const isPageReload = performance.navigation?.type === 1 || 
+                        (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
+    
+    // リロード時は履歴読み込みフラグをリセットして最新データを取得
+    if (isPageReload && historyLoaded) {
+      setHistoryLoaded(false);
+      // リロード時は既存のメッセージをクリアして最新を取得
+      clearMessages();
+      return; // 次のレンダリングサイクルで再度呼ばれる
+    }
+    
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
@@ -238,7 +252,7 @@ const AIChat: React.FC<AIChatProps> = ({
       console.error('対話履歴の読み込みエラー:', error);
       setHistoryLoaded(true); // エラーでも処理を続行
     }
-  }, [isDashboard, loadHistoryFromDB, historyLoaded]);
+  }, [isDashboard, loadHistoryFromDB, historyLoaded, clearMessages, setMessages]);
 
   // 初期メッセージ設定関数（イベント駆動）
   const loadInitialMessages = useCallback(async () => {
@@ -497,6 +511,17 @@ const AIChat: React.FC<AIChatProps> = ({
     };
     addMessage(initialMsg);
   };
+
+  // コンポーネントマウント時のリセット処理
+  useEffect(() => {
+    // コンポーネントが新規マウントされた場合（リロード含む）
+    // historyLoadedフラグをリセットして最新データの取得を可能にする
+    const isFirstMount = !historyLoaded && messages.length === 0;
+    if (isFirstMount && loadHistoryFromDB) {
+      // 初回マウント時は履歴読み込みフラグをリセット
+      setHistoryLoaded(false);
+    }
+  }, []); // 空の依存配列で初回マウント時のみ実行
 
   // 初期化とクリーンアップ
   useEffect(() => {
