@@ -27,7 +27,7 @@ load_dotenv()
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from module.llm_api import learning_plannner
-from prompt.prompt import system_prompt
+from prompt.prompt import system_prompt, dev_system_prompt
 
 # 並列処理・非同期処理統合のためのインポート
 from async_helpers import (
@@ -746,7 +746,7 @@ async def chat_with_ai(
             
             # メッセージの準備
             # システムプロンプトとメッセージを準備（プロジェクト情報は含めない）
-            messages = [{"role": "system", "content": system_prompt}]
+            messages = [{"role": "system", "content": dev_system_prompt}]
             if conversation_history:  # None または空リストのチェック
                 for history_msg in conversation_history:
                     role = "user" if history_msg["sender"] == "user" else "assistant"
