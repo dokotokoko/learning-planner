@@ -88,6 +88,10 @@ const AIChat: React.FC<AIChatProps> = ({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   
+  // 会話管理機能
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
 
@@ -317,6 +321,16 @@ const AIChat: React.FC<AIChatProps> = ({
     // 二重送信防止フラグ
     isSendingRef.current = true;
 
+    // 会話IDが存在しない場合は新しい会話を作成
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      conversationId = await createNewConversation();
+      if (conversationId) {
+        setCurrentConversationId(conversationId);
+        console.log('🆕 メッセージ送信前に新しい会話を作成:', conversationId);
+      }
+    }
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -485,6 +499,12 @@ const AIChat: React.FC<AIChatProps> = ({
       timestamp: item.created_at ? new Date(item.created_at) : new Date(),
     }));
     
+    // 会話IDを設定（sessionに含まれている場合）
+    if (session.conversation_id) {
+      setCurrentConversationId(session.conversation_id);
+      console.log('📋 会話を切り替えました:', session.conversation_id);
+    }
+    
     setMessages(historyMessages);
     setIsHistoryOpen(false);
     setShouldAutoScroll(true);
@@ -495,11 +515,74 @@ const AIChat: React.FC<AIChatProps> = ({
     }, 100);
   };
 
+  // 新しい会話を作成
+  const createNewConversation = async (): Promise<string | null> => {
+    try {
+      setConversationLoading(true);
+      
+      // ユーザーIDを取得
+      let userId: string | null = null;
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+      
+      if (!userId) {
+        console.error('ユーザーIDが見つかりません');
+        return null;
+      }
+      
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userId}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: null, // 自動生成
+          metadata: {
+            source: 'new_chat_button',
+            created_via: 'ai_chat_component'
+          }
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        return result.id;
+      } else {
+        console.error('新しい会話の作成に失敗:', response.status);
+        return null;
+      }
+    } catch (error) {
+      console.error('新しい会話の作成エラー:', error);
+      return null;
+    } finally {
+      setConversationLoading(false);
+    }
+  };
+
   // 新しいチャット開始
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     clearMessages();
     setIsHistoryOpen(false);
     setShouldAutoScroll(true);
+    
+    // 新しい会話を作成
+    const newConversationId = await createNewConversation();
+    if (newConversationId) {
+      setCurrentConversationId(newConversationId);
+      console.log('🆕 新しい会話を作成しました:', newConversationId);
+    }
     
     // 初期メッセージがある場合は設定、なければデフォルトメッセージを使用
     const messageContent = initialMessage || getDefaultInitialMessage();

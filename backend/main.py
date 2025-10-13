@@ -43,6 +43,16 @@ from conversation_agent.optimized_conversation_agent import optimized_chat_with_
 # 探究学習APIルーターのインポート
 from inquiry_api import router as inquiry_router
 
+# 会話管理APIのインポート
+from conversation_api import (
+    ConversationManager,
+    ConversationCreate,
+    ConversationUpdate,
+    ConversationResponse,
+    ConversationListResponse,
+    MessageResponse
+)
+
 # ロギング設定（デバッグ用）
 logging.basicConfig(
     level=logging.INFO,  # DEBUG用にINFOレベルに変更
@@ -384,10 +394,13 @@ phase1_llm_manager = None  # Phase 1 プール管理システム（追加）
 # Phase 1: 対話エージェント
 conversation_orchestrator = None
 
+# 会話管理システム
+conversation_manager: Optional[ConversationManager] = None
+
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化（最適化版）"""
-    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client
+    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client, conversation_manager
     
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
@@ -398,6 +411,10 @@ async def startup_event():
             raise ValueError("Supabase環境変数が設定されていません")
             
         supabase = create_client(supabase_url, supabase_key)
+        
+        # 会話管理システム初期化
+        conversation_manager = ConversationManager(supabase)
+        logger.info("✅ 会話管理システム初期化完了")
         
         # LLMクライアント初期化
         llm_client = learning_plannner()
@@ -545,21 +562,42 @@ def handle_database_error(error: Exception, operation: str):
     )
 
 async def get_or_create_global_chat_session(user_id: int) -> str:
-    """ユーザーのAIチャットセッションを取得または作成"""
+    """ユーザーのAIチャットセッションを取得または作成（新会話管理システム対応）"""
     try:
-        # ユーザーのチャットセッションを探す
-        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).execute()
-        
-        if existing_conv.data:
-            return existing_conv.data[0]["id"]
+        # 新しい会話管理システムを使用
+        if conversation_manager:
+            # 最新のアクティブな会話を取得
+            conversations = await conversation_manager.list_conversations(
+                user_id=user_id,
+                limit=1,
+                offset=0,
+                is_active=True
+            )
+            
+            if conversations.conversations:
+                return conversations.conversations[0].id
+            else:
+                # 新しい会話を作成
+                return await conversation_manager.create_conversation(
+                    user_id=user_id,
+                    title="AIチャットセッション",
+                    metadata={"session_type": "global_chat", "auto_created": True}
+                )
         else:
-            # 新しいチャットセッションを作成
-            new_conv_data = {
-                "user_id": user_id,
-                "title": "AIチャットセッション"
-            }
-            new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
-            return new_conv.data[0]["id"] if new_conv.data else None
+            # フォールバック: 既存の実装
+            existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).execute()
+            
+            if existing_conv.data:
+                return existing_conv.data[0]["id"]
+            else:
+                # 新しいチャットセッションを作成
+                new_conv_data = {
+                    "user_id": user_id,
+                    "title": "AIチャットセッション"
+                }
+                new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
+                return new_conv.data[0]["id"] if new_conv.data else None
+                
     except Exception as e:
         logger.error(f"チャットセッション取得/作成エラー: {e}")
         raise
@@ -771,6 +809,7 @@ async def chat_with_ai(
             # ユーザーメッセージをDBに保存
             user_message_data = {
                 "user_id": current_user,
+                "page": "legacy",  # 廃止予定: context_dataを使用
                 "sender": "user",
                 "message": chat_data.message,
                 "conversation_id": conversation_id,
@@ -792,6 +831,7 @@ async def chat_with_ai(
             
             ai_message_data = {
                 "user_id": current_user,
+                "page": "legacy",  # 廃止予定: context_dataを使用
                 "sender": "assistant",
                 "message": response,
                 "conversation_id": conversation_id,
@@ -852,6 +892,220 @@ async def get_chat_history(
         return list(reversed(items))
     except Exception as e:
         handle_database_error(e, "対話履歴の取得")
+
+# ===================================================================
+# 会話管理エンドポイント
+# ===================================================================
+
+@app.post("/conversations", response_model=ConversationResponse)
+async def create_conversation(
+    conversation_data: ConversationCreate,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """新しい会話を作成"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        conversation_id = await conversation_manager.create_conversation(
+            user_id=current_user,
+            title=conversation_data.title,
+            metadata=conversation_data.metadata
+        )
+        
+        # 作成した会話情報を取得して返す
+        conversation = await conversation_manager.get_conversation(conversation_id, current_user)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="会話の作成後の取得に失敗しました"
+            )
+        
+        return conversation
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"会話作成エラー: {e}")
+        handle_database_error(e, "会話の作成")
+
+@app.get("/conversations", response_model=ConversationListResponse)
+async def list_conversations(
+    limit: Optional[int] = 20,
+    offset: Optional[int] = 0,
+    is_active: Optional[bool] = None,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """会話リストを取得"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        # パラメータ制限
+        limit = min(limit or 20, 100)  # 最大100件
+        offset = max(offset or 0, 0)
+        
+        return await conversation_manager.list_conversations(
+            user_id=current_user,
+            limit=limit,
+            offset=offset,
+            is_active=is_active
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"会話リスト取得エラー: {e}")
+        handle_database_error(e, "会話リストの取得")
+
+@app.get("/conversations/{conversation_id}", response_model=ConversationResponse)
+async def get_conversation(
+    conversation_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """指定した会話の詳細を取得"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        conversation = await conversation_manager.get_conversation(conversation_id, current_user)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会話が見つからないか、アクセス権限がありません"
+            )
+        
+        return conversation
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"会話取得エラー: {e}")
+        handle_database_error(e, "会話の取得")
+
+@app.put("/conversations/{conversation_id}", response_model=ConversationResponse)
+async def update_conversation(
+    conversation_id: str,
+    update_data: ConversationUpdate,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """会話情報を更新"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        success = await conversation_manager.update_conversation(
+            conversation_id=conversation_id,
+            user_id=current_user,
+            update_data=update_data
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会話が見つからないか、更新に失敗しました"
+            )
+        
+        # 更新後の会話情報を取得して返す
+        conversation = await conversation_manager.get_conversation(conversation_id, current_user)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="会話の更新後の取得に失敗しました"
+            )
+        
+        return conversation
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"会話更新エラー: {e}")
+        handle_database_error(e, "会話の更新")
+
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """会話を削除（論理削除）"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        success = await conversation_manager.delete_conversation(conversation_id, current_user)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会話が見つからないか、削除に失敗しました"
+            )
+        
+        return {"message": "会話を削除しました", "conversation_id": conversation_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"会話削除エラー: {e}")
+        handle_database_error(e, "会話の削除")
+
+@app.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
+async def get_conversation_messages(
+    conversation_id: str,
+    limit: Optional[int] = 50,
+    offset: Optional[int] = 0,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """会話のメッセージを取得"""
+    try:
+        validate_supabase()
+        
+        if not conversation_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="会話管理システムが初期化されていません"
+            )
+        
+        # パラメータ制限
+        limit = min(limit or 50, 200)  # 最大200件
+        offset = max(offset or 0, 0)
+        
+        return await conversation_manager.get_messages(
+            conversation_id=conversation_id,
+            user_id=current_user,
+            limit=limit,
+            offset=offset
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"メッセージ取得エラー: {e}")
+        handle_database_error(e, "メッセージの取得")
 
 @app.post("/memos", response_model=MemoResponse)
 async def save_memo(
@@ -1979,14 +2233,15 @@ async def chat_with_conversation_agent(
                 # 応答をDB保存（ユーザーメッセージ）
                 user_message_data = {
                     "user_id": current_user,
-                    "page": page_id,
+                    "page": "legacy",  # 廃止予定: context_dataを使用
                     "sender": "user",
                     "message": request.message,
                     "conversation_id": conversation_id,
                     "context_data": json.dumps({
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "agent_endpoint": True,
-                        "project_id": request.project_id
+                        "project_id": request.project_id,
+                        "page_id": page_id  # ページ情報はcontext_dataに格納
                     }, ensure_ascii=False)
                 }
                 await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
@@ -1994,13 +2249,14 @@ async def chat_with_conversation_agent(
                 # 応答をDB保存（AIメッセージ）
                 ai_message_data = {
                     "user_id": current_user,
-                    "page": page_id,
+                    "page": "legacy",  # 廃止予定: context_dataを使用
                     "sender": "assistant",
                     "message": agent_result["response"],
                     "conversation_id": conversation_id,
                     "context_data": json.dumps({
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "agent_endpoint": True,
+                        "page_id": page_id,  # ページ情報はcontext_dataに格納
                         "support_type": agent_result.get("support_type"),
                         "selected_acts": agent_result.get("selected_acts"),
                         "state_snapshot": agent_result.get("state_snapshot", {}),
