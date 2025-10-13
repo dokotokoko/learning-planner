@@ -145,7 +145,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                     transition: 'all 0.3s ease',
                   }}
                 >
-                  探Qメイトを始める
+                  探究を始める！
                 </Button>
                 
                 <Button
@@ -168,119 +168,80 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                     transition: 'all 0.3s ease',
                   }}
                 >
-                  詳しく見る
+                  探Qメイトと何ができる？
                 </Button>
               </Box>
             </motion.div>
           </Grid>
 
-          {/* 特徴アイコン */}
+          {/* アプリケーション画面の画像 */}
           <Grid item xs={12} lg={5}>
-            <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
-              <Grid container spacing={3}>
-                {features.map((feature, index) => (
-                  <Grid item xs={12} key={feature.title}>
-                    <motion.div
-                      initial={{ opacity: 0, x: 50 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.8, delay: index * 0.2 + 0.4 }}
-                    >
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 3,
-                          p: 3,
-                          background: 'rgba(255,255,255,0.1)',
-                          backdropFilter: 'blur(10px)',
-                          borderRadius: 3,
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          transition: 'all 0.3s ease',
-                          '&:hover': {
-                            background: 'rgba(255,255,255,0.15)',
-                            transform: 'translateY(-4px)',
-                          },
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            color: 'rgba(255,255,255,0.9)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {feature.icon}
-                        </Box>
-                        <Box>
-                          <Typography
-                            variant="h6"
-                            sx={{
-                              color: 'white',
-                              fontWeight: 600,
-                              mb: 0.5,
-                            }}
-                          >
-                            {feature.title}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: 'rgba(255,255,255,0.8)',
-                              fontSize: '0.9rem',
-                            }}
-                          >
-                            {feature.description}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </motion.div>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-
-            {/* モバイル・タブレット用の簡略版 */}
-            <Box sx={{ display: { xs: 'block', lg: 'none' }, mt: 4 }}>
-              <Grid container spacing={2}>
-                {features.map((feature, index) => (
-                  <Grid item xs={12} sm={4} key={feature.title}>
-                    <motion.div
-                      initial={{ opacity: 0, y: 30 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.6, delay: index * 0.1 + 0.4 }}
-                    >
-                      <Box
-                        sx={{
-                          textAlign: 'center',
-                          p: 2,
-                          background: 'rgba(255,255,255,0.1)',
-                          backdropFilter: 'blur(10px)',
-                          borderRadius: 2,
-                          border: '1px solid rgba(255,255,255,0.2)',
-                        }}
-                      >
-                        <Box sx={{ color: 'rgba(255,255,255,0.9)', mb: 1 }}>
-                          {React.cloneElement(feature.icon, { sx: { fontSize: 32 } })}
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: 'white',
-                            fontWeight: 600,
-                            fontSize: '0.85rem',
-                          }}
-                        >
-                          {feature.title}
-                        </Typography>
-                      </Box>
-                    </motion.div>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
+            <motion.div
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+            >
+              <Box
+                sx={{
+                  position: 'relative',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                  background: 'rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  p: { xs: 1, sm: 2 },
+                }}
+              >
+                {/* メインのアプリケーション画面 */}
+                <Box
+                  component="img"
+                  src="/images/app-screenshot-main.png"
+                  alt="探Qメイトのメイン画面"
+                  loading="lazy"
+                  sx={{
+                    width: '200%',
+                    height: 'auto',
+                    display: 'block',
+                  }}
+                  onError={(e) => {
+                    // 画像が存在しない場合のフォールバック
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    target.parentElement!.innerHTML = `
+                      <div style="
+                        background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 100%);
+                        border-radius: 8px;
+                        padding: 40px;
+                        text-align: center;
+                        min-height: 400px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex-direction: column;
+                      ">
+                        <div style="color: rgba(255,255,255,0.9); font-size: 1.2rem; font-weight: 600; margin-bottom: 20px;">
+                          アプリケーション画面プレビュー
+                        </div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; line-height: 1.6;">
+                          実際の探Qメイトの画面がここに表示されます<br>
+                          /public/images/app-screenshot-main.png に画像を配置してください
+                        </div>
+                      </div>
+                    `;
+                  }}
+                />
+              </Box>
+            </motion.div>
           </Grid>
+
         </Grid>
+        
+        {/* モバイル・タブレット用の機能表示 */}
+        <Box sx={{ display: { xs: 'block', lg: 'none' }, mt: 6 }}>
+          <Grid container spacing={2}>
+          </Grid>
+        </Box>
       </Container>
     </Box>
   );

@@ -182,6 +182,7 @@ function App() {
               {/* アプリケーション本体（認証必要） */}
               <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
+              </Route>
               
               {/* InquiryExplorer - サイドバーなしのフルスクリーン */}
               <Route 
@@ -201,8 +202,7 @@ function App() {
                 } 
               />
 
-              <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/chat" replace />} />
+              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
                 <Route path="dashboard" element={<DashboardPage />} />
@@ -219,7 +219,6 @@ function App() {
               
               {/* 未定義ルートのフォールバック */}
               <Route path="*" element={<Navigate to="/" replace />} />
-              <Route path="*" element={<Navigate to="/chat" replace />} />
             </Routes>
           </AnimatePresence>
         </Router>

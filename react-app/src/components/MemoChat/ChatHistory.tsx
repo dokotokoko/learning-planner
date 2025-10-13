@@ -15,40 +15,34 @@ import {
   DialogContent,
   DialogActions,
   Paper,
-  Collapse,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   History as HistoryIcon,
   Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
   Clear as ClearIcon,
   Schedule as ScheduleIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 
-interface ChatSession {
+// 会話データの型定義
+interface ConversationData {
   id: string;
-  page: string;
-  title: string;
-  lastMessage: string;
-  messageCount: number;
-  lastUpdated: Date;
-  memoTitle?: string; // 実際のメモタイトル
-  projectName?: string; // プロジェクト名
-  messages: {
-    id: number;
-    sender: string;
-    message: string;
-    created_at: string;
-  }[];
+  title: string | null;
+  message_count: number;
+  last_message: string | null;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, any>;
+  is_active: boolean;
 }
 
 interface ChatHistoryProps {
   isOpen: boolean;
   onClose: () => void;
-  onSessionSelect: (session: ChatSession) => void;
+  onSessionSelect: (session: ConversationData & { messages: any[] }) => void;
   currentPageId?: string;
 }
 
@@ -58,32 +52,23 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   onSessionSelect,
   currentPageId,
 }) => {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [sessionToClear, setSessionToClear] = useState<string | null>(null);
-  const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
-  // チャット履歴を取得
-  const fetchChatHistory = async () => {
+  // 会話リストを取得
+  const fetchConversations = async () => {
     setLoading(true);
     try {
       // ユーザーIDを取得
       let userId: string | null = null;
       const authData = localStorage.getItem('auth-storage');
-      const authToken = localStorage.getItem('auth-token');
-      
-      console.log('🔍 認証情報デバッグ:', {
-        authData: authData,
-        authToken: authToken,
-      });
       
       if (authData) {
         try {
           const parsed = JSON.parse(authData);
-          console.log('📋 auth-storage解析結果:', parsed);
-          
           if (parsed.state?.user?.id) {
             userId = parsed.state.user.id;
           }
@@ -91,24 +76,20 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
           console.error('認証データの解析に失敗:', e);
         }
       }
-      
-      // 代替認証: auth-tokenも試す
-      if (!userId && authToken) {
-        userId = authToken;
-        console.log('⚠️ auth-storageからuser_id取得失敗、auth-tokenを使用:', userId);
-      }
-
-      console.log('🆔 最終user_id:', userId);
 
       if (!userId) {
         console.error('ユーザーIDが見つかりません');
         return;
       }
 
-      // chat/history APIから直接取得
-      console.log('📡 chat/history API呼び出し...');
+      // 新しい会話管理APIから会話リストを取得
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat/history?limit=200`, {
+      console.log('🔍 API呼び出し開始:', {
+        url: `${apiBaseUrl}/conversations?limit=50`,
+        userId: userId
+      });
+      
+      const response = await fetch(`${apiBaseUrl}/conversations?limit=50`, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
@@ -116,242 +97,108 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       });
 
       if (response.ok) {
-        const history = await response.json();
-        console.log(`履歴取得成功:`, {
-          total: history.length,
-          memoCount: history.filter((item: any) => {
-            try {
-              const contextData = typeof item.context_data === 'string' 
-                ? JSON.parse(item.context_data) 
-                : item.context_data;
-              return contextData?.project_id !== undefined;
-            } catch {
-              return false;
-            }
-          }).length,
-          samplePages: [...new Set(history.slice(0, 10).map((item: any) => {
-            try {
-              const contextData = typeof item.context_data === 'string' 
-                ? JSON.parse(item.context_data) 
-                : item.context_data;
-              return contextData?.project_id ? `memo-${contextData.project_id}` : 'general';
-            } catch {
-              return 'general';
-            }
-          }))],
-        });
+        const result = await response.json();
+        console.log('🔍 API レスポンス:', result);
         
-        // デバッグ用：最初のアイテムの構造を確認
-        if (history.length > 0) {
-          console.log('📋 最初のアイテムの構造:', history[0]);
-        }
+        const conversationList: ConversationData[] = result.conversations || [];
         
-        // ページごとにセッションをグループ化
-        const sessionMap = new Map<string, ChatSession>();
-        
-        history.forEach((item: any) => {
-          // context_dataをパース
-          let contextData: any = {};
-          if (item.context_data) {
-            try {
-              contextData = typeof item.context_data === 'string' 
-                ? JSON.parse(item.context_data) 
-                : item.context_data;
-            } catch (e) {
-              console.error('context_dataのパースエラー:', e);
-            }
-          }
-          
-          // ページIDを決定（複数のソースから優先順位で判定）
-          let pageId = 'general';
-          
-          // 1. context_data内のpage_id（conversation-agentから）
-          if (contextData.page_id) {
-            pageId = contextData.page_id;
-          }
-          // 2. project_idからページIDを生成（従来の方式）
-          else if (contextData.project_id) {
-            pageId = `memo-${contextData.project_id}`;
-          }
-          // 3. デフォルト: general
-          const sessionId = pageId;
-          
-          if (!sessionMap.has(sessionId)) {
-            sessionMap.set(sessionId, {
-              id: sessionId,
-              page: pageId,
-              title: getPageTitle(pageId),
-              lastMessage: '',
-              messageCount: 0,
-              lastUpdated: new Date(item.created_at),
-              messages: [],
-            });
-          }
-          
-          const session = sessionMap.get(sessionId)!;
-          session.messages.push(item);
-          session.messageCount++;
-          session.lastUpdated = new Date(Math.max(
-            session.lastUpdated.getTime(),
-            new Date(item.created_at).getTime()
-          ));
+        console.log(`✅ 会話リスト取得成功:`, {
+          total: conversationList.length,
+          hasMore: result.has_more,
+          totalCount: result.total_count,
+          conversations: conversationList.slice(0, 5).map(c => ({
+            id: c.id,
+            title: c.title,
+            message_count: c.message_count,
+            is_active: c.is_active
+          }))
         });
 
-        // メッセージを時系列順（古い→新しい）にソートして最後のメッセージを設定
-        sessionMap.forEach((session) => {
-          session.messages.sort((a, b) => 
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-          if (session.messages.length > 0) {
-            const lastMsg = session.messages[session.messages.length - 1];
-            session.lastMessage = lastMsg.message.substring(0, 100) + 
-              (lastMsg.message.length > 100 ? '...' : '');
-          }
-        });
-
-        const sortedSessions = Array.from(sessionMap.values()).sort((a, b) => 
-          b.lastUpdated.getTime() - a.lastUpdated.getTime()
-        );
-
-        console.log(`セッション作成後:`, {
-          sessionCount: sortedSessions.length,
-          memoSessions: sortedSessions.filter(s => s.page.startsWith('memo-')).length,
-          pages: sortedSessions.map(s => s.page).slice(0, 10),
-        });
-
-        // メモタイトルを取得して追加
-        await fetchMemoTitles(sortedSessions, userId);
-
-        setSessions(sortedSessions);
+        setConversations(conversationList);
       } else {
-        console.error('履歴取得エラー:', response.status);
+        console.error('❌ 会話リスト取得エラー:', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        
+        // エラーレスポンスの内容も確認
+        try {
+          const errorData = await response.text();
+          console.error('❌ エラーレスポンス内容:', errorData);
+        } catch (e) {
+          console.error('❌ エラーレスポンス読み取り失敗');
+        }
       }
     } catch (error) {
-      console.error('履歴取得エラー:', error);
+      console.error('会話リスト取得エラー:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // メモタイトルを取得する関数（並列処理で高速化）
-  const fetchMemoTitles = async (sessions: ChatSession[], userId: string) => {
-    // 統一した認証トークンの取得
-    const token = userId; // userIdをそのまま使用
-    const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-    
-    // メモセッションのみをフィルタリング
-    const memoSessions = sessions.filter(session => session.page.startsWith('memo-'));
-    
-    // 並列でメモ情報を取得
-    const memoPromises = memoSessions.map(async (session) => {
-      try {
-        const memoId = session.page.replace('memo-', '');
-        const memoResponse = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          credentials: 'include',
-        });
-        
-        if (memoResponse.ok) {
-          const memoData = await memoResponse.json();
-          session.memoTitle = memoData.title || '無題のメモ';
-          session.title = memoData.title || '無題のメモ';
-          
-          // プロジェクト名も取得
-          if (memoData.project_id) {
-            try {
-              const projectResponse = await fetch(`${apiBaseUrl}/projects/${memoData.project_id}`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                },
-                credentials: 'include',
-              });
-              if (projectResponse.ok) {
-                const projectData = await projectResponse.json();
-                session.projectName = projectData.theme;
-              }
-            } catch (e) {
-              console.error('プロジェクト情報の取得に失敗:', e);
-            }
-          }
-        } else if (memoResponse.status === 404) {
-          // メモが見つからない場合のフォールバック
-          session.memoTitle = `メモ ${memoId} (削除済み)`;
-          session.title = `メモ ${memoId} (削除済み)`;
-          session.projectName = '不明';
-          console.warn(`メモ ID ${memoId} が見つかりません（削除済みまたは権限なし）`);
-        } else {
-          // その他のHTTPエラー
-          session.memoTitle = `メモ ${memoId} (取得エラー)`;
-          session.title = `メモ ${memoId} (取得エラー)`;
-          console.error(`メモ ${memoId} の取得でエラー: ${memoResponse.status}`);
-        }
-      } catch (error) {
-        console.error(`メモ${session.page}の情報取得に失敗:`, error);
-        // エラーの場合はデフォルトタイトルを使用
-        const memoId = session.page.replace('memo-', '');
-        session.memoTitle = `メモ ${memoId}`;
-        session.title = session.memoTitle;
-      }
-    });
-    
-    // 全てのPromiseの完了を待つ
-    await Promise.all(memoPromises);
-  };
-
-  // ページIDからタイトルを生成
-  const getPageTitle = (pageId: string): string => {
-    if (pageId.startsWith('memo-')) {
-      return `メモ ${pageId.replace('memo-', '')}`;
-    }
-    if (pageId.startsWith('step-')) {
-      return `ステップ ${pageId.replace('step-', '')}`;
-    }
-    if (pageId === 'general') {
-      return '一般的な質問';
-    }
-    return pageId;
-  };
-
-  // ページ別グループ化（メモ中心に改善）
-  const groupedSessions = sessions.reduce((acc, session) => {
-    let pageGroup: string;
-    
-    if (session.page.startsWith('memo-')) {
-      // プロジェクト名があればそれを使用、なければ「個人メモ」
-      pageGroup = session.projectName ? `📁 ${session.projectName}` : '📝 個人メモ';
-    } else if (session.page.startsWith('step-')) {
-      pageGroup = '🎯 学習ステップ';
-    } else if (session.page === 'general' || session.page.includes('inquiry')) {
-      pageGroup = '💬 一般相談';
-    } else {
-      pageGroup = '📂 その他';
-    }
-    
-    if (!acc[pageGroup]) {
-      acc[pageGroup] = [];
-    }
-    acc[pageGroup].push(session);
-    return acc;
-  }, {} as Record<string, ChatSession[]>);
-
-  // セッションクリア
-  const handleClearSession = async (pageId: string) => {
+  // 会話のメッセージを取得
+  const fetchConversationMessages = async (conversationId: string): Promise<any[]> => {
     try {
-      let userId = null;
+      let userId: string | null = null;
       const authData = localStorage.getItem('auth-storage');
+      
       if (authData) {
-        const parsed = JSON.parse(authData);
-        if (parsed.state?.user?.id) {
-          userId = parsed.state.user.id;
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
+        }
+      }
+
+      if (!userId) {
+        return [];
+      }
+
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages?limit=200`, {
+        headers: {
+          'Authorization': `Bearer ${userId}`,
+        },
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const messages = await response.json();
+        return messages;
+      } else {
+        console.error('メッセージ取得エラー:', response.status);
+        return [];
+      }
+    } catch (error) {
+      console.error('メッセージ取得エラー:', error);
+      return [];
+    }
+  };
+
+  // 会話削除
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      let userId: string | null = null;
+      const authData = localStorage.getItem('auth-storage');
+      
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.state?.user?.id) {
+            userId = parsed.state.user.id;
+          }
+        } catch (e) {
+          console.error('認証データの解析に失敗:', e);
         }
       }
 
       if (!userId) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
+      const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${userId}`,
@@ -360,29 +207,47 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       });
 
       if (response.ok) {
-        await fetchChatHistory(); // 履歴を再取得
+        await fetchConversations(); // 会話リストを再取得
+      } else {
+        console.error('会話削除エラー:', response.status);
       }
     } catch (error) {
-      console.error('履歴削除エラー:', error);
+      console.error('会話削除エラー:', error);
     }
-    setClearDialogOpen(false);
-    setSessionToClear(null);
+    setDeleteDialogOpen(false);
+    setConversationToDelete(null);
   };
 
-  // ページグループの展開/折りたたみ
-  const togglePageExpanded = (pageGroup: string) => {
-    const newExpanded = new Set(expandedPages);
-    if (newExpanded.has(pageGroup)) {
-      newExpanded.delete(pageGroup);
-    } else {
-      newExpanded.add(pageGroup);
-    }
-    setExpandedPages(newExpanded);
+  // 会話選択時の処理
+  const handleConversationSelect = async (conversation: ConversationData) => {
+    setSelectedConversation(conversation.id);
+    console.log('🖱️ 会話選択:', {
+      conversationId: conversation.id,
+      title: conversation.title,
+      messageCount: conversation.message_count
+    });
+
+    // メッセージを取得してonSessionSelectコールバックを呼び出し
+    const messages = await fetchConversationMessages(conversation.id);
+    
+    onSessionSelect({
+      ...conversation,
+      messages: messages,
+      conversation_id: conversation.id, // AIChat.tsxで使用
+    });
   };
 
+  // タイトル表示用の関数
+  const getDisplayTitle = (conversation: ConversationData): string => {
+    if (conversation.title) {
+      return conversation.title;
+    }
+    return '無題の会話';
+  };
 
   // 時間フォーマット
-  const formatTime = (date: Date) => {
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
     const now = new Date();
     const diffHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
     
@@ -394,29 +259,9 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetchChatHistory();
+      fetchConversations();
     }
   }, [isOpen]);
-
-  // セッション取得後にページグループを自動展開
-  useEffect(() => {
-    if (sessions.length > 0) {
-      const groupNames = new Set<string>();
-      sessions.forEach(session => {
-        if (session.page.startsWith('memo-')) {
-          const groupName = session.projectName ? `📁 ${session.projectName}` : '📝 個人メモ';
-          groupNames.add(groupName);
-        } else if (session.page.startsWith('step-')) {
-          groupNames.add('🎯 学習ステップ');
-        } else if (session.page === 'general' || session.page.includes('inquiry')) {
-          groupNames.add('💬 一般相談');
-        } else {
-          groupNames.add('📂 その他');
-        }
-      });
-      setExpandedPages(groupNames);
-    }
-  }, [sessions]);
 
   if (!isOpen) return null;
 
@@ -466,153 +311,114 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
           </IconButton>
         </Box>
 
-
-        {/* 履歴リスト */}
+        {/* 会話リスト */}
         <Box sx={{ flex: 1, overflow: 'auto' }}>
           {loading ? (
             <Box sx={{ p: 3, textAlign: 'center' }}>
-              <Typography color="text.secondary">読み込み中...</Typography>
+              <CircularProgress size={24} />
+              <Typography color="text.secondary" sx={{ mt: 1 }}>
+                読み込み中...
+              </Typography>
             </Box>
-          ) : sessions.length === 0 ? (
+          ) : conversations.length === 0 ? (
             <Box sx={{ p: 3, textAlign: 'center' }}>
               <Typography color="text.secondary">
-                まだ対話履歴がありません
+                まだ会話履歴がありません
               </Typography>
             </Box>
           ) : (
             <List sx={{ py: 0 }}>
-              {Object.entries(groupedSessions).map(([pageGroup, groupSessions]) => (
-                <Box key={pageGroup}>
-                  {/* ページグループヘッダー */}
+              {conversations.map((conversation) => (
+                <ListItem
+                  key={conversation.id}
+                  sx={{
+                    backgroundColor: selectedConversation === conversation.id ? 'action.selected' : 'transparent',
+                  }}
+                >
                   <ListItemButton
-                    onClick={() => togglePageExpanded(pageGroup)}
-                    sx={{
-                      backgroundColor: 'action.hover',
-                      '&:hover': {
-                        backgroundColor: 'action.selected',
-                      },
-                    }}
+                    onClick={() => handleConversationSelect(conversation)}
+                    sx={{ borderRadius: 1 }}
                   >
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="subtitle2" fontWeight="bold">
-                        {pageGroup} ({groupSessions.length})
-                      </Typography>
-                    </Box>
-                    {expandedPages.has(pageGroup) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  </ListItemButton>
-
-                  {/* セッションリスト */}
-                  <Collapse in={expandedPages.has(pageGroup)}>
-                    {groupSessions.map((session) => (
-                      <ListItem
-                        key={session.id}
-                        sx={{
-                          pl: 3,
-                          backgroundColor: selectedSession === session.id ? 'action.selected' : 'transparent',
-                        }}
-                      >
-                        <ListItemButton
-                          onClick={() => {
-                            setSelectedSession(session.id);
-                            console.log('🖱️ セッション選択:', {
-                              sessionId: session.id,
-                              messageCount: session.messages.length
-                            });
-                            onSessionSelect(session);
-                          }}
-                          sx={{ borderRadius: 1 }}
-                        >
-                          <Box sx={{ flex: 1, pr: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                              <Box sx={{ flex: 1 }}>
-                                <Typography variant="body2" fontWeight="medium">
-                                  {session.memoTitle || session.title}
-                                </Typography>
-                                {session.page.startsWith('memo-') && session.projectName && (
-                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                    📁 {session.projectName}
-                                  </Typography>
-                                )}
-                              </Box>
-                              <Chip
-                                label={session.messageCount}
-                                size="small"
-                                variant="outlined"
-                                sx={{ fontSize: '0.7rem', height: '20px' }}
-                              />
-                            </Box>
-                            <Box>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical',
-                                  overflow: 'hidden',
-                                  lineHeight: 1.2,
-                                  mb: 0.5,
-                                }}
-                              >
-                                {session.lastMessage}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                                <ScheduleIcon sx={{ fontSize: '0.8rem', mr: 0.5, color: 'text.disabled' }} />
-                                <Typography variant="caption" color="text.disabled">
-                                  {formatTime(session.lastUpdated)}
-                                </Typography>
-                                {session.page.startsWith('memo-') && (
-                                  <Typography variant="caption" color="text.disabled" sx={{ ml: 1 }}>
-                                    • メモ {session.page.replace('memo-', '')}
-                                  </Typography>
-                                )}
-                              </Box>
-                            </Box>
-                          </Box>
-                        </ListItemButton>
-                        <Tooltip title="この履歴を削除">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSessionToClear(session.page);
-                              setClearDialogOpen(true);
+                    <Box sx={{ flex: 1, pr: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                        <ChatIcon sx={{ fontSize: '1rem', mr: 1, color: 'primary.main' }} />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" fontWeight="medium">
+                            {getDisplayTitle(conversation)}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          label={conversation.message_count}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem', height: '20px' }}
+                        />
+                      </Box>
+                      <Box>
+                        {conversation.last_message && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              lineHeight: 1.2,
+                              mb: 0.5,
                             }}
-                            sx={{ ml: 1 }}
                           >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </ListItem>
-                    ))}
-                  </Collapse>
-                  <Divider />
-                </Box>
+                            {conversation.last_message}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                          <ScheduleIcon sx={{ fontSize: '0.8rem', mr: 0.5, color: 'text.disabled' }} />
+                          <Typography variant="caption" color="text.disabled">
+                            {formatTime(conversation.updated_at)}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </ListItemButton>
+                  <Tooltip title="この会話を削除">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConversationToDelete(conversation.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                      sx={{ ml: 1 }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </ListItem>
               ))}
             </List>
           )}
         </Box>
       </Paper>
 
-      {/* 履歴削除確認ダイアログ */}
+      {/* 会話削除確認ダイアログ */}
       <Dialog
-        open={clearDialogOpen}
-        onClose={() => setClearDialogOpen(false)}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>履歴を削除</DialogTitle>
+        <DialogTitle>会話を削除</DialogTitle>
         <DialogContent>
           <Typography>
-            この対話履歴を完全に削除しますか？この操作は元に戻せません。
+            この会話を削除しますか？この操作は元に戻せません。
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setClearDialogOpen(false)}>
+          <Button onClick={() => setDeleteDialogOpen(false)}>
             キャンセル
           </Button>
           <Button
-            onClick={() => sessionToClear && handleClearSession(sessionToClear)}
+            onClick={() => conversationToDelete && handleDeleteConversation(conversationToDelete)}
             color="error"
             variant="contained"
           >
@@ -624,4 +430,4 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   );
 };
 
-export default ChatHistory; 
+export default ChatHistory;

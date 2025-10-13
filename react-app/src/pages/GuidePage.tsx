@@ -9,8 +9,8 @@ import { useAuthStore } from '../stores/authStore';
 import HeroSection from '../components/Guide/HeroSection';
 import WhyNeededSection from '../components/Guide/WhyNeededSection';
 import HowToUseSection from '../components/Guide/HowToUseSection';
-import ResultsSection from '../components/Guide/ResultsSection';
-import CTASection from '../components/Guide/CTASection';
+import UseCaseSection from '../components/Guide/UseCaseSection';
+import FAQSection from '../components/Guide/FAQSection';
 
 const GuidePage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,8 +23,8 @@ const GuidePage: React.FC = () => {
   const heroRef = useRef<HTMLDivElement>(null);
   const whyRef = useRef<HTMLDivElement>(null);
   const howRef = useRef<HTMLDivElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
-  const ctaRef = useRef<HTMLDivElement>(null);
+  const useCaseRef = useRef<HTMLDivElement>(null);
+  const faqRef = useRef<HTMLDivElement>(null);
 
   // スムーズスクロール関数
   const scrollToSection = (ref: React.RefObject<HTMLDivElement>) => {
@@ -88,17 +88,14 @@ const GuidePage: React.FC = () => {
         <HowToUseSection />
       </Box>
 
-      {/* Results Section */}
-      <Box ref={resultsRef}>
-        <ResultsSection />
+      {/* Use Case Section */}
+      <Box ref={useCaseRef}>
+        <UseCaseSection />
       </Box>
 
-      {/* CTA Section */}
-      <Box ref={ctaRef}>
-        <CTASection 
-          onGetStarted={handleGetStarted}
-          onWatchDemo={handleWatchDemo}
-        />
+      {/* FAQ Section */}
+      <Box ref={faqRef}>
+        <FAQSection />
       </Box>
 
       {/* フローティングナビゲーション（上に戻るボタン） */}
@@ -151,10 +148,10 @@ const GuidePage: React.FC = () => {
         >
           {[
             { ref: heroRef, label: 'トップ' },
-            { ref: whyRef, label: 'なぜ必要か' },
-            { ref: howRef, label: 'どう使うか' },
-            { ref: resultsRef, label: '結果' },
-            { ref: ctaRef, label: '始める' },
+            { ref: whyRef, label: '機能の特徴' },
+            { ref: howRef, label: '使い方' },
+            { ref: useCaseRef, label: 'UseCase' },
+            { ref: faqRef, label: 'FAQ' },
           ].map((section, index) => (
             <motion.div
               key={index}
