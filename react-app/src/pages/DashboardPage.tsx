@@ -523,7 +523,7 @@ const DashboardPage: React.FC = () => {
                           boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
                         },
                       }}
-                      onClick={() => navigate(`/projects/${project.id}`)}
+                      onClick={() => navigate(`/app/projects/${project.id}`)}
                     >
                       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                         <Box sx={{ 
