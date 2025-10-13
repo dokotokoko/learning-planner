@@ -119,15 +119,61 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         const history = await response.json();
         console.log(`履歴取得成功:`, {
           total: history.length,
-          memoCount: history.filter((item: any) => item.page?.startsWith('memo-')).length,
-          samplePages: [...new Set(history.slice(0, 10).map((item: any) => item.page))],
+          memoCount: history.filter((item: any) => {
+            try {
+              const contextData = typeof item.context_data === 'string' 
+                ? JSON.parse(item.context_data) 
+                : item.context_data;
+              return contextData?.project_id !== undefined;
+            } catch {
+              return false;
+            }
+          }).length,
+          samplePages: [...new Set(history.slice(0, 10).map((item: any) => {
+            try {
+              const contextData = typeof item.context_data === 'string' 
+                ? JSON.parse(item.context_data) 
+                : item.context_data;
+              return contextData?.project_id ? `memo-${contextData.project_id}` : 'general';
+            } catch {
+              return 'general';
+            }
+          }))],
         });
+        
+        // デバッグ用：最初のアイテムの構造を確認
+        if (history.length > 0) {
+          console.log('📋 最初のアイテムの構造:', history[0]);
+        }
         
         // ページごとにセッションをグループ化
         const sessionMap = new Map<string, ChatSession>();
         
         history.forEach((item: any) => {
-          const pageId = item.page || 'general';
+          // context_dataをパース
+          let contextData: any = {};
+          if (item.context_data) {
+            try {
+              contextData = typeof item.context_data === 'string' 
+                ? JSON.parse(item.context_data) 
+                : item.context_data;
+            } catch (e) {
+              console.error('context_dataのパースエラー:', e);
+            }
+          }
+          
+          // ページIDを決定（複数のソースから優先順位で判定）
+          let pageId = 'general';
+          
+          // 1. context_data内のpage_id（conversation-agentから）
+          if (contextData.page_id) {
+            pageId = contextData.page_id;
+          }
+          // 2. project_idからページIDを生成（従来の方式）
+          else if (contextData.project_id) {
+            pageId = `memo-${contextData.project_id}`;
+          }
+          // 3. デフォルト: general
           const sessionId = pageId;
           
           if (!sessionMap.has(sessionId)) {

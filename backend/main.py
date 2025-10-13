@@ -771,6 +771,7 @@ async def chat_with_ai(
             # ユーザーメッセージをDBに保存
             user_message_data = {
                 "user_id": current_user,
+                "page": "legacy",  # 廃止予定: context_dataを使用
                 "sender": "user",
                 "message": chat_data.message,
                 "conversation_id": conversation_id,
@@ -792,6 +793,7 @@ async def chat_with_ai(
             
             ai_message_data = {
                 "user_id": current_user,
+                "page": "legacy",  # 廃止予定: context_dataを使用
                 "sender": "assistant",
                 "message": response,
                 "conversation_id": conversation_id,
@@ -1979,14 +1981,15 @@ async def chat_with_conversation_agent(
                 # 応答をDB保存（ユーザーメッセージ）
                 user_message_data = {
                     "user_id": current_user,
-                    "page": page_id,
+                    "page": "legacy",  # 廃止予定: context_dataを使用
                     "sender": "user",
                     "message": request.message,
                     "conversation_id": conversation_id,
                     "context_data": json.dumps({
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "agent_endpoint": True,
-                        "project_id": request.project_id
+                        "project_id": request.project_id,
+                        "page_id": page_id  # ページ情報はcontext_dataに格納
                     }, ensure_ascii=False)
                 }
                 await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
@@ -1994,13 +1997,14 @@ async def chat_with_conversation_agent(
                 # 応答をDB保存（AIメッセージ）
                 ai_message_data = {
                     "user_id": current_user,
-                    "page": page_id,
+                    "page": "legacy",  # 廃止予定: context_dataを使用
                     "sender": "assistant",
                     "message": agent_result["response"],
                     "conversation_id": conversation_id,
                     "context_data": json.dumps({
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "agent_endpoint": True,
+                        "page_id": page_id,  # ページ情報はcontext_dataに格納
                         "support_type": agent_result.get("support_type"),
                         "selected_acts": agent_result.get("selected_acts"),
                         "state_snapshot": agent_result.get("state_snapshot", {}),
