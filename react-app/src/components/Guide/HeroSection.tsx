@@ -173,16 +173,15 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
             >
               <Box
                 sx={{
-                  maxWidth: { xs: '100%', sm: '600px', md: '800px' },
+                  maxWidth: { xs: '100%', sm: '600px', md: '1200px' },
                   mx: 'auto',
                   position: 'relative',
-                  borderRadius: 0,
+                  borderRadius: 1,
                   overflow: 'hidden',
                   boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                   background: 'rgba(255,255,255,0.1)',
                   backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  p: { xs: 1, sm: 2 },
+                  //p: { xs: 1, sm: 2 },
                 }}
               >
                 {/* メインのアプリケーション画面 */}

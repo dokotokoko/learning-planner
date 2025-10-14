@@ -186,7 +186,7 @@ const FAQSection: React.FC = () => {
               mt: 6,
               p: 4,
               borderRadius: 3,
-              background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+              background: 'linear-gradient(135deg,rgb(253, 180, 137) 0%,rgb(252, 255, 82) 100%)',
               textAlign: 'center',
             }}
           >
