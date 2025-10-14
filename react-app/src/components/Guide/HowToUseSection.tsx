@@ -43,7 +43,7 @@ const HowToUseSection: React.FC = () => {
       ],
       icon: <Lightbulb sx={{ fontSize: 48 }} />,
       bgColor: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E8E 100%)',
-      example: 'ダッシュボード→「新しいプロジェクト」→テーマを入力してプロジェクト作成',
+      image: '/images/app-screenshot-main.png'
     },
     {
       number: 2,
@@ -58,7 +58,7 @@ const HowToUseSection: React.FC = () => {
       ],
       icon: <Assignment sx={{ fontSize: 48 }} />,
       bgColor: 'linear-gradient(135deg, #4ECDC4 0%, #67E6DC 100%)',
-      example: 'プロジェクトページで問いと仮説の欄をクリックして編集・保存',
+      image: '/images/app-screenshot-main.png'
     },
     {
       number: 3,
@@ -73,7 +73,7 @@ const HowToUseSection: React.FC = () => {
       ],
       icon: <Psychology sx={{ fontSize: 48 }} />,
       bgColor: 'linear-gradient(135deg, #A8E6CF 0%, #C1E6CF 100%)',
-      example: 'メモ作成→内容記録→AIチャットで相談→思考フレームワークで整理',
+      image: '/images/app-screenshot-main.png'
     },
   ];
 
@@ -94,14 +94,14 @@ const HowToUseSection: React.FC = () => {
                 fontWeight: 700,
                 fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
                 mb: 2,
-                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                background: 'linear-gradient(45deg, #FF7A00, #E55100)',
                 backgroundClip: 'text',
                 textFillColor: 'transparent',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              どう使うか？
+              探Qメイトの対話の特徴
             </Typography>
             <Typography
               variant="h6"
@@ -114,18 +114,7 @@ const HowToUseSection: React.FC = () => {
                 mb: 4,
               }}
             >
-              3つのステップで始める探究学習
             </Typography>
-            <Chip
-              label="すぐに始められる"
-              color="primary"
-              sx={{
-                fontWeight: 600,
-                px: 2,
-                py: 1,
-                fontSize: '0.9rem',
-              }}
-            />
           </Box>
         </motion.div>
 
@@ -260,8 +249,8 @@ const HowToUseSection: React.FC = () => {
                       elevation={2}
                       sx={{
                         p: 3,
-                        backgroundColor: 'rgba(5, 155, 255, 0.05)',
-                        border: '1px solid rgba(5, 155, 255, 0.1)',
+                        backgroundColor: 'rgba(255, 122, 0, 0.05)',
+                        border: '1px solid rgba(255, 122, 0, 0.1)',
                         borderRadius: 3,
                       }}
                     >
@@ -274,7 +263,6 @@ const HowToUseSection: React.FC = () => {
                           color: 'text.secondary',
                         }}
                       >
-                        <strong>実例:</strong> {step.example}
                       </Typography>
                     </Paper>
                   </Box>
@@ -282,87 +270,18 @@ const HowToUseSection: React.FC = () => {
 
                 {/* ビジュアル側 */}
                 <Grid item xs={12} md={6}>
-                  <Paper
-                    elevation={8}
-                    sx={{
-                      p: 4,
-                      textAlign: 'center',
-                      background: step.bgColor,
-                      color: 'white',
-                      borderRadius: 4,
-                      minHeight: { xs: 300, md: 400 },
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {/* 背景装飾 */}
+                  <Paper elevation={8} sx={{ borderRadius: 0, overflow: 'hidden' }}>
                     <Box
+                      component="img"
+                      src={step.image}
+                      loading="lazy"
                       sx={{
-                        position: 'absolute',
-                        top: -50,
-                        right: -50,
-                        width: 200,
-                        height: 200,
-                        borderRadius: '50%',
-                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        display: 'block',
+                        width: '100%',
+                        height: { xs: 300, md: 400 }, // 固定したい時
+                        objectFit: 'cover',
                       }}
                     />
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: -30,
-                        left: -30,
-                        width: 150,
-                        height: 150,
-                        borderRadius: '50%',
-                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                      }}
-                    />
-
-                    <Box sx={{ position: 'relative', zIndex: 1 }}>
-                      {step.icon}
-                      <Typography
-                        variant="h5"
-                        sx={{
-                          fontWeight: 600,
-                          mt: 3,
-                          mb: 2,
-                          fontSize: { xs: '1.2rem', sm: '1.5rem' },
-                        }}
-                      >
-                        ステップ {step.number}
-                      </Typography>
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          opacity: 0.9,
-                          fontSize: { xs: '0.9rem', sm: '1rem' },
-                        }}
-                      >
-                        {step.subtitle}
-                      </Typography>
-                      
-                      <Button
-                        variant="contained"
-                        startIcon={<PlayArrow />}
-                        sx={{
-                          mt: 4,
-                          backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                          color: 'white',
-                          '&:hover': {
-                            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                          },
-                          borderRadius: 2,
-                          px: 3,
-                        }}
-                      >
-                        詳しく見る
-                      </Button>
-                    </Box>
                   </Paper>
                 </Grid>
               </Grid>
@@ -382,7 +301,7 @@ const HowToUseSection: React.FC = () => {
               elevation={3}
               sx={{
                 p: { xs: 4, md: 6 },
-                background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+                background: 'linear-gradient(135deg, #FF7A00 0%, #E55100 100%)',
                 color: 'white',
                 borderRadius: 4,
               }}

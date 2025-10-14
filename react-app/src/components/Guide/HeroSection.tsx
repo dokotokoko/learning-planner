@@ -48,7 +48,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        background: 'linear-gradient(135deg, #FFB347 0%, #FF8A65 100%)',
         display: 'flex',
         alignItems: 'center',
         py: 8,
@@ -73,118 +73,110 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
       />
 
       <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-        <Grid container spacing={6} alignItems="center">
+        <Grid container spacing={6} direction="column" alignItems="center">
           {/* メインコンテンツ */}
-          <Grid item xs={12} lg={7}>
+          <Grid item xs={12}>
             <motion.div
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <Typography
-                variant="h1"
-                sx={{
-                  color: 'white',
-                  fontWeight: 700,
-                  fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4rem' },
-                  lineHeight: 1.2,
-                  mb: 3,
-                }}
-              >
-                探Qメイト
-              </Typography>
-              
-              <Typography
-                variant="h4"
-                sx={{
-                  color: 'rgba(255,255,255,0.9)',
-                  fontWeight: 400,
-                  fontSize: { xs: '1.2rem', sm: '1.5rem', md: '1.8rem' },
-                  lineHeight: 1.4,
-                  mb: 4,
-                }}
-              >
-                AIを活用した探究学習支援で
-                <br />
-                学びの質を変革する
-              </Typography>
-
-              <Typography
-                variant="body1"
-                sx={{
-                  color: 'rgba(255,255,255,0.8)',
-                  fontSize: { xs: '1rem', sm: '1.1rem' },
-                  lineHeight: 1.6,
-                  mb: 5,
-                  maxWidth: '600px',
-                }}
-              >
-                探究学習の課題設定から成果発表まで、AI対話によって一人ひとりの学習者を個別にサポート。
-                先生・生徒・管理職すべてにとって価値のある学習環境を提供します。
-              </Typography>
-
-              <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', sm: 'row' } }}>
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={onGetStarted}
-                  endIcon={<ArrowForward />}
-                  sx={{
-                    background: 'rgba(255,255,255,0.9)',
-                    color: '#006EB8',
-                    '&:hover': {
-                      background: 'rgba(255,255,255,1)',
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-                    },
-                    px: 4,
-                    py: 2,
-                    fontSize: '1.1rem',
-                    fontWeight: 600,
-                    borderRadius: 3,
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  探究を始める！
-                </Button>
-                
-                <Button
-                  variant="outlined"
-                  size="large"
-                  onClick={onLearnMore}
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography
+                  variant="h1"
                   sx={{
                     color: 'white',
-                    borderColor: 'rgba(255,255,255,0.8)',
-                    '&:hover': {
-                      borderColor: 'white',
-                      backgroundColor: 'rgba(255,255,255,0.1)',
-                      transform: 'translateY(-2px)',
-                    },
-                    px: 4,
-                    py: 2,
-                    fontSize: '1.1rem',
-                    fontWeight: 600,
-                    borderRadius: 3,
-                    transition: 'all 0.3s ease',
+                    fontWeight: 800,
+                    fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4rem' },
+                    textShadow: '2px 2px 8px rgba(0,0,0,0.1)',
+                    lineHeight: 1.2,
+                    mb: 3,
                   }}
                 >
-                  探Qメイトと何ができる？
-                </Button>
+                  探Qメイト
+                </Typography>
+                
+                <Typography
+                  variant="h4"
+                  sx={{
+                    color: 'rgba(255,255,255,0.9)',
+                    fontWeight: 500,
+                    fontSize: { xs: '1.2rem', sm: '1.5rem', md: '1.8rem' },
+                    lineHeight: 1.4,
+                    mb: 4,
+                  }}
+                >
+                  AIとの対話で自分の考えを言葉にしながら
+                  <br />
+                  楽しく探究を前に進めよう
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'center' }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={onGetStarted}
+                    endIcon={<ArrowForward />}
+                    sx={{
+                      background: 'linear-gradient(45deg, #FFF3E0, #FFCC80)',
+                      color: '#D84315',
+                      boxShadow: '0 4px 15px rgba(255,183,77,0.4)',
+                      '&:hover': {
+                        background: 'linear-gradient(45deg, #FFCC80, #FFB74D)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                      },
+                      px: 4,
+                      py: 2,
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      borderRadius: 25,
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    探究を始める
+                  </Button>
+                  
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={onLearnMore}
+                    sx={{
+                      color: 'white',
+                      borderColor: 'rgba(255,255,255,0.8)',
+                      '&:hover': {
+                        borderColor: 'white',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        transform: 'translateY(-2px)',
+                      },
+                      px: 4,
+                      py: 2,
+                      fontSize: '1.1rem',
+                      fontWeight: 600,
+                      borderRadius: 25,
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    詳しく見る
+                  </Button>
+                </Box>
               </Box>
             </motion.div>
           </Grid>
 
           {/* アプリケーション画面の画像 */}
-          <Grid item xs={12} lg={5}>
+          <Grid item xs={12}>
             <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
             >
               <Box
                 sx={{
+                  maxWidth: { xs: '100%', sm: '600px', md: '800px' },
+                  mx: 'auto',
                   position: 'relative',
-                  borderRadius: 3,
+                  borderRadius: 0,
                   overflow: 'hidden',
                   boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                   background: 'rgba(255,255,255,0.1)',
@@ -200,7 +192,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                   alt="探Qメイトのメイン画面"
                   loading="lazy"
                   sx={{
-                    width: '200%',
+                    width: '100%',
                     height: 'auto',
                     display: 'block',
                   }}
@@ -211,10 +203,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                     target.parentElement!.innerHTML = `
                       <div style="
                         background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 100%);
-                        border-radius: 8px;
+                        border-radius: 0px;
                         padding: 40px;
                         text-align: center;
-                        min-height: 400px;
+                        min-height: 300px;
                         display: flex;
                         align-items: center;
                         justify-content: center;

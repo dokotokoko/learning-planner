@@ -117,13 +117,13 @@ const GuidePage: React.FC = () => {
             size={isMobile ? 'medium' : 'large'}
             onClick={scrollToTop}
             sx={{
-              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              background: 'linear-gradient(45deg, #FF7A00, #FF9500)',
               '&:hover': {
-                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                 transform: 'scale(1.1)',
               },
               transition: 'all 0.3s ease',
-              boxShadow: '0 8px 25px rgba(5,155,255,0.3)',
+              boxShadow: '0 8px 25px rgba(255,122,0,0.3)',
             }}
             aria-label="上に戻る"
           >
@@ -164,13 +164,13 @@ const GuidePage: React.FC = () => {
                   width: 12,
                   height: 12,
                   borderRadius: '50%',
-                  backgroundColor: 'primary.main',
+                  backgroundColor: '#FF7A00',
                   cursor: 'pointer',
                   opacity: 0.6,
                   transition: 'all 0.3s ease',
                   '&:hover': {
                     opacity: 1,
-                    backgroundColor: 'primary.dark',
+                    backgroundColor: '#FF6B35',
                     transform: 'scale(1.2)',
                   },
                 }}

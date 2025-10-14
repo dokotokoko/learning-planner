@@ -56,17 +56,17 @@ function App() {
       mode: isDarkMode ? 'dark' : 'light',
       primary: {
         main: primaryColor,
-        light: isDarkMode ? '#52BAFF' : '#9ED8FF',
-        dark: '#006EB8',
+        light: isDarkMode ? '#FFCC80' : '#FFD54F',
+        dark: '#FF8F00',
       },
       secondary: {
-        main: '#52BAFF',
-        light: '#9ED8FF',
-        dark: '#00406B',
+        main: '#FF8A65',
+        light: '#FFAB91',
+        dark: '#FF5722',
       },
       background: {
-        default: '#E0F2F7', // 例: 明るい水色
-        paper: isDarkMode ? '#1e1e1e' : '#ffffff',
+        default: '#FFF9C4', // より明るいパステルクリーム色
+        paper: isDarkMode ? '#1e1e1e' : '#FFFDE7',
       },
     },
     typography: {
@@ -87,14 +87,14 @@ function App() {
       },
     },
     shape: {
-      borderRadius: 12,
+      borderRadius: 20,
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
-            borderRadius: 8,
+            borderRadius: 20,
             fontWeight: 600,
             padding: '10px 24px',
             transition: 'all 0.3s ease',
@@ -109,12 +109,7 @@ function App() {
         styleOverrides: {
           root: {
             boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            borderRadius: 16,
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-              transform: 'translateY(-2px)',
-            },
+            borderRadius: 24,
           },
         },
       },
@@ -122,7 +117,7 @@ function App() {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 8,
+              borderRadius: 20,
               transition: 'all 0.3s ease',
               '&:hover': {
                 '& .MuiOutlinedInput-notchedOutline': {

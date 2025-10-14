@@ -85,11 +85,11 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       // 新しい会話管理APIから会話リストを取得
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       console.log('🔍 API呼び出し開始:', {
-        url: `${apiBaseUrl}/conversations?limit=50`,
+        url: `${apiBaseUrl}/conversations?limit=50&is_active=true`,
         userId: userId
       });
       
-      const response = await fetch(`${apiBaseUrl}/conversations?limit=50`, {
+      const response = await fetch(`${apiBaseUrl}/conversations?limit=50&is_active=true`, {
         headers: {
           'Authorization': `Bearer ${userId}`,
         },
