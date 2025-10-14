@@ -142,7 +142,7 @@ const HowToUseSection: React.FC = () => {
                   fontSize: { xs: '1.8rem', md: '2.4rem' } 
                 }}
               >
-                答えではなく<br />
+                正解を答えるのではなく<br />
                 <Box component="span" sx={{ 
                   background: 'linear-gradient(45deg, #FF7A00, #E55100)',
                   backgroundClip: 'text',
@@ -162,43 +162,15 @@ const HowToUseSection: React.FC = () => {
                   fontSize: { xs: '1rem', sm: '1.1rem' },
                 }}
               >
-                探QメイトのAIは答えを教えるのではなく、
-                あなたの考えをより具体的にするための問いを投げかけます。
-                自ら考える力を育てるサポートをします。
+                問いかけ中心の対話形式だから気軽に考えを深めて、自分の言葉で表現できます。
+                今のあなたに最適な問いをAIが判断するので、悩みすぎずに探究できます。
               </Typography>
-
-              {/* ステップリスト（コンパクト版） */}
-              <Stack spacing={2} sx={{ mt: 3 }}>
-                {steps.map((step, index) => (
-                  <Stack key={index} direction="row" alignItems="center" spacing={2}>
-                    <Avatar
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        bgcolor: `${step.bgColor}20`,
-                        color: step.bgColor,
-                      }}
-                    >
-                      {React.cloneElement(step.icon, { fontSize: 'small' })}
-                    </Avatar>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {step.title}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {step.subtitle}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                ))}
-              </Stack>
             </Stack>
           </Grid>
 
           {/* 右側：インタラクティブなモックUI */}
           <Grid item xs={12} md={6}>
             <Box sx={{ position: 'relative' }}>
-              {/* グロー影 */}
               <Box
                 sx={{
                   position: 'absolute',
@@ -236,6 +208,7 @@ const HowToUseSection: React.FC = () => {
                     border: '1px solid rgba(120,144,180,0.15)',
                     boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
                     maxWidth: 520,
+                    minHeight: 420,
                     width: '100%',
                     mx: 'auto',
                   }}
@@ -464,7 +437,7 @@ const HowToUseSection: React.FC = () => {
               <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box sx={{ width: 14, height: 14, bgcolor: '#4ECDC4', borderRadius: 0.5 }} />
                 <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
-                  多様な選択肢を提示
+                  選択肢や例を選択肢て気軽に考えを深められる
                 </Typography>
               </Stack>
 
@@ -474,7 +447,7 @@ const HowToUseSection: React.FC = () => {
                   fontWeight: 800, 
                   lineHeight: 1.3, 
                   fontSize: { xs: '1.8rem', md: '2.4rem' },
-                  textAlign: { xs: 'center', md: 'right' },
+                  textAlign: { xs: 'center', md: 'left' },
                 }}
               >
                 次のステップやアイデアなど<br />
@@ -495,47 +468,13 @@ const HowToUseSection: React.FC = () => {
                   color: 'text.secondary', 
                   lineHeight: 1.8,
                   fontSize: { xs: '1rem', sm: '1.1rem' },
-                  textAlign: { xs: 'center', md: 'right' },
+                  textAlign: { xs: 'center', md: 'left' },
                 }}
               >
-                AIは複数の選択肢を提案しますが、最終的な判断は生徒自身が行います。
-                主体性を保ちながら、視野を広げるサポートをします。
+                探Qメイトは、対話を進めやすいように、選択肢や例を提示します。
+                選択肢を選ぶことで自分の考えを深めることができます！
+                あなたの主体性を尊重しながら、適切なサポートを届けます。
               </Typography>
-
-              {/* 選択肢の例 */}
-              <Stack spacing={2} sx={{ mt: 3 }}>
-                {[
-                  { icon: <TipsAndUpdates />, title: '調査方法の提案', subtitle: '実験・インタビュー・文献', color: '#ffa726' },
-                  { icon: <Assignment />, title: '複数の視点', subtitle: '異なるアプローチを紹介', color: '#4ECDC4' },
-                  { icon: <Psychology />, title: '発展の方向', subtitle: '深める・広げる・つなげる', color: '#ab47bc' },
-                  { icon: <Assessment />, title: 'あなたが選ぶ', subtitle: '興味に合わせて決定', color: '#42a5f5' },
-                ].map((item, index) => (
-                  <Stack key={index} direction="row" alignItems="center" spacing={2} sx={{ 
-                    justifyContent: { xs: 'center', md: 'flex-end' },
-                    textAlign: { xs: 'center', md: 'right' },
-                  }}>
-                    <Box sx={{ order: { xs: 1, md: 2 }, flex: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {item.title}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {item.subtitle}
-                      </Typography>
-                    </Box>
-                    <Avatar
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        bgcolor: `${item.color}20`,
-                        color: item.color,
-                        order: { xs: 2, md: 1 },
-                      }}
-                    >
-                      {React.cloneElement(item.icon, { fontSize: 'small' })}
-                    </Avatar>
-                  </Stack>
-                ))}
-              </Stack>
             </Stack>
           </Grid>
 
@@ -684,7 +623,7 @@ const HowToUseSection: React.FC = () => {
               <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box sx={{ width: 14, height: 14, bgcolor: '#2196F3', borderRadius: 0.5 }} />
                 <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
-                  適切な問いのサイズ調整
+                  問いのサイズを調整して行き詰まりを解消
                 </Typography>
               </Stack>
 
@@ -720,37 +659,6 @@ const HowToUseSection: React.FC = () => {
                 小さすぎたら視野を広げる。
                 探究が止まらないよう、適切なサイズに調整するお手伝いをします。
               </Typography>
-
-              {/* 問いの調整例 */}
-              <Stack spacing={2} sx={{ mt: 3 }}>
-                {[
-                  { icon: <Assessment />, title: '問いを分解', subtitle: '大きな問いを扱いやすく', color: '#2196F3' },
-                  { icon: <PlayArrow />, title: '視野を広げる', subtitle: '小さな問いを発展させる', color: '#ff9800' },
-                  { icon: <AutoStories />, title: '関連づける', subtitle: '他の問いとつなげる', color: '#4caf50' },
-                  { icon: <Save />, title: '段階的に進む', subtitle: 'ステップバイステップ', color: '#9c27b0' },
-                ].map((item, index) => (
-                  <Stack key={index} direction="row" alignItems="center" spacing={2}>
-                    <Avatar
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        bgcolor: `${item.color}20`,
-                        color: item.color,
-                      }}
-                    >
-                      {React.cloneElement(item.icon, { fontSize: 'small' })}
-                    </Avatar>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {item.title}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {item.subtitle}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                ))}
-              </Stack>
             </Stack>
           </Grid>
 
@@ -793,6 +701,7 @@ const HowToUseSection: React.FC = () => {
                     border: '1px solid rgba(120,144,180,0.15)',
                     boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
                     maxWidth: 520,
+                    minHeight: 480,
                     width: '100%',
                     mx: 'auto',
                   }}
@@ -817,26 +726,16 @@ const HowToUseSection: React.FC = () => {
                         height: 8, 
                         width: 140, 
                         bgcolor: '#2b3a4d',
-                        borderRadius: 4,
+                        borderRadius: 2,
                         mb: 0.8,
                       }} />
                       <Box sx={{ 
                         height: 6, 
                         width: 90, 
                         bgcolor: '#c1c9d5',
-                        borderRadius: 3,
+                        borderRadius: 2,
                       }} />
                     </Box>
-                    <Chip 
-                      label="発表準備" 
-                      size="small"
-                      sx={{ 
-                        bgcolor: 'rgba(33, 150, 243, 0.1)',
-                        color: '#2196F3',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                      }}
-                    />
                   </Stack>
 
                   {/* 問いの調整UI */}
@@ -844,11 +743,11 @@ const HowToUseSection: React.FC = () => {
                     <Box sx={{ 
                       p: 2,
                       bgcolor: '#fff4e6',
-                      borderRadius: 2,
+                      borderRadius: 1,
                       border: '1px solid #ffb74d',
                     }}>
                       <Typography variant="caption" fontWeight={600} sx={{ color: '#e65100' }}>
-                        現在の問い（大きすぎる？）
+                        現在の問い
                       </Typography>
                       <Typography variant="body2" sx={{ mt: 1, color: '#424242' }}>
                         なぜ地球温暖化が起きるのか？
@@ -860,7 +759,7 @@ const HowToUseSection: React.FC = () => {
                     </Box>
 
                     <Typography variant="caption" fontWeight={600} sx={{ color: '#2196F3', mb: 1 }}>
-                      📏 問いを分解して扱いやすくしました：
+                      📏 問いを細分化しました。どれから始めますか？選んでみましょう！：
                     </Typography>
 
                     <Stack spacing={1}>
@@ -875,7 +774,7 @@ const HowToUseSection: React.FC = () => {
                             p: 1.5,
                             bgcolor: '#e3f2fd',
                             border: '1px solid #90caf9',
-                            borderRadius: 2,
+                            borderRadius: 1,
                           }}
                         >
                           <Typography variant="caption" sx={{ color: '#1565c0' }}>
@@ -884,18 +783,6 @@ const HowToUseSection: React.FC = () => {
                         </Paper>
                       ))}
                     </Stack>
-
-                    <Box sx={{ 
-                      mt: 2, 
-                      p: 1.5, 
-                      bgcolor: '#f3e5f5', 
-                      borderRadius: 2,
-                      textAlign: 'center',
-                    }}>
-                      <Typography variant="caption" sx={{ color: '#6a1b9a', fontWeight: 600 }}>
-                        どれから始めますか？選んでみましょう！
-                      </Typography>
-                    </Box>
                   </Stack>
                 </Paper>
               </motion.div>
@@ -929,7 +816,7 @@ const HowToUseSection: React.FC = () => {
                   fontSize: { xs: '1.2rem', sm: '1.5rem' },
                 }}
               >
-                探究学習を始めよう
+                AIとの対話で探究学習を前に進めよう！
               </Typography>
               <Typography
                 variant="body1"
@@ -941,7 +828,6 @@ const HowToUseSection: React.FC = () => {
                   lineHeight: 1.8,
                 }}
               >
-                5つのステップで、あなたの探究学習をサポート。
                 AIアシスタントと一緒に、深い学びと創造的思考力を育てましょう。
               </Typography>
             </Paper>

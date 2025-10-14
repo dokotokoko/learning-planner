@@ -20,6 +20,7 @@ import {
   Psychology,
   Extension,
   TrendingUp,
+  Description,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 
@@ -31,17 +32,20 @@ const UseCaseSection: React.FC = () => {
     {
       title: '探究テーマが決まらない時に...',
       color: '#4CAF50',
-      image: '/images/usecase1.png'
+      image: '/images/usecase1.png',
+      description: '小さな好奇心をAIとの対話で広げてテーマを発見できます。'
     },
     {
       title: '少し調べた後に行き詰ってしまった時に...',
       color: '#2196F3',
-      image: '/images/usecase2.png'
+      image: '/images/usecase2.png',
+      description: '1つ目の問いが調べて終わっても、次の問いをAIと一緒に決めていきましょう。'
     },
     {
       title: '今日の学びを深く振り返りたい時に',
       color: '#FF9800',
-      image: '/images/usecase3.png'
+      image: '/images/usecase3.png',
+      description: '浅く留まりがちな探究の振り返りをAIとの対話で深められます。'
     }
   ];
 
@@ -167,6 +171,7 @@ const UseCaseSection: React.FC = () => {
                         textAlign: 'center',
                       }}
                     >
+                      {useCase.description}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -174,48 +179,6 @@ const UseCaseSection: React.FC = () => {
             </Grid>
           ))}
         </Grid>
-
-        {/* Bottom CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-        >
-          <Box
-            sx={{
-              mt: 8,
-              p: 4,
-              borderRadius: 3,
-              background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-              textAlign: 'center',
-            }}
-          >
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 600,
-                mb: 2,
-                fontSize: { xs: '1.3rem', sm: '1.5rem' },
-              }}
-            >
-              あなたの探究活動にも活用できます
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{
-                maxWidth: 600,
-                mx: 'auto',
-                lineHeight: 1.6,
-              }}
-            >
-              探Qメイトは、生徒一人ひとりの興味や学習スタイルに合わせて
-              最適な探究学習をサポートします。
-              まずは無料で試してみませんか？
-            </Typography>
-          </Box>
-        </motion.div>
       </Container>
     </Box>
   );
