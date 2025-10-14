@@ -122,7 +122,7 @@ const HowToUseSection: React.FC = () => {
   return (
     <Box sx={{ py: { xs: 8, md: 12 }, backgroundColor: 'background.default' }}>
       <Container maxWidth="lg">
-        {/* メインコンテンツ */}
+        {/* メインコンテンツ：問いかけによる具体化 */}
         <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center">
           {/* 左側：テキストコンテンツ */}
           <Grid item xs={12} md={6}>
@@ -130,7 +130,7 @@ const HowToUseSection: React.FC = () => {
               <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box sx={{ width: 14, height: 14, bgcolor: '#FF7A00', borderRadius: 0.5 }} />
                 <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
-                  5つのステップで進行
+                  問いかけによる思考の深化
                 </Typography>
               </Stack>
 
@@ -142,7 +142,7 @@ const HowToUseSection: React.FC = () => {
                   fontSize: { xs: '1.8rem', md: '2.4rem' } 
                 }}
               >
-                ステップに沿った進行で<br />
+                答えではなく<br />
                 <Box component="span" sx={{ 
                   background: 'linear-gradient(45deg, #FF7A00, #E55100)',
                   backgroundClip: 'text',
@@ -150,7 +150,7 @@ const HowToUseSection: React.FC = () => {
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}>
-                  誰でもスムーズに探究できる
+                  考えを具体的にする問いかけ
                 </Box>
               </Typography>
 
@@ -162,8 +162,9 @@ const HowToUseSection: React.FC = () => {
                   fontSize: { xs: '1rem', sm: '1.1rem' },
                 }}
               >
-                アイデア出しから発表まで、探究学習を5つのステップでガイド。
-                各ステップでAIが適切なサポートを提供し、迷わず進められます。
+                探QメイトのAIは答えを教えるのではなく、
+                あなたの考えをより具体的にするための問いを投げかけます。
+                自ら考える力を育てるサポートをします。
               </Typography>
 
               {/* ステップリスト（コンパクト版） */}
@@ -293,12 +294,12 @@ const HowToUseSection: React.FC = () => {
                         }}
                       >
                         <Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
-                          どうやって探究テーマを見つければいいですか？
+                          プラスチックが環境に悪いと聞きました
                         </Typography>
                       </Box>
                     </Box>
 
-                    {/* AIメッセージ（実際のテキスト） */}
+                    {/* AIメッセージ（問いかけ） */}
                     <Box sx={{ display: 'flex', gap: 1.5 }}>
                       <Box sx={{ 
                         width: 32, 
@@ -314,15 +315,23 @@ const HowToUseSection: React.FC = () => {
                       </Box>
                       <Box
                         sx={{
-                          maxWidth: '70%',
+                          maxWidth: '75%',
                           p: 2,
                           bgcolor: '#f0f4f8',
                           borderRadius: '4px 20px 20px 20px',
                         }}
                       >
-                        <Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.6, color: '#334155' }}>
-                          まずは身近な「なぜ？」から始めてみましょう。日常生活で感じる疑問や興味を書き出してみると、探究テーマが見つかりやすくなります。
+                        <Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.6, color: '#334155', mb: 1 }}>
+                          なるほど！では質問です：
                         </Typography>
+                        <Stack spacing={1} sx={{ pl: 2 }}>
+                          <Typography variant="caption" sx={{ color: '#FF7A00', fontWeight: 600 }}>
+                            • どんな場面でそう感じましたか？
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#FF7A00', fontWeight: 600 }}>
+                            • 特に気になる影響はありますか？
+                          </Typography>
+                        </Stack>
                       </Box>
                     </Box>
 
@@ -447,95 +456,452 @@ const HowToUseSection: React.FC = () => {
           </Grid>
         </Grid>
 
-        {/* 詳細セクション */}
-        <Box sx={{ mt: { xs: 10, md: 14 } }}>
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <Typography
-              variant="h4"
-              sx={{
-                textAlign: 'center',
-                fontWeight: 700,
-                fontSize: { xs: '1.5rem', md: '2rem' },
-                mb: { xs: 6, md: 8 },
-              }}
-            >
-              各ステップの詳細
-            </Typography>
-          </motion.div>
+        {/* 2つ目のセット：多様な選択肢の提示 */}
+        <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center" sx={{ mt: { xs: 12, md: 16 } }}>
+          {/* 右側：テキストコンテンツ */}
+          <Grid item xs={12} md={6} order={{ xs: 2, md: 2 }}>
+            <Stack spacing={3}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Box sx={{ width: 14, height: 14, bgcolor: '#4ECDC4', borderRadius: 0.5 }} />
+                <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
+                  多様な選択肢を提示
+                </Typography>
+              </Stack>
 
-          {/* ステップ詳細カード */}
-          <Grid container spacing={3}>
-            {steps.map((step, index) => (
-              <Grid item xs={12} md={6} lg={4} key={index}>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: 0.1 * index }}
+              <Typography 
+                variant="h3" 
+                sx={{ 
+                  fontWeight: 800, 
+                  lineHeight: 1.3, 
+                  fontSize: { xs: '1.8rem', md: '2.4rem' },
+                  textAlign: { xs: 'center', md: 'right' },
+                }}
+              >
+                次のステップやアイデアなど<br />
+                <Box component="span" sx={{ 
+                  background: 'linear-gradient(45deg, #4ECDC4, #2b79ff)',
+                  backgroundClip: 'text',
+                  textFillColor: 'transparent',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>
+                  決定するのはあなた！
+                </Box>
+              </Typography>
+
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  lineHeight: 1.8,
+                  fontSize: { xs: '1rem', sm: '1.1rem' },
+                  textAlign: { xs: 'center', md: 'right' },
+                }}
+              >
+                AIは複数の選択肢を提案しますが、最終的な判断は生徒自身が行います。
+                主体性を保ちながら、視野を広げるサポートをします。
+              </Typography>
+
+              {/* 選択肢の例 */}
+              <Stack spacing={2} sx={{ mt: 3 }}>
+                {[
+                  { icon: <TipsAndUpdates />, title: '調査方法の提案', subtitle: '実験・インタビュー・文献', color: '#ffa726' },
+                  { icon: <Assignment />, title: '複数の視点', subtitle: '異なるアプローチを紹介', color: '#4ECDC4' },
+                  { icon: <Psychology />, title: '発展の方向', subtitle: '深める・広げる・つなげる', color: '#ab47bc' },
+                  { icon: <Assessment />, title: 'あなたが選ぶ', subtitle: '興味に合わせて決定', color: '#42a5f5' },
+                ].map((item, index) => (
+                  <Stack key={index} direction="row" alignItems="center" spacing={2} sx={{ 
+                    justifyContent: { xs: 'center', md: 'flex-end' },
+                    textAlign: { xs: 'center', md: 'right' },
+                  }}>
+                    <Box sx={{ order: { xs: 1, md: 2 }, flex: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {item.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.subtitle}
+                      </Typography>
+                    </Box>
+                    <Avatar
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: `${item.color}20`,
+                        color: item.color,
+                        order: { xs: 2, md: 1 },
+                      }}
+                    >
+                      {React.cloneElement(item.icon, { fontSize: 'small' })}
+                    </Avatar>
+                  </Stack>
+                ))}
+              </Stack>
+            </Stack>
+          </Grid>
+
+          {/* 左側：メモUIモック */}
+          <Grid item xs={12} md={6} order={{ xs: 1, md: 1 }}>
+            <Box sx={{ position: 'relative' }}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 'auto 0 -20px 0',
+                  height: 40,
+                  mx: 'auto',
+                  width: '80%',
+                  filter: 'blur(20px)',
+                  borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.15)',
+                  zIndex: 0,
+                }}
+              />
+
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                whileInView={{ y: 0, opacity: 1 }}
+                viewport={{ once: true }}
+                animate={{ y: [0, -6, 0] }}
+                transition={{ 
+                  y: { duration: 5, repeat: Infinity, ease: "easeInOut" },
+                  default: { duration: 0.6 }
+                }}
+              >
+                <Paper
+                  elevation={0}
+                  sx={{
+                    position: 'relative',
+                    zIndex: 1,
+                    p: { xs: 3, md: 4 },
+                    borderRadius: 3,
+                    bgcolor: 'rgba(255,255,255,0.95)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(120,144,180,0.15)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
+                    maxWidth: 520,
+                    width: '100%',
+                    mx: 'auto',
+                  }}
                 >
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      height: '100%',
-                      borderRadius: 3,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 12px 24px rgba(0,0,0,0.1)',
-                      },
-                    }}
-                  >
-                    <Stack spacing={2}>
-                      <Stack direction="row" alignItems="center" spacing={2}>
-                        <Avatar
+                  {/* メモヘッダー */}
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+                    <Box 
+                      sx={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #4ECDC4, #2b79ff)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Edit sx={{ color: 'white', fontSize: 20 }} />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Box sx={{ 
+                        height: 8, 
+                        width: 120, 
+                        bgcolor: '#2b3a4d',
+                        borderRadius: 4,
+                        mb: 0.8,
+                      }} />
+                      <Box sx={{ 
+                        height: 6, 
+                        width: 80, 
+                        bgcolor: '#c1c9d5',
+                        borderRadius: 3,
+                      }} />
+                    </Box>
+                    <Chip 
+                      label="下書き" 
+                      size="small"
+                      sx={{ 
+                        bgcolor: 'rgba(76, 205, 196, 0.1)',
+                        color: '#4ECDC4',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}
+                    />
+                  </Stack>
+
+                  {/* 選択肢UI */}
+                  <Stack spacing={2}>
+                    <Typography variant="body2" fontWeight={600} sx={{ color: '#334155' }}>
+                      次のアプローチを選んでください：
+                    </Typography>
+                    
+                    {/* 選択肢カード */}
+                    <Stack spacing={1.5}>
+                      {[
+                        { label: 'A: 実験で確かめる', desc: '実際に観察してデータ収集', selected: false },
+                        { label: 'B: 専門家に聞く', desc: 'インタビューで深い知識', selected: true },
+                        { label: 'C: 文献を調べる', desc: '論文や書籍から学ぶ', selected: false },
+                      ].map((option, i) => (
+                        <Paper
+                          key={i}
                           sx={{
-                            width: 48,
-                            height: 48,
-                            bgcolor: `${step.bgColor}15`,
-                            color: step.bgColor,
+                            p: 1.5,
+                            bgcolor: option.selected ? '#e8f5ff' : '#f8fafc',
+                            border: option.selected ? '2px solid #4ECDC4' : '1px solid #e2e8f0',
+                            borderRadius: 2,
+                            cursor: 'pointer',
                           }}
                         >
-                          {React.cloneElement(step.icon, { fontSize: 'medium' })}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="h6" fontWeight={700}>
-                            {step.title}
+                          <Typography variant="caption" fontWeight={600} sx={{ 
+                            color: option.selected ? '#4ECDC4' : '#64748b',
+                          }}>
+                            {option.label}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {step.subtitle}
+                          <Typography variant="caption" sx={{ 
+                            display: 'block',
+                            color: '#94a3b8',
+                            fontSize: '0.7rem',
+                            mt: 0.5,
+                          }}>
+                            {option.desc}
                           </Typography>
-                        </Box>
-                      </Stack>
-
-                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                        {step.description}
-                      </Typography>
-
-                      <Stack spacing={1}>
-                        {step.features.map((feature, i) => (
-                          <Stack key={i} direction="row" alignItems="center" spacing={1}>
-                            <CheckCircle sx={{ fontSize: 16, color: step.bgColor }} />
-                            <Typography variant="caption">
-                              {feature}
-                            </Typography>
-                          </Stack>
-                        ))}
-                      </Stack>
+                        </Paper>
+                      ))}
                     </Stack>
-                  </Paper>
-                </motion.div>
-              </Grid>
-            ))}
+
+                    <Box sx={{ mt: 2, p: 1.5, bgcolor: '#f0f9ff', borderRadius: 2 }}>
+                      <Typography variant="caption" sx={{ color: '#0284c7', fontWeight: 600 }}>
+                        💡 複数選択も可能です！
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </motion.div>
+            </Box>
           </Grid>
-        </Box>
+        </Grid>
+
+        {/* 3つ目のセット：問いの調整 */}
+        <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center" sx={{ mt: { xs: 12, md: 16 } }}>
+          {/* 左側：テキストコンテンツ */}
+          <Grid item xs={12} md={6}>
+            <Stack spacing={3}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Box sx={{ width: 14, height: 14, bgcolor: '#2196F3', borderRadius: 0.5 }} />
+                <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
+                  適切な問いのサイズ調整
+                </Typography>
+              </Stack>
+
+              <Typography 
+                variant="h3" 
+                sx={{ 
+                  fontWeight: 800, 
+                  lineHeight: 1.3, 
+                  fontSize: { xs: '1.8rem', md: '2.4rem' } 
+                }}
+              >
+                問いの大小を調整して<br />
+                <Box component="span" sx={{ 
+                  background: 'linear-gradient(45deg, #2196F3, #9c27b0)',
+                  backgroundClip: 'text',
+                  textFillColor: 'transparent',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>
+                  前に進むサポート
+                </Box>
+              </Typography>
+
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  lineHeight: 1.8,
+                  fontSize: { xs: '1rem', sm: '1.1rem' },
+                }}
+              >
+                問いが大きすぎて困ったら小さく分解、
+                小さすぎたら視野を広げる。
+                探究が止まらないよう、適切なサイズに調整するお手伝いをします。
+              </Typography>
+
+              {/* 問いの調整例 */}
+              <Stack spacing={2} sx={{ mt: 3 }}>
+                {[
+                  { icon: <Assessment />, title: '問いを分解', subtitle: '大きな問いを扱いやすく', color: '#2196F3' },
+                  { icon: <PlayArrow />, title: '視野を広げる', subtitle: '小さな問いを発展させる', color: '#ff9800' },
+                  { icon: <AutoStories />, title: '関連づける', subtitle: '他の問いとつなげる', color: '#4caf50' },
+                  { icon: <Save />, title: '段階的に進む', subtitle: 'ステップバイステップ', color: '#9c27b0' },
+                ].map((item, index) => (
+                  <Stack key={index} direction="row" alignItems="center" spacing={2}>
+                    <Avatar
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: `${item.color}20`,
+                        color: item.color,
+                      }}
+                    >
+                      {React.cloneElement(item.icon, { fontSize: 'small' })}
+                    </Avatar>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {item.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.subtitle}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                ))}
+              </Stack>
+            </Stack>
+          </Grid>
+
+          {/* 右側：プレゼンUIモック */}
+          <Grid item xs={12} md={6}>
+            <Box sx={{ position: 'relative' }}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 'auto 0 -20px 0',
+                  height: 40,
+                  mx: 'auto',
+                  width: '80%',
+                  filter: 'blur(20px)',
+                  borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.15)',
+                  zIndex: 0,
+                }}
+              />
+
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                whileInView={{ y: 0, opacity: 1 }}
+                viewport={{ once: true }}
+                animate={{ y: [0, -5, 0] }}
+                transition={{ 
+                  y: { duration: 6, repeat: Infinity, ease: "easeInOut" },
+                  default: { duration: 0.6 }
+                }}
+              >
+                <Paper
+                  elevation={0}
+                  sx={{
+                    position: 'relative',
+                    zIndex: 1,
+                    p: { xs: 3, md: 4 },
+                    borderRadius: 3,
+                    bgcolor: 'rgba(255,255,255,0.95)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(120,144,180,0.15)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
+                    maxWidth: 520,
+                    width: '100%',
+                    mx: 'auto',
+                  }}
+                >
+                  {/* プレゼンヘッダー */}
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+                    <Box 
+                      sx={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #2196F3, #9c27b0)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <PlayArrow sx={{ color: 'white', fontSize: 20 }} />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Box sx={{ 
+                        height: 8, 
+                        width: 140, 
+                        bgcolor: '#2b3a4d',
+                        borderRadius: 4,
+                        mb: 0.8,
+                      }} />
+                      <Box sx={{ 
+                        height: 6, 
+                        width: 90, 
+                        bgcolor: '#c1c9d5',
+                        borderRadius: 3,
+                      }} />
+                    </Box>
+                    <Chip 
+                      label="発表準備" 
+                      size="small"
+                      sx={{ 
+                        bgcolor: 'rgba(33, 150, 243, 0.1)',
+                        color: '#2196F3',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}
+                    />
+                  </Stack>
+
+                  {/* 問いの調整UI */}
+                  <Stack spacing={2}>
+                    <Box sx={{ 
+                      p: 2,
+                      bgcolor: '#fff4e6',
+                      borderRadius: 2,
+                      border: '1px solid #ffb74d',
+                    }}>
+                      <Typography variant="caption" fontWeight={600} sx={{ color: '#e65100' }}>
+                        現在の問い（大きすぎる？）
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 1, color: '#424242' }}>
+                        なぜ地球温暖化が起きるのか？
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ textAlign: 'center', py: 1 }}>
+                      <ArrowForward sx={{ color: '#2196F3', transform: 'rotate(90deg)' }} />
+                    </Box>
+
+                    <Typography variant="caption" fontWeight={600} sx={{ color: '#2196F3', mb: 1 }}>
+                      📏 問いを分解して扱いやすくしました：
+                    </Typography>
+
+                    <Stack spacing={1}>
+                      {[
+                        '1. CO2はどのように温室効果を起こす？',
+                        '2. 人間活動のどれがCO2を増やす？',
+                        '3. 森林減少の影響はどれくらい？',
+                      ].map((q, i) => (
+                        <Paper
+                          key={i}
+                          sx={{
+                            p: 1.5,
+                            bgcolor: '#e3f2fd',
+                            border: '1px solid #90caf9',
+                            borderRadius: 2,
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ color: '#1565c0' }}>
+                            {q}
+                          </Typography>
+                        </Paper>
+                      ))}
+                    </Stack>
+
+                    <Box sx={{ 
+                      mt: 2, 
+                      p: 1.5, 
+                      bgcolor: '#f3e5f5', 
+                      borderRadius: 2,
+                      textAlign: 'center',
+                    }}>
+                      <Typography variant="caption" sx={{ color: '#6a1b9a', fontWeight: 600 }}>
+                        どれから始めますか？選んでみましょう！
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </motion.div>
+            </Box>
+          </Grid>
+        </Grid>
 
         {/* CTA セクション */}
         <motion.div

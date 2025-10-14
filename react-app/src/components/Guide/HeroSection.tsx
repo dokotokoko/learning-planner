@@ -173,7 +173,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
             >
               <Box
                 sx={{
-                  maxWidth: { xs: '100%', sm: '600px', md: '1200px' },
+                  maxWidth: { xs: '100%', sm: '600px', md: '1000px' },
                   mx: 'auto',
                   position: 'relative',
                   borderRadius: 1,

@@ -31,17 +31,17 @@ const UseCaseSection: React.FC = () => {
     {
       title: '探究テーマが決まらない時に...',
       color: '#4CAF50',
-      image: '/images/app-screenshot-main.png'
+      image: '/images/usecase1.png'
     },
     {
       title: '少し調べた後に行き詰ってしまった時に...',
       color: '#2196F3',
-      image: '/images/app-screenshot-main.png'
+      image: '/images/usecase2.png'
     },
     {
-      title: 'どうやって検証を進めたらよいかわからない時に...',
+      title: '今日の学びを深く振り返りたい時に',
       color: '#FF9800',
-      image: '/images/app-screenshot-main.png'
+      image: '/images/usecase3.png'
     }
   ];
 
@@ -81,7 +81,6 @@ const UseCaseSection: React.FC = () => {
                 lineHeight: 1.6,
               }}
             >
-              探Qメイトは探究学習のあらゆる過程を伴走します。
             </Typography>
           </Box>
         </motion.div>
@@ -168,7 +167,6 @@ const UseCaseSection: React.FC = () => {
                         textAlign: 'center',
                       }}
                     >
-                      探Qメイトがあなたの探究をサポートします
                     </Typography>
                   </CardContent>
                 </Card>
