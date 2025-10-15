@@ -317,8 +317,8 @@ const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({
               <Box
                 sx={{
                   position: 'absolute',
-                  border: '2px solid #007bff',
-                  backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                  border: '2px solid #FF7A00',
+                  backgroundColor: 'rgba(255, 122, 0, 0.1)',
                   transform: `translate(${100 + transform.x / 40}px, ${75 + transform.y / 40}px)`,
                   width: `${100 / transform.scale}px`,
                   height: `${75 / transform.scale}px`,

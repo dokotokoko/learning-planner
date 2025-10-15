@@ -97,7 +97,7 @@ const ResultsSection: React.FC = () => {
                 fontWeight: 700,
                 fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
                 mb: 2,
-                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                 backgroundClip: 'text',
                 textFillColor: 'transparent',
                 WebkitBackgroundClip: 'text',
