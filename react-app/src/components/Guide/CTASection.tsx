@@ -85,7 +85,7 @@ const CTASection: React.FC<CTASectionProps> = ({ onGetStarted, onWatchDemo }) =>
     <Box
       sx={{
         py: { xs: 8, md: 12 },
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)',
         color: 'white',
         position: 'relative',
         overflow: 'hidden',
@@ -161,7 +161,7 @@ const CTASection: React.FC<CTASectionProps> = ({ onGetStarted, onWatchDemo }) =>
                 endIcon={<ArrowForward />}
                 sx={{
                   background: 'rgba(255,255,255,0.95)',
-                  color: '#006EB8',
+                  color: '#FF6B35',
                   '&:hover': {
                     background: 'rgba(255,255,255,1)',
                     transform: 'translateY(-2px)',

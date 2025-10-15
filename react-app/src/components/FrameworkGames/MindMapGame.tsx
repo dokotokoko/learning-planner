@@ -297,7 +297,7 @@ const MindMapGame: React.FC = () => {
     
     // 線の色と太さを設定
     const isSelected = selectedNodeId === fromNodeId || selectedNodeId === toNodeId;
-    const lineColor = isSelected ? '#1976d2' : '#aaa';
+    const lineColor = isSelected ? '#FF7A00' : '#aaa';
     const lineWidth = isSelected ? 2 : 1;
     
     return (
@@ -360,7 +360,7 @@ const MindMapGame: React.FC = () => {
             height: isRoot ? 120 : 'auto',
             minWidth: isRoot ? 120 : 150,
             bgcolor: isRoot ? 'primary.main' : 'background.paper',
-            border: isSelected ? '2px solid #1976d2' : 'none',
+            border: isSelected ? '2px solid #FF7A00' : 'none',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',

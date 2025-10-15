@@ -16,7 +16,7 @@ const LoadingScreen: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)',
         zIndex: 9999,
       }}
     >

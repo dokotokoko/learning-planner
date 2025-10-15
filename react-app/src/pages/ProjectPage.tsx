@@ -325,10 +325,10 @@ const ProjectPage: React.FC = () => {
             startIcon={<PsychologyIcon />}
             onClick={toggleChat}
             sx={{
-              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
               color: 'white',
               '&:hover': {
-                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
               },
               borderRadius: 2,
               px: 3,
@@ -462,10 +462,10 @@ const ProjectPage: React.FC = () => {
             startIcon={<AddIcon />}
             onClick={handleCreateMemo}
             sx={{
-              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
               color: 'white',
               '&:hover': {
-                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
               },
             }}
           >
@@ -552,10 +552,10 @@ const ProjectPage: React.FC = () => {
               startIcon={<AddIcon />}
               onClick={handleCreateMemo}
               sx={{
-                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                 color: 'white',
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                 },
               }}
             >

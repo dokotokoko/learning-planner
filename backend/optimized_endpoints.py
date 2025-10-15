@@ -100,9 +100,9 @@ async def optimized_chat_with_ai(
         # ====================
         db_fetch_start = time.time()
         
-        # conversationの取得/作成（既存の関数を非同期化）
+        # conversationの取得/作成（既存の関数を非同期化、page_id削除対応）
         conversation_id = await asyncio.to_thread(
-            lambda: get_or_create_conversation_sync(supabase, current_user, page_id)
+            lambda: get_or_create_conversation_sync(supabase, current_user, "general")
         )
         
         # 履歴取得数の動的調整（パフォーマンス改善）
@@ -258,19 +258,26 @@ async def optimized_chat_with_ai(
 # ヘルパー関数群
 # =====================================
 
-def get_or_create_conversation_sync(supabase, user_id: int, page_id: str) -> str:
-    """既存のget_or_create_conversation関数の同期版"""
+def get_or_create_conversation_sync(supabase, user_id: int, session_type: str = "general") -> str:
+    """既存のget_or_create_conversation関数の同期版（page_id削除対応）"""
     try:
-        existing_conv = supabase.table("chat_conversations").select("*").eq("user_id", user_id).eq("page_id", page_id).execute()
+        # ユーザーの最新のアクティブな会話を取得
+        existing_conv = supabase.table("chat_conversations")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .eq("is_active", True)\
+            .order("updated_at", desc=True)\
+            .limit(1)\
+            .execute()
         
         if existing_conv.data:
             return existing_conv.data[0]["id"]
         else:
-            title = f"{page_id}での相談"
+            # 新しい会話を作成
             new_conv_data = {
                 "user_id": user_id,
-                "title": title,
-                "page_id": page_id
+                "title": f"AIチャットセッション",
+                "is_active": True
             }
             new_conv = supabase.table("chat_conversations").insert(new_conv_data).execute()
             return new_conv.data[0]["id"] if new_conv.data else None

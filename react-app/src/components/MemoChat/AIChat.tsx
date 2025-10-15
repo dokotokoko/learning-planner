@@ -32,6 +32,10 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date | string | undefined | null;
+  // 分割表示用フィールド
+  chunks?: string[];
+  isSplit?: boolean;
+  originalLength?: number;
 }
 
 interface AIChatProps {
@@ -392,7 +396,40 @@ const AIChat: React.FC<AIChatProps> = ({
 
           if (response.ok) {
             const result = await response.json();
-            aiResponse = result.response;
+            
+            // 分割情報がある場合は対応
+            if (result.is_split && result.response_chunks) {
+              // 分割されたレスポンスを保存
+              const assistantMessage: Message = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: result.response, // 最初のチャンク
+                chunks: result.response_chunks,
+                isSplit: true,
+                originalLength: result.original_length,
+                timestamp: new Date(),
+              };
+              
+              // 統一されたフックでAI応答を追加
+              addMessage(assistantMessage);
+              
+              // 学習活動記録（AI応答）
+              if (onActivityRecord) {
+                onActivityRecord(result.response_chunks.join(''), 'ai');
+              }
+              // 通知システムにも記録
+              notificationManagerRef.current?.recordActivity(result.response_chunks.join(''), 'ai');
+              
+              // AI応答完了時も条件付きで最下部にスクロール
+              setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+              
+              setIsLoading(false);
+              isSendingRef.current = false;
+              inputRef.current?.focus();
+              return; // 早期リターン
+            } else {
+              aiResponse = result.response;
+            }
           } else {
             throw new Error('API応答エラー');
           }
@@ -786,15 +823,58 @@ const AIChat: React.FC<AIChatProps> = ({
                         borderRadius: 2,
                       }}
                     >
-                      <Typography 
-                        variant="body1" 
-                        sx={{ 
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {message.content}
-                      </Typography>
+                      {message.isSplit && message.chunks ? (
+                        <Box>
+                          {message.chunks.map((chunk, index) => (
+                            <motion.div
+                              key={index}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ 
+                                delay: index * 0.5,
+                                duration: 0.3 
+                              }}
+                            >
+                              <Typography 
+                                variant="body1" 
+                                sx={{ 
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.6,
+                                  mb: index < message.chunks!.length - 1 ? 2 : 0,
+                                  pb: index < message.chunks!.length - 1 ? 2 : 0,
+                                  borderBottom: index < message.chunks!.length - 1 
+                                    ? '1px solid rgba(0,0,0,0.1)' 
+                                    : 'none',
+                                }}
+                              >
+                                {chunk}
+                              </Typography>
+                            </motion.div>
+                          ))}
+                          {message.originalLength && message.originalLength > 300 && (
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                mt: 1,
+                                color: 'text.secondary',
+                                fontStyle: 'italic',
+                              }}
+                            >
+                              （元の文字数: {message.originalLength}文字）
+                            </Typography>
+                          )}
+                        </Box>
+                      ) : (
+                        <Typography 
+                          variant="body1" 
+                          sx={{ 
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.6,
+                          }}
+                        >
+                          {message.content}
+                        </Typography>
+                      )}
                     </Box>
                   </Box>
                 </ListItem>

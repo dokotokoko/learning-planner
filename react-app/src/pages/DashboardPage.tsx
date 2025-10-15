@@ -377,10 +377,10 @@ const DashboardPage: React.FC = () => {
               onClick={handleUserToggleChat}
               data-tutorial="ai-chat-section"
               sx={{
-                background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                 color: 'white',
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                 },
                 borderRadius: 2,
                 px: { xs: 2, sm: 3 },
@@ -419,10 +419,10 @@ const DashboardPage: React.FC = () => {
             onClick={() => setIsCreateDialogOpen(true)}
             data-tutorial="create-project-button"
             sx={{
-              background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+              background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
               color: 'white',
               '&:hover': {
-                background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
               },
               borderRadius: 2,
               px: { xs: 2, sm: 3 },
@@ -478,10 +478,10 @@ const DashboardPage: React.FC = () => {
                 startIcon={<AddIcon />}
                 onClick={() => setIsCreateDialogOpen(true)}
                 sx={{
-                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                   color: 'white',
                   '&:hover': {
-                    background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                    background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                   },
                   borderRadius: 2,
                   px: { xs: 3, sm: 4 },

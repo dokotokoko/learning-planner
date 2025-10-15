@@ -158,16 +158,16 @@ const Layout: React.FC = () => {
 
   const mainListItems: MenuItem[] = useMemo(() => [
     { text: 'AIチャット', icon: <ChatIcon />, path: '/chat' },
-    { text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    //{ text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
     { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
-    { text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
+    //{ text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
     // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
   ], [handleDashboardSidebarToggle]);
 
   // 展開状態のサイドバー
   const fullDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)' }}>
+      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
             <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
@@ -207,14 +207,14 @@ const Layout: React.FC = () => {
               sx={{
                 borderRadius: 2,
                 '&.Mui-selected': {
-                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                   color: 'white',
                   '& .MuiListItemIcon-root': {
                     color: 'white',
                   },
                 },
                 '&:hover': {
-                  background: 'rgba(5, 155, 255, 0.1)',
+                  background: 'rgba(255, 122, 0, 0.1)',
                 },
               }}
             >
@@ -251,12 +251,12 @@ const Layout: React.FC = () => {
             p: 1,
             borderRadius: 1,
             '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.1)',
+              bgcolor: 'rgba(255, 122, 0, 0.1)',
             },
           }}
           onClick={handleUserMenuOpen}
         >
-          <Avatar sx={{ bgcolor: 'primary.main' }}>
+          <Avatar sx={{ bgcolor: '#FF7A00' }}>
             {user?.username?.charAt(0).toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1 }}>
@@ -278,7 +278,7 @@ const Layout: React.FC = () => {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ 
         p: 1.5, 
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)',
         display: 'flex',
         justifyContent: 'center',
       }}>
@@ -312,14 +312,14 @@ const Layout: React.FC = () => {
                 justifyContent: 'center',
                 minHeight: 48,
                 '&.Mui-selected': {
-                  background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                   color: 'white',
                   '& .MuiListItemIcon-root': {
                     color: 'white',
                   },
                 },
                 '&:hover': {
-                  background: 'rgba(5, 155, 255, 0.1)',
+                  background: 'rgba(255, 122, 0, 0.1)',
                 },
               }}
             >
@@ -342,13 +342,13 @@ const Layout: React.FC = () => {
             width: '100%',
             height: 48,
             borderRadius: 1,
-            color: 'primary.main',
+            color: '#FF7A00',
             '&:hover': {
-              bgcolor: 'rgba(5, 155, 255, 0.1)',
+              bgcolor: 'rgba(255, 122, 0, 0.1)',
             },
           }}
         >
-          <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+          <Avatar sx={{ bgcolor: '#FF7A00', width: 32, height: 32 }}>
             {user?.username?.charAt(0).toUpperCase()}
           </Avatar>
         </IconButton>

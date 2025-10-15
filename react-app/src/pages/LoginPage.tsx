@@ -63,7 +63,7 @@ const FeatureCard = ({ icon, title, description, delay }: {
         p: 3,
         textAlign: 'center',
         height: '100%',
-        background: 'linear-gradient(145deg, rgba(115,187,255,0.05) 0%, rgba(71,215,172,0.05) 100%)',
+        background: 'linear-gradient(145deg, rgba(255,152,0,0.05) 0%, rgba(255,193,7,0.05) 100%)',
         borderRadius: 3,
         transition: 'all 0.3s ease',
         '&:hover': {
@@ -175,7 +175,7 @@ const LoginPage = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
+        background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
         display: 'flex',
         alignItems: 'center',
         py: 4,
@@ -218,7 +218,7 @@ const LoginPage = () => {
                     gutterBottom
                     fontWeight={700}
                     sx={{
-                      background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                      background: 'linear-gradient(45deg, #FF9800, #F57C00)',
                       backgroundClip: 'text',
                       textFillColor: 'transparent',
                       WebkitBackgroundClip: 'text',
@@ -343,9 +343,9 @@ const LoginPage = () => {
                         sx={{
                           py: 1.5,
                           fontSize: '1.1rem',
-                          background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                          background: 'linear-gradient(45deg, #FF9800, #F57C00)',
                           '&:hover': {
-                            background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                            background: 'linear-gradient(45deg, #FFB74D, #FF6F00)',
                           },
                         }}
                       >
@@ -435,9 +435,9 @@ const LoginPage = () => {
                         sx={{
                           py: 1.5,
                           fontSize: '1.1rem',
-                          background: 'linear-gradient(45deg, #52BAFF, #059BFF)',
+                          background: 'linear-gradient(45deg, #FFB74D, #FF9800)',
                           '&:hover': {
-                            background: 'linear-gradient(45deg, #9ED8FF, #52BAFF)',
+                            background: 'linear-gradient(45deg, #FFCC80, #FFB74D)',
                           },
                         }}
                       >

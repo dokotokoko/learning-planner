@@ -549,9 +549,9 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     onClick={() => setIsCreateDialogOpen(true)}
                     sx={{
                       mb: 2,
-                      background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                      background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                        background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                       },
                     }}
                   >

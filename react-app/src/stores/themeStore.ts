@@ -13,7 +13,7 @@ interface ThemeState {
 
 const defaultTheme = {
   isDarkMode: false,
-  primaryColor: '#059BFF',
+  primaryColor: '#FF7A00',
   fontSize: 'medium' as const,
 };
 

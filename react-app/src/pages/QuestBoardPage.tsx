@@ -609,9 +609,9 @@ const QuestBoardPage: React.FC = () => {
                     fullWidth
                     onClick={handleStartQuest}
                     sx={{
-                      background: 'linear-gradient(45deg, #059BFF, #006EB8)',
+                      background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #52BAFF, #00406B)',
+                        background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                       },
                     }}
                   >

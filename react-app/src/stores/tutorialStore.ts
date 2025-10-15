@@ -221,7 +221,7 @@ export const DEFAULT_TUTORIAL_STYLE = {
     arrowColor: '#fff',
     backgroundColor: '#fff',
     overlayColor: 'rgba(0, 0, 0, 0.4)',
-    primaryColor: '#73bbff',
+    primaryColor: '#FF7A00',
     textColor: '#333',
     width: 400,
     zIndex: 10000,
